@@ -69,16 +69,6 @@ body {
 .card h2 { margin: 0 0 8px; font-size: 1.05rem; }
 .muted { color: var(--muted); font-size: .9rem; }
 
-.placeholder {
-  display: grid; place-items: center; text-align: center;
-  min-height: 40vh; color: var(--muted);
-}
-.placeholder__orb {
-  width: 120px; height: 120px; border-radius: 50%;
-  background: radial-gradient(circle at 40% 35%, var(--accent), var(--accent-2));
-  box-shadow: 0 0 60px color-mix(in srgb, var(--accent) 50%, transparent);
-  margin-bottom: 16px;
-}
 
 label { display: block; font-weight: 500; margin-bottom: 6px; }
 input[type="text"], input[type="password"], textarea {
@@ -108,4 +98,90 @@ input[dir="ltr"] { text-align: left; }
   display: block; width: 100%;
   touch-action: none;
   border-radius: var(--radius);
+}
+
+/* ---- شاشة الرفيقة ---- */
+.home {
+  display: flex; flex-direction: column; align-items: center;
+  min-height: calc(100dvh - 180px); justify-content: center; gap: 8px;
+}
+.home__stage { width: min(72vw, 280px); }
+.home__hint { text-align: center; }
+
+.bubble {
+  position: relative; margin: 0; max-width: 85%;
+  background: var(--surface-2); border: 1px solid var(--border);
+  border-radius: 18px; padding: 10px 16px; text-align: center; font-weight: 500;
+  animation: bubble-in .35s ease-out both;
+}
+.bubble::after {
+  content: ""; position: absolute; bottom: -8px; left: 50%; translate: -50% 0;
+  border: 8px solid transparent; border-bottom: 0; border-top-color: var(--surface-2);
+}
+.bubble.is-shown { animation: bubble-in .35s ease-out both; }
+@keyframes bubble-in { from { opacity: 0; transform: translateY(6px) scale(.96); } }
+
+/* ---- الرفيقة ---- */
+.companion { cursor: pointer; user-select: none; -webkit-user-select: none; }
+.companion__svg { display: block; width: 100%; height: auto; overflow: visible; }
+.cmp-shadow, .cmp-aura, .cmp-hair-back, .cmp-ahoge, .cmp-star, .cmp-tail, .cmp-arm,
+.cmp-eye, .cmp-mouth, .cmp-think circle { transform-box: fill-box; }
+
+.cmp-float { animation: cmp-float 4.2s ease-in-out infinite; transform-origin: center; transform-box: view-box; }
+@keyframes cmp-float {
+  0%, 100% { transform: translate(0, 0) rotate(-1.5deg); }
+  50%      { transform: translate(3px, -12px) rotate(1.5deg); }
+}
+.cmp-shadow { animation: cmp-shadow 4.2s ease-in-out infinite; transform-origin: center; }
+@keyframes cmp-shadow { 50% { transform: scale(.8); opacity: .2; } }
+
+.cmp-aura { animation: cmp-aura 4.2s ease-in-out infinite; transform-origin: center; }
+@keyframes cmp-aura { 50% { opacity: .6; transform: scale(.92); } }
+
+.cmp-hair-back { animation: cmp-sway 5s ease-in-out infinite; transform-origin: 50% 0; }
+@keyframes cmp-sway { 0%,100% { transform: rotate(-1.2deg); } 50% { transform: rotate(1.2deg); } }
+
+.cmp-ahoge { animation: cmp-ahoge 2.6s ease-in-out infinite; transform-origin: 30% 100%; }
+@keyframes cmp-ahoge { 0%,100% { transform: rotate(-8deg); } 50% { transform: rotate(10deg); } }
+
+.cmp-star { animation: cmp-twinkle 3s ease-in-out infinite; transform-origin: center; }
+@keyframes cmp-twinkle { 50% { transform: scale(.8) rotate(20deg); opacity: .7; } }
+
+.cmp-tail { animation: cmp-tail 2.4s ease-in-out infinite; transform-origin: 50% 0; }
+@keyframes cmp-tail { 0%,100% { transform: skewX(-6deg); } 50% { transform: skewX(6deg); } }
+
+.cmp-arm--r { animation: cmp-arm 4.2s ease-in-out infinite; transform-origin: 50% 0; }
+.cmp-arm--l { animation: cmp-arm 4.2s ease-in-out infinite reverse; transform-origin: 50% 0; }
+@keyframes cmp-arm { 50% { transform: rotate(6deg); } }
+
+.cmp-eye { transform-origin: center; transition: transform .07s; }
+.companion.is-blinking .cmp-eye { transform: scaleY(.08); }
+.cmp-pupil { transition: transform .15s ease-out; }
+
+/* الحالات */
+.cmp-eyes--happy, .cmp-mouth--talk, .cmp-mouth--o, .cmp-think { display: none; }
+
+.companion.is-happy .cmp-eyes--open { display: none; }
+.companion.is-happy .cmp-eyes--happy { display: inline; }
+.companion.is-happy .cmp-float { animation: cmp-hop .5s ease-out 2; }
+@keyframes cmp-hop { 50% { transform: translateY(-22px); } }
+
+.companion.is-talking .cmp-mouth--smile { display: none; }
+.companion.is-talking .cmp-mouth--talk { display: inline; animation: cmp-talk .22s ease-in-out infinite alternate; transform-origin: center; }
+@keyframes cmp-talk { from { transform: scaleY(.3); } to { transform: scaleY(1.1); } }
+
+.companion.is-thinking .cmp-mouth--smile { display: none; }
+.companion.is-thinking .cmp-mouth--o { display: inline; }
+.companion.is-thinking .cmp-think { display: inline; }
+.companion.is-thinking .cmp-think circle { animation: cmp-dot 1.2s ease-in-out infinite; transform-origin: center; }
+.companion.is-thinking .cmp-think circle:nth-child(2) { animation-delay: .2s; }
+.companion.is-thinking .cmp-think circle:nth-child(3) { animation-delay: .4s; }
+@keyframes cmp-dot { 50% { opacity: .3; transform: scale(.7); } }
+.companion.is-thinking .cmp-pupil { transform: translate(2px, -3px) !important; }
+
+.companion.is-listening .cmp-aura { animation: cmp-listen 1s ease-in-out infinite; }
+@keyframes cmp-listen { 50% { transform: scale(1.12); opacity: 1; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .companion *, .companion { animation-duration: 0s !important; animation-iteration-count: 1 !important; }
 }
