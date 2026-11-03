@@ -1,11 +1,11 @@
 // شاشة الرفيقة: الشخصية الطافية + المحادثة صوتاً أو كتابة + تصنيف كل ملاحظة
 import { createCompanion } from '../companion.js';
 import { addEntry, addMessage, getEntries, getMessages, getSetting, getSummaries } from '../storage.js';
-import { chat } from '../gemini.js';
+import { chat, transcribe } from '../gemini.js';
 import { CATEGORIES, NONE, categoryById } from '../categories.js';
 import { classifyEntry, classifyPending, setCategory } from '../classifier.js';
 import { recall } from '../recall.js';
-import { canListen, listen, speak, stopSpeaking, unlockAudio } from '../voice.js';
+import { canListen, canRecord, canBrowserListen, listen, record, speak, stopSpeaking, unlockAudio } from '../voice.js';
 
 export const title = 'الرفيقة';
 
@@ -267,40 +267,81 @@ export async function mount(root) {
   const micOff = () => {
     stopListening = null;
     mic.classList.remove('is-on');
+    mic.style.removeProperty('--lvl');
     mic.setAttribute('aria-label', 'تحدّث');
     if (companion?.state === 'listening') companion.setState('idle');
   };
 
-  mic?.addEventListener('click', () => {
-    // ضغطة ثانية: إيقاف فوري للواجهة، وإرسال ما سُمع
+  const micError = (code) => {
+    if (code === 'not-allowed' || code === 'service-not-allowed') say('أحتاج إذن الميكروفون لأسمعك. فعّله من إعدادات المتصفح للموقع.');
+    else if (code === 'no-speech') say('لم أسمع شيئاً، جرّب مرة أخرى.');
+    else if (code === 'network') say('التعرف على الكلام يحتاج إنترنت، تحقق من الاتصال.');
+    else if (code === 'audio-capture') say('لا أستطيع الوصول إلى الميكروفون. ربما يستخدمه تطبيق آخر.');
+    else if (code === 'no-start') say('لم يبدأ الميكروفون. جرّب مرة أخرى، أو اختر "Gemini" للتعرف على الكلام من الإعدادات.');
+    else if (code === 'language-not-supported') say('خدمة الكلام في المتصفح لا تدعم العربية. اختر "Gemini" من الإعدادات.');
+    else if (code !== 'aborted') say(`تعذّر الاستماع (${code}). جرّب الكتابة.`);
+  };
+
+  // الطريقة الافتراضية: نسجّل الصوت ونفرّغه عبر Gemini (تعمل حتى لو كانت خدمة المتصفح معطلة)
+  async function listenWithGemini() {
+    let rec = null;
+    stopListening = () => rec?.stop();
+    rec = await record({
+      onStart: () => say('أسمعك… تكلّم، وسأتوقف حين تسكت (أو المس 🎙).'),
+      onLevel: (l) => mic.style.setProperty('--lvl', l.toFixed(2)),
+      onError: (code) => { micOff(); micError(code); },
+      onDone: async (blob, heard) => {
+        micOff();
+        if (!heard || blob.size < 2000) { say('لم أسمع شيئاً، جرّب مرة أخرى وتكلّم قريباً من الجوال.'); return; }
+        companion.setState('thinking');
+        say('<span class="dots"><i></i><i></i><i></i></span> أحوّل كلامك إلى نص…');
+        try {
+          const text = await transcribe(blob);
+          companion.setState('idle');
+          if (!text) { say('لم أفهم الكلام جيداً، جرّب مرة أخرى.'); return; }
+          send(text, 'voice');
+        } catch (err) {
+          companion.setState('idle');
+          say(`${escapeHtml(err.message)} جرّب مرة أخرى أو اكتب.`);
+        }
+      },
+    });
+  }
+
+  function listenWithBrowser() {
+    stopListening = listen({
+      onStart: () => say('أسمعك… تكلّم، ثم المس 🎙 لتنهي.'),
+      onInterim: (t) => { input.value = t; autosize(); },
+      onText: (t) => { input.value = ''; autosize(); send(t, 'voice'); },
+      onError: micError,
+      onEnd: () => { if (stopListening) micOff(); },
+    });
+  }
+
+  mic?.addEventListener('click', async () => {
+    // ضغطة ثانية: إيقاف فوري
     if (stopListening) {
       const stop = stopListening;
       micOff();
-      say('أوقفتُ الاستماع.');
       stop();
       return;
     }
     if (busy) { say('لحظة، ما زلت أفكر… 💭'); return; }
+    const hasKey = !!(await getSetting('geminiApiKey', ''));
+    let engine = await getSetting('sttEngine', canRecord ? 'gemini' : 'browser');
+    if (engine === 'gemini' && (!canRecord || !hasKey)) engine = canBrowserListen ? 'browser' : 'none';
+    if (engine === 'browser' && !canBrowserListen) engine = canRecord && hasKey ? 'gemini' : 'none';
+    if (engine === 'none') {
+      say(hasKey ? 'الإدخال الصوتي غير متاح هنا. استخدم مايك لوحة المفاتيح 🎤.' : 'أضف مفتاح Gemini في <a href="#/settings">الإعدادات</a> لأفهم كلامك الصوتي.');
+      return;
+    }
     companion.setState('listening');
     mic.classList.add('is-on');
     mic.setAttribute('aria-label', 'أوقف الاستماع');
     say('أجهّز الميكروفون…');
     try {
-      stopListening = listen({
-        onStart: () => say('أسمعك… تكلّم، ثم المس 🎙 لتنهي.'),
-        onInterim: (t) => { input.value = t; autosize(); },
-        onText: (t) => { input.value = ''; autosize(); send(t, 'voice'); },
-        onError: (code) => {
-          if (code === 'not-allowed' || code === 'service-not-allowed') say('أحتاج إذن الميكروفون لأسمعك. فعّله من إعدادات المتصفح للموقع.');
-          else if (code === 'no-speech') say('لم أسمع شيئاً، جرّب مرة أخرى.');
-          else if (code === 'network') say('التعرف على الكلام يحتاج إنترنت، تحقق من الاتصال.');
-          else if (code === 'audio-capture') say('لا أستطيع الوصول إلى الميكروفون. ربما يستخدمه تطبيق آخر.');
-          else if (code === 'no-start') say('لم يبدأ الميكروفون. جرّب مرة أخرى، أو استخدم مايك لوحة المفاتيح 🎤 في خانة الكتابة.');
-          else if (code === 'language-not-supported') say('خدمة الكلام لا تدعم العربية في هذا المتصفح. استخدم مايك لوحة المفاتيح 🎤.');
-          else if (code !== 'aborted') say(`تعذّر الاستماع (${code}). جرّب الكتابة.`);
-        },
-        onEnd: () => { if (stopListening) micOff(); },
-      });
+      if (engine === 'gemini') await listenWithGemini();
+      else listenWithBrowser();
     } catch {
       micOff();
       say('الإدخال الصوتي غير متاح في هذا المتصفح. استخدم مايك لوحة المفاتيح 🎤.');

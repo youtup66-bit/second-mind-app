@@ -6,7 +6,9 @@ import { tts } from './gemini.js';
 
 const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 
-export const canListen = !!Recognition;
+export const canRecord = !!(navigator.mediaDevices?.getUserMedia && window.MediaRecorder);
+export const canListen = !!Recognition || canRecord;
+export const canBrowserListen = !!Recognition;
 export const canSpeak = 'speechSynthesis' in window;
 
 // يبدأ الاستماع ويعيد دالة للإيقاف.
@@ -61,8 +63,76 @@ export function listen({ onText, onInterim, onEnd, onError, onStart }) {
   rec.start();
   return () => {
     try { rec.stop(); } catch { /* انتهى */ }
-    forceTimer = setTimeout(() => { try { rec.abort(); } catch { /* انتهى */ } finish(); }, 1500);
+    forceTimer = setTimeout(() => { try { rec.abort(); } catch { /* انتهى */ } finish(); }, 3500);
   };
+}
+
+// ---- تسجيل الصوت (لتفريغه عبر Gemini) ----
+// onLevel(0..1): مستوى الصوت لعرضه. يتوقف تلقائياً بعد ثانيتين من الصمت (بعد أن يبدأ الكلام) أو بعد دقيقة.
+// يعيد { stop() } ويستدعي onDone(blob) عند الانتهاء.
+export async function record({ onStart, onLevel, onDone, onError, maxMs = 60_000 }) {
+  stopSpeaking();
+  suspendAudio();
+  let stream;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
+  } catch (err) {
+    onError?.(err.name === 'NotAllowedError' || err.name === 'SecurityError' ? 'not-allowed' : 'audio-capture');
+    return { stop() {} };
+  }
+  const type = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg'].find((t) => MediaRecorder.isTypeSupported?.(t)) || '';
+  const rec = new MediaRecorder(stream, type ? { mimeType: type } : undefined);
+  const chunks = [];
+  let done = false, raf = 0, heard = false, silentSince = 0;
+
+  // قياس المستوى بمحرك صوت مستقل يُغلق بعد التسجيل
+  let actx = null, analyser = null;
+  try {
+    actx = new (window.AudioContext || window.webkitAudioContext)();
+    analyser = actx.createAnalyser();
+    analyser.fftSize = 512;
+    actx.createMediaStreamSource(stream).connect(analyser);
+  } catch { /* بلا مؤشر */ }
+  const buf = new Uint8Array(512);
+  const started = performance.now();
+  const tick = () => {
+    if (done) return;
+    if (analyser) {
+      analyser.getByteTimeDomainData(buf);
+      let sum = 0;
+      for (const v of buf) sum += ((v - 128) / 128) ** 2;
+      const level = Math.min(1, Math.sqrt(sum / buf.length) * 6);
+      onLevel?.(level);
+      const now = performance.now();
+      if (level > 0.12) { heard = true; silentSince = 0; }
+      else if (heard) {
+        silentSince ||= now;
+        if (now - silentSince > 2000) return stop();
+      }
+      if (now - started > maxMs) return stop();
+    }
+    raf = requestAnimationFrame(tick);
+  };
+
+  const cleanup = () => {
+    cancelAnimationFrame(raf);
+    stream.getTracks().forEach((t) => t.stop());
+    actx?.close().catch(() => {});
+  };
+  rec.ondataavailable = (e) => { if (e.data?.size) chunks.push(e.data); };
+  rec.onstop = () => {
+    cleanup();
+    onDone?.(new Blob(chunks, { type: rec.mimeType || type || 'audio/webm' }), heard);
+  };
+  function stop() {
+    if (done) return;
+    done = true;
+    try { rec.state !== 'inactive' ? rec.stop() : rec.onstop(); } catch { cleanup(); onDone?.(new Blob(chunks), heard); }
+  }
+  rec.start(250);
+  onStart?.();
+  raf = requestAnimationFrame(tick);
+  return { stop };
 }
 
 // ---- أصوات الجهاز ----

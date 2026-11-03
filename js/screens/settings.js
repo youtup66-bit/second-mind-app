@@ -1,7 +1,7 @@
 // شاشة الإعدادات: مفتاح Gemini يُحفظ على الجهاز فقط
 import { getSetting, setSetting, deleteSetting, clearAll, clearMessages } from '../storage.js';
 import { DEFAULT_MODEL, testKey } from '../gemini.js';
-import { canSpeak, speak, stopSpeaking, unlockAudio, voicesReady } from '../voice.js';
+import { canSpeak, canRecord, canBrowserListen, speak, stopSpeaking, unlockAudio, voicesReady } from '../voice.js';
 import { SKINS, DEFAULT_SKIN, skinSVG } from '../skins.js';
 import {
   downloadBackup, shareBackup, canShareFiles, importFile,
@@ -18,6 +18,7 @@ export async function mount(root) {
   const model = await getSetting('geminiModel', DEFAULT_MODEL);
   const speakOn = await getSetting('speakReplies', true);
   const memoryOn = await getSetting('useMemory', true);
+  const stt = await getSetting('sttEngine', canRecord ? 'gemini' : 'browser');
   let skin = await getSetting('companionSkin', DEFAULT_SKIN);
   const engine = await getSetting('voiceEngine', 'device');
   const deviceVoice = await getSetting('deviceVoice', '');
@@ -90,7 +91,13 @@ export async function mount(root) {
         <span>الرفيقة تستعين بملاحظاتي في ردودها</span>
       </label>
       <p class="muted">يبحث التطبيق في ملاحظاتك على جهازك، ويرفق مع رسالتك أقرب ٥ ملاحظات صلة بها فقط، لتقترح الرفيقة حلولاً مبنية على ما دوّنته.</p>
-      <p class="muted">الإدخال الصوتي يعتمد على خدمة التعرف على الكلام في متصفحك، وقد يرسل المتصفح الصوت إلى خوادمه لتحويله إلى نص.</p>
+      <h3 class="subhead">التعرف على كلامك 🎙</h3>
+      <div class="radio-row" role="radiogroup" aria-label="التعرف على الكلام">
+        <label class="switch"><input type="radio" name="stt" value="gemini" ${stt === 'gemini' ? 'checked' : ''} ${canRecord ? '' : 'disabled'}><span>Gemini (أدق ويفهم العامية)</span></label>
+        <label class="switch"><input type="radio" name="stt" value="browser" ${stt === 'browser' ? 'checked' : ''} ${canBrowserListen ? '' : 'disabled'}><span>خدمة المتصفح</span></label>
+      </div>
+      <p class="muted">Gemini: يسجّل التطبيق صوتك ويرسل التسجيل إلى Gemini ليحوّله إلى نص، ثم يُحذف التسجيل ولا يُحفظ. يعمل حتى لو كانت خدمة المتصفح معطّلة.
+      خدمة المتصفح: تظهر الكلمات أثناء كلامك، لكنها لا تعمل على بعض الجوالات، والمتصفح نفسه يرسل الصوت إلى خوادمه.</p>
       <div class="row">
         <button class="btn btn--ghost" id="clear-chat">مسح سجل المحادثة</button>
       </div>
@@ -125,7 +132,7 @@ export async function mount(root) {
 
     <section class="card">
       <h2>الخصوصية</h2>
-      <p class="muted">كل ملاحظاتك محفوظة على هذا الجهاز. لا يُرسل شيء للخارج إلا إلى Gemini: نص المحادثة الأخيرة، والملاحظات القليلة ذات الصلة بها (إن فعّلت ذلك)، وما تطلب تلخيصه.</p>
+      <p class="muted">كل ملاحظاتك محفوظة على هذا الجهاز. لا يُرسل شيء للخارج إلا إلى Gemini: نص المحادثة الأخيرة، وتسجيلك الصوتي لتحويله إلى نص (إن استخدمت 🎙)، والملاحظات القليلة ذات الصلة بها (إن فعّلت ذلك)، وما تطلب تلخيصه.</p>
       <div class="row">
         <button class="btn btn--danger" id="wipe">مسح كل البيانات</button>
       </div>
@@ -262,6 +269,7 @@ export async function mount(root) {
 
   root.querySelector('#speak').addEventListener('change', (e) => setSetting('speakReplies', e.target.checked));
   root.querySelector('#memory').addEventListener('change', (e) => setSetting('useMemory', e.target.checked));
+  root.querySelectorAll('input[name="stt"]').forEach((r) => r.addEventListener('change', () => setSetting('sttEngine', r.value)));
 
   root.querySelector('#clear-chat').addEventListener('click', async () => {
     if (!confirm('سيُمسح سجل المحادثة فقط، وتبقى ملاحظاتك. متابعة؟')) return;

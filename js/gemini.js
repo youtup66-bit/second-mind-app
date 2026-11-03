@@ -277,6 +277,28 @@ export async function tts(text, { voice, style }) {
   return { samples: new Int16Array(bytes.buffer, 0, bytes.length >> 1), rate };
 }
 
+// ---- تفريغ الكلام إلى نص ----
+// يُرسل التسجيل الصوتي إلى Gemini (بديل خدمة الكلام في المتصفح التي لا تعمل على بعض الجوالات).
+const TRANSCRIBER = `فرّغ هذا التسجيل الصوتي إلى نص عربي حرفياً كما قيل، فصحى كان أو عامية، مع علامات ترقيم بسيطة.
+لا تترجم ولا تلخّص ولا تعلّق ولا تضف أي شيء. إن لم يكن فيه كلام مفهوم فأعد نصاً فارغاً تماماً.`;
+
+async function blobToBase64(blob) {
+  const bytes = new Uint8Array(await blob.arrayBuffer());
+  let bin = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  return btoa(bin);
+}
+
+export async function transcribe(blob) {
+  const mimeType = (blob.type || 'audio/webm').split(';')[0];
+  const text = await generate({
+    systemInstruction: { parts: [{ text: TRANSCRIBER }] },
+    contents: [{ role: 'user', parts: [{ inlineData: { mimeType, data: await blobToBase64(blob) } }, { text: 'فرّغ التسجيل.' }] }],
+    generationConfig: { temperature: 0, maxOutputTokens: 2048 },
+  }).catch((err) => { if (err.code === 'EMPTY') return ''; throw err; });
+  return text.replace(/^["«]|["»]$/g, '').trim();
+}
+
 // للتحقق من المفتاح من الإعدادات
 export async function testKey(key) {
   const model = await findWorkingModel(key);

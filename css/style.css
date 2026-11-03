@@ -436,3 +436,6 @@ input[type="range"] { width: 100%; accent-color: var(--accent); margin: 4px 0 12
 }
 
 .voice-note { display: block; font-size: .75rem; color: var(--muted); margin-top: 4px; font-weight: 500; }
+
+/* مؤشر مستوى الصوت على زر الميكروفون */
+.composer__mic.is-on { --lvl: 0; box-shadow: 0 0 0 calc(4px + var(--lvl) * 14px) color-mix(in srgb, var(--danger) 35%, transparent); transition: box-shadow .08s linear; animation: none; }
