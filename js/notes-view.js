@@ -1,6 +1,6 @@
 // عرض الملاحظات وأزرارها (نقل، حذف)، مشترك بين شاشة العقل وشاشة المجلد
 import { CATEGORIES, NONE, categoryById } from './categories.js';
-import { deleteEntry } from './storage.js';
+import { deleteEntry, getEntry, updateEntry } from './storage.js';
 import { setCategory } from './classifier.js';
 
 const fmtDate = new Intl.DateTimeFormat('ar', { dateStyle: 'medium', timeStyle: 'short' });
@@ -16,10 +16,14 @@ export function noteHTML(e, { showCategory = false, highlight = '' } = {}) {
     return safe.replace(new RegExp(q, 'gi'), (m) => `<mark>${m}</mark>`);
   };
   return `
-    <li class="note" data-id="${e.id}">
+    <li class="note ${e.category === 'task' && e.meta?.done ? 'is-done' : ''}" data-id="${e.id}">
       ${showCategory ? `<span class="chip chip--small chip--static" style="--c:${cat ? cat.color : 'var(--muted)'}">${cat ? cat.label : 'لم تُصنّف بعد'}</span>` : ''}
       ${e.meta?.title ? `<p class="note__title">${mark(e.meta.title)}</p>` : ''}
       <p class="note__text">${mark(e.text)}</p>
+      ${e.category === 'task' ? `
+        <label class="switch note__done">
+          <input type="checkbox" data-act="done" ${e.meta?.done ? 'checked' : ''}><span>أنجزتها</span>
+        </label>` : ''}
       <div class="note__foot">
         <time class="muted">${fmtDate.format(e.createdAt)}${e.source === 'voice' ? ' · 🎙' : ''}</time>
         <span class="note__actions">
@@ -41,7 +45,12 @@ export function bindNoteActions(container, onChange) {
     if (!li) return;
     const id = li.dataset.id;
     const act = e.target.closest('[data-act]')?.dataset.act;
-    if (act === 'move') {
+    if (act === 'done') {
+      const entry = await getEntry(id);
+      entry.meta = { ...entry.meta, done: e.target.checked, doneAt: e.target.checked ? Date.now() : null };
+      await updateEntry(entry);
+      li.classList.toggle('is-done', e.target.checked);
+    } else if (act === 'move') {
       const box = li.querySelector('.note__move');
       box.hidden = !box.hidden;
     } else if (act === 'delete') {

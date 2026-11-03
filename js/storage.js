@@ -1,6 +1,6 @@
 // خدمة التخزين المحلي (IndexedDB). لا شيء هنا يغادر الجهاز.
 const DB_NAME = 'second-mind';
-const DB_VERSION = 3;
+const DB_VERSION = 4;
 
 let dbPromise;
 
@@ -23,6 +23,9 @@ function openDB() {
       }
       if (!db.objectStoreNames.contains('snapshots')) {
         db.createObjectStore('snapshots', { keyPath: 'id' });
+      }
+      if (!db.objectStoreNames.contains('summaries')) {
+        db.createObjectStore('summaries', { keyPath: 'id' });
       }
     };
     req.onsuccess = () => resolve(req.result);
@@ -125,6 +128,7 @@ export async function exportData() {
     exportedAt: Date.now(),
     entries: await run('entries', 'readonly', (s) => s.getAll()),
     messages: await run('messages', 'readonly', (s) => s.getAll()),
+    summaries: await run('summaries', 'readonly', (s) => s.getAll()),
     settings: await getAllSettings(),
   };
 }
@@ -138,13 +142,16 @@ export async function importData(data, mode = 'merge') {
   const valid = (x) => x && typeof x.id === 'string' && typeof x.text === 'string' && Number.isFinite(x.createdAt);
   const entries = data.entries.filter(valid);
   const messages = (data.messages || []).filter((m) => valid(m) && (m.role === 'user' || m.role === 'model'));
+  const summaries = (data.summaries || []).filter((x) => x && typeof x.id === 'string' && x.result && Number.isFinite(x.createdAt));
   const settings = Object.entries(data.settings || {}).filter(([k]) => !PRIVATE_SETTINGS.has(k));
 
   const db = await openDB();
   await new Promise((resolve, reject) => {
-    const tx = db.transaction(['entries', 'messages', 'settings'], 'readwrite');
+    const tx = db.transaction(['entries', 'messages', 'summaries', 'settings'], 'readwrite');
     const es = tx.objectStore('entries'), ms = tx.objectStore('messages'), ss = tx.objectStore('settings');
-    if (mode === 'replace') { es.clear(); ms.clear(); }
+    const sums = tx.objectStore('summaries');
+    if (mode === 'replace') { es.clear(); ms.clear(); sums.clear(); }
+    summaries.forEach((x) => sums.put(x));
     entries.forEach((e) => es.put({ category: null, source: 'text', meta: {}, ...e }));
     messages.forEach((m) => ms.put({ entryId: null, ...m }));
     settings.forEach(([k, v]) => ss.put(v, k));
@@ -154,6 +161,20 @@ export async function importData(data, mode = 'merge') {
   });
   return { entries: entries.length, messages: messages.length };
 }
+
+// ---- الملخصات ----
+export async function addSummary(summary) {
+  const item = { id: crypto.randomUUID(), createdAt: Date.now(), ...summary };
+  await run('summaries', 'readwrite', (s) => s.put(item));
+  return item;
+}
+
+export async function getSummaries() {
+  const all = await run('summaries', 'readonly', (s) => s.getAll());
+  return all.sort((a, b) => b.createdAt - a.createdAt);
+}
+
+export const deleteSummary = (id) => run('summaries', 'readwrite', (s) => s.delete(id));
 
 // ---- لقطات داخلية (نسخ احتياطية تلقائية على الجهاز نفسه) ----
 export async function saveSnapshot(reason = 'auto') {
@@ -172,6 +193,7 @@ export const getSnapshot = (id) => run('snapshots', 'readonly', (s) => s.get(id)
 export const deleteSnapshot = (id) => run('snapshots', 'readwrite', (s) => s.delete(id));
 
 export async function clearAll() {
+  await run('summaries', 'readwrite', (s) => s.clear());
   await run('snapshots', 'readwrite', (s) => s.clear());
   await run('messages', 'readwrite', (s) => s.clear());
   await run('entries', 'readwrite', (s) => s.clear());

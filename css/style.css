@@ -321,3 +321,37 @@ mark { background: color-mix(in srgb, #ffc857 45%, transparent); color: inherit;
 .snap { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: .9rem;
   background: var(--bg-2); border: 1px solid var(--border); border-radius: 12px; padding: 6px 10px; }
 #backup { scroll-margin-top: 80px; }
+
+/* ---- التبويبات ---- */
+.seg { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 4px; margin-bottom: 12px; }
+.seg button { font: inherit; font-weight: 700; border: 0; border-radius: 10px; padding: 8px; min-height: 40px; background: none; color: var(--muted); cursor: pointer; }
+.seg button.is-active { background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: #fff; }
+.pane[hidden] { display: none; }
+.btn:disabled { opacity: .55; cursor: default; }
+
+/* ---- الملخص ---- */
+.sum { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; margin-bottom: 14px; }
+.sum p { margin: 0; }
+.sum__head { display: flex; gap: 12px; align-items: flex-start; margin-bottom: 10px; }
+.sum__mood { font-size: 2rem; line-height: 1; flex: none; }
+.sum__kind { font-size: .8rem; }
+.sum__title { margin: 2px 0; font-size: 1.1rem; }
+.sum__moodtext { font-size: .9rem; color: var(--muted); }
+.sum__bar { display: flex; height: 8px; border-radius: 999px; overflow: hidden; gap: 2px; margin: 4px 0 6px; }
+.sum__legend { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: .75rem; margin-bottom: 10px !important; }
+.sum__legend i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-inline-end: 4px; }
+.sum__overview { line-height: 1.8; }
+.sum__themes { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px !important; }
+.tag { font-size: .8rem; background: var(--surface-2); border: 1px solid var(--border); border-radius: 999px; padding: 2px 10px; }
+.sum__block { margin-top: 12px; }
+.sum__block h4 { margin: 0 0 4px; font-size: .9rem; }
+.sum__block ul { margin: 0; padding-inline-start: 20px; }
+.sum__tip { margin-top: 12px !important; background: color-mix(in srgb, var(--ok) 12%, transparent); border: 1px solid color-mix(in srgb, var(--ok) 40%, transparent); border-radius: 12px; padding: 10px 12px; }
+.sum__foot { display: flex; justify-content: space-between; align-items: center; margin-top: 10px; font-size: .8rem; }
+.sheet__body { overflow-y: auto; }
+.sheet__sum { width: 100%; margin-bottom: 10px; }
+.sheet__body .notes { overflow: visible; }
+
+/* ---- المهام المنجزة ---- */
+.note__done { margin-top: 8px; font-size: .9rem; }
+.note.is-done .note__text, .note.is-done .note__title { text-decoration: line-through; opacity: .6; }

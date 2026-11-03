@@ -5,7 +5,8 @@
 import { CATEGORIES, categoryById } from '../categories.js';
 import { getEntries } from '../storage.js';
 import { createMindGraph } from '../mind-graph.js';
-import { noteHTML, bindNoteActions } from '../notes-view.js';
+import { noteHTML, bindNoteActions, esc } from '../notes-view.js';
+import { createSummary, summaryHTML } from '../summaries.js';
 
 export const title = 'العقل';
 
@@ -63,7 +64,11 @@ export async function mount(root) {
           <p class="sheet__title" id="sheet-title"></p>
           <button class="btn btn--ghost sheet__close" id="sheet-close" aria-label="إغلاق">✕</button>
         </div>
-        <ul class="notes" id="notes"></ul>
+        <div class="sheet__body">
+          <button class="btn btn--ghost sheet__sum" id="sum-cat">✨ لخّص هذا القسم</button>
+          <div id="cat-sum"></div>
+          <ul class="notes" id="notes"></ul>
+        </div>
       </div>
     </div>
   `;
@@ -101,8 +106,24 @@ export async function mount(root) {
     if (openCat) renderNotes();
   }
 
+  const catSum = root.querySelector('#cat-sum');
+  const sumBtn = root.querySelector('#sum-cat');
+  sumBtn.addEventListener('click', async () => {
+    sumBtn.disabled = true;
+    catSum.innerHTML = '<p class="muted"><span class="dots"><i></i><i></i><i></i></span> أقرأ ملاحظات هذا القسم…</p>';
+    try {
+      catSum.innerHTML = summaryHTML(await createSummary({ category: openCat }), { removable: false });
+    } catch (err) {
+      catSum.innerHTML = `<p class="status status--err">${esc(err.message)}${err.code === 'NO_KEY' ? ' <a href="#/settings">الإعدادات</a>' : ''}</p>`;
+    } finally {
+      sumBtn.disabled = false;
+    }
+  });
+
   function openSheet(catId) {
     openCat = catId;
+    catSum.innerHTML = '';
+    sumBtn.hidden = !model.weights[catId];
     const c = categoryById(catId);
     root.querySelector('#sheet-title').textContent = c.label;
     root.querySelector('#sheet-dot').style.background = c.color;

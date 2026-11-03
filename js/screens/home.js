@@ -1,6 +1,6 @@
 // شاشة الرفيقة: الشخصية الطافية + المحادثة صوتاً أو كتابة + تصنيف كل ملاحظة
 import { createCompanion } from '../companion.js';
-import { addEntry, addMessage, getEntries, getMessages, getSetting } from '../storage.js';
+import { addEntry, addMessage, getEntries, getMessages, getSetting, getSummaries } from '../storage.js';
 import { chat } from '../gemini.js';
 import { CATEGORIES, NONE, categoryById } from '../categories.js';
 import { classifyEntry, classifyPending, setCategory } from '../classifier.js';
@@ -51,6 +51,17 @@ export async function mount(root) {
   `;
 
   const bubble = root.querySelector('#bubble');
+
+  // مساءً، إن كتبت أشياء كثيرة اليوم ولم تلخصه بعد، تقترح الرفيقة ملخصاً
+  (async () => {
+    if (new Date().getHours() < 19) return;
+    const start = new Date(); start.setHours(0, 0, 0, 0);
+    const today = (await getEntries()).filter((e) => e.createdAt >= start && e.category !== 'none').length;
+    const done = (await getSummaries()).some((x) => x.kind === 'day' && x.createdAt >= start);
+    if (today >= 3 && !done && bubble.isConnected) {
+      bubble.innerHTML = `${greeting()} قلتَ لي أشياء كثيرة اليوم، <a href="#/folder?summaries">أجهّز لك ملخص يومك؟</a>`;
+    }
+  })();
   const log = root.querySelector('#log');
   const form = root.querySelector('#composer');
   const input = root.querySelector('#input');

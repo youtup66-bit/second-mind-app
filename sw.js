@@ -1,11 +1,16 @@
-// عامل الخدمة: يجعل التطبيق يعمل دون اتصال
-const CACHE = 'second-mind-v7';
+// عامل الخدمة: يجعل التطبيق يعمل دون اتصال.
+// ملفات التطبيق: الشبكة أولاً (لتصلك آخر نسخة فوراً)، والمخزّن عند انقطاع الاتصال.
+// الخطوط: المخزّن أولاً. طلبات Gemini لا تمر عبر المخزّن أبداً.
+const CACHE = 'second-mind-v8';
 const ASSETS = [
   './',
   './index.html',
   './manifest.webmanifest',
   './css/style.css',
   './icons/icon.svg',
+  './icons/icon-192.png',
+  './icons/icon-512.png',
+  './icons/apple-touch-icon.png',
   './js/app.js',
   './js/storage.js',
   './js/categories.js',
@@ -17,9 +22,10 @@ const ASSETS = [
   './js/zip.js',
   './js/backup.js',
   './js/notes-view.js',
-  './js/screens/folder.js',
+  './js/summaries.js',
   './js/screens/home.js',
   './js/screens/mind.js',
+  './js/screens/folder.js',
   './js/screens/settings.js',
 ];
 
@@ -35,24 +41,31 @@ self.addEventListener('activate', (e) => {
   self.clients.claim();
 });
 
-self.addEventListener('fetch', (e) => {
-  const url = new URL(e.request.url);
-  // لا نخزّن طلبات Gemini أو أي طرف خارجي غير الخطوط
-  if (e.request.method !== 'GET') return;
-  const sameOrigin = url.origin === location.origin;
-  const isFont = url.hostname.endsWith('fonts.googleapis.com') || url.hostname.endsWith('fonts.gstatic.com');
-  if (!sameOrigin && !isFont) return;
+async function networkFirst(req) {
+  const cache = await caches.open(CACHE);
+  try {
+    const res = await fetch(req, { cache: 'no-cache' });
+    if (res.ok) cache.put(req, res.clone());
+    return res;
+  } catch {
+    const hit = await cache.match(req, { ignoreSearch: true });
+    if (hit) return hit;
+    if (req.mode === 'navigate') return cache.match('./index.html');
+    throw new Error('offline');
+  }
+}
 
-  e.respondWith(
-    caches.match(e.request).then((cached) => {
-      const network = fetch(e.request).then((res) => {
-        if (res.ok || res.type === 'opaque') {
-          const copy = res.clone();
-          caches.open(CACHE).then((c) => c.put(e.request, copy));
-        }
-        return res;
-      }).catch(() => cached);
-      return cached || network;
-    })
-  );
+async function cacheFirst(req) {
+  const hit = await caches.match(req);
+  if (hit) return hit;
+  const res = await fetch(req);
+  if (res.ok || res.type === 'opaque') (await caches.open(CACHE)).put(req, res.clone());
+  return res;
+}
+
+self.addEventListener('fetch', (e) => {
+  if (e.request.method !== 'GET') return;
+  const url = new URL(e.request.url);
+  if (url.origin === location.origin) return e.respondWith(networkFirst(e.request));
+  if (/(^|\.)fonts\.(googleapis|gstatic)\.com$/.test(url.hostname)) return e.respondWith(cacheFirst(e.request));
 });

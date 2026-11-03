@@ -150,6 +150,59 @@ export async function classify(text, context = []) {
   return { category, title: String(out.title || '').trim().slice(0, 60) };
 }
 
+// ---- الملخصات ----
+const SUMMARIZER = `أنت تكتب ملخصاً شخصياً دافئاً لصاحب مذكرات، بالعربية الفصحى البسيطة وبصيغة المخاطب المحايدة.
+ستصلك ملاحظاته خلال فترة معينة، كل سطر فيه التاريخ والقسم والنص.
+- اكتب بلطف وصدق، بلا مبالغة ولا وعظ، ولا تخترع أحداثاً غير مذكورة.
+- overview: من جملتين إلى أربع تصف ما شغله وكيف بدا حاله.
+- themes: من ٢ إلى ٥ مواضيع متكررة، كل واحد بكلمتين أو ثلاث.
+- openTasks: المهام التي ذكرها ولم يذكر أنه أنجزها (فارغة إن لم توجد).
+- ideas: الأفكار والأحلام التي تستحق العودة إليها (فارغة إن لم توجد).
+- gratitude: ما امتنّ له (فارغة إن لم يوجد).
+- suggestion: اقتراح واحد صغير عملي ولطيف للفترة القادمة.
+- mood: كلمة أو كلمتان تصفان المزاج العام، و moodEmoji: رمز تعبيري واحد يناسبه.`;
+
+const LIST = { type: 'ARRAY', items: { type: 'STRING' } };
+
+// notes: [{ createdAt, categoryLabel, text, done }]
+export async function summarize(notes, periodLabel) {
+  const fmt = new Intl.DateTimeFormat('ar', { weekday: 'short', day: 'numeric', month: 'short' });
+  const lines = notes.map((n) =>
+    `- [${fmt.format(n.createdAt)}] (${n.categoryLabel}${n.done ? '، منجزة' : ''}) ${n.text.slice(0, 500).replace(/\s+/g, ' ')}`);
+  const raw = await generate({
+    systemInstruction: { parts: [{ text: SUMMARIZER }] },
+    contents: [{ role: 'user', parts: [{ text: `الفترة: ${periodLabel}\nعدد الملاحظات: ${notes.length}\n\n${lines.join('\n')}` }] }],
+    generationConfig: {
+      temperature: 0.5,
+      maxOutputTokens: 4096,
+      responseMimeType: 'application/json',
+      responseSchema: {
+        type: 'OBJECT',
+        properties: {
+          headline: { type: 'STRING' },
+          mood: { type: 'STRING' },
+          moodEmoji: { type: 'STRING' },
+          overview: { type: 'STRING' },
+          themes: LIST, openTasks: LIST, ideas: LIST, gratitude: LIST,
+          suggestion: { type: 'STRING' },
+        },
+        required: ['headline', 'mood', 'moodEmoji', 'overview', 'themes', 'openTasks', 'ideas', 'gratitude', 'suggestion'],
+      },
+    },
+  });
+  try {
+    const out = JSON.parse(raw.replace(/^```(?:json)?\s*|\s*```$/g, ''));
+    const arr = (x) => (Array.isArray(x) ? x.map(String).filter(Boolean).slice(0, 8) : []);
+    return {
+      headline: String(out.headline || ''), mood: String(out.mood || ''), moodEmoji: String(out.moodEmoji || '').slice(0, 4),
+      overview: String(out.overview || ''), suggestion: String(out.suggestion || ''),
+      themes: arr(out.themes), openTasks: arr(out.openTasks), ideas: arr(out.ideas), gratitude: arr(out.gratitude),
+    };
+  } catch {
+    throw new GeminiError('رد الملخص غير مفهوم، جرّب مرة أخرى.', 'PARSE');
+  }
+}
+
 // للتحقق من المفتاح من الإعدادات
 export async function testKey(key) {
   const model = await findWorkingModel(key);

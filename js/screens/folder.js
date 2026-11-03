@@ -3,6 +3,8 @@ import { CATEGORIES, NONE, categoryById } from '../categories.js';
 import { getEntries } from '../storage.js';
 import { noteHTML, bindNoteActions, esc } from '../notes-view.js';
 import { backupStatus } from '../backup.js';
+import { getSummaries, deleteSummary } from '../storage.js';
+import { PERIODS, createSummary, summaryHTML } from '../summaries.js';
 
 export const title = 'المجلد';
 
@@ -23,13 +25,19 @@ const norm = (s) => String(s || '').toLowerCase()
   .replace(/[ً-ْـ]/g, '')
   .replace(/[أإآ]/g, 'ا').replace(/ى/g, 'ي').replace(/ة/g, 'ه');
 
-let state = { q: '', cat: 'all' };
+let state = { q: '', cat: 'all', tab: 'notes' };
 
 export async function mount(root) {
   let entries = await getEntries();
   const status = await backupStatus();
+  if (location.hash.includes('summaries')) state.tab = 'summaries';
 
   root.innerHTML = `
+    <div class="seg" role="tablist" aria-label="عرض">
+      <button role="tab" data-tab="notes">الملاحظات</button>
+      <button role="tab" data-tab="summaries">الملخصات</button>
+    </div>
+    <div class="pane" data-pane="notes">
     ${status.needsReminder && entries.length ? `
       <a class="banner" href="#/settings?backup">
         💾 ${status.lastExportAt ? 'مرّ أسبوع على آخر نسخة احتياطية.' : 'لم تحفظ نسخة احتياطية بعد.'}
@@ -40,6 +48,18 @@ export async function mount(root) {
     </div>
     <div class="filters" id="filters" role="tablist" aria-label="الأقسام"></div>
     <div id="list"></div>
+    </div>
+    <div class="pane" data-pane="summaries">
+      <section class="card">
+        <h2>اطلب ملخصاً</h2>
+        <p class="muted">تُرسل ملاحظات الفترة المختارة إلى Gemini ليكتب ملخصها، ويُحفظ الملخص على جهازك.</p>
+        <div class="row" id="sum-actions">
+          ${Object.entries(PERIODS).map(([k, v]) => `<button class="btn btn--ghost" data-period="${k}">${v.label}</button>`).join('')}
+        </div>
+        <p class="status" id="sum-status" role="status"></p>
+      </section>
+      <div id="sums"></div>
+    </div>
   `;
   const q = root.querySelector('#q');
   const filters = root.querySelector('#filters');
@@ -89,8 +109,59 @@ export async function mount(root) {
     `).join('');
   }
 
+  // ---- التبويبات ----
+  function showTab(tab) {
+    state.tab = tab;
+    root.querySelectorAll('[data-tab]').forEach((b) => {
+      b.classList.toggle('is-active', b.dataset.tab === tab);
+      b.setAttribute('aria-selected', b.dataset.tab === tab);
+    });
+    root.querySelectorAll('[data-pane]').forEach((p) => { p.hidden = p.dataset.pane !== tab; });
+  }
+  root.querySelector('.seg').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-tab]');
+    if (b) showTab(b.dataset.tab);
+  });
+
+  // ---- الملخصات ----
+  const sumsEl = root.querySelector('#sums');
+  const sumStatus = root.querySelector('#sum-status');
+  async function renderSummaries() {
+    const all = await getSummaries();
+    sumsEl.innerHTML = all.length
+      ? all.map((x) => summaryHTML(x)).join('')
+      : '<p class="empty muted">لا ملخصات بعد. اختر فترة بالأعلى.</p>';
+  }
+  root.querySelector('#sum-actions').addEventListener('click', async (e) => {
+    const b = e.target.closest('[data-period]');
+    if (!b) return;
+    const buttons = root.querySelectorAll('[data-period]');
+    buttons.forEach((x) => { x.disabled = true; });
+    sumStatus.className = 'status';
+    sumStatus.innerHTML = '<span class="dots"><i></i><i></i><i></i></span> الرفيقة تقرأ ملاحظاتك…';
+    try {
+      await createSummary({ period: b.dataset.period });
+      sumStatus.textContent = '';
+      await renderSummaries();
+    } catch (err) {
+      sumStatus.className = 'status status--err';
+      sumStatus.innerHTML = err.code === 'NO_KEY' || err.code === 'BAD_KEY'
+        ? `${esc(err.message)} <a href="#/settings">الإعدادات</a>` : esc(err.message);
+    } finally {
+      buttons.forEach((x) => { x.disabled = false; });
+    }
+  });
+  sumsEl.addEventListener('click', async (e) => {
+    if (e.target.closest('[data-act="del-summary"]') && confirm('حذف هذا الملخص؟')) {
+      await deleteSummary(e.target.closest('.sum').dataset.id);
+      renderSummaries();
+    }
+  });
+
+  showTab(state.tab);
   renderFilters();
   renderList();
+  renderSummaries();
 
   q.addEventListener('input', () => { state.q = q.value; renderList(); });
   filters.addEventListener('click', (e) => {
