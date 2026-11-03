@@ -413,3 +413,12 @@ mark { background: color-mix(in srgb, #ffc857 45%, transparent); color: inherit;
 @keyframes cmp-pom { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.08) translateY(-1px); } }
 .companion.is-happy .cmp-pom { animation: cmp-pom-wiggle .25s ease-in-out 6; }
 @keyframes cmp-pom-wiggle { 50% { transform: translateX(3px) scale(1.1); } }
+
+/* ---- إعدادات الصوت ---- */
+select {
+  width: 100%; font: inherit; color: var(--text); background: var(--bg-2);
+  border: 1px solid var(--border); border-radius: 12px; padding: 10px 12px; margin-bottom: 12px;
+}
+input[type="range"] { width: 100%; accent-color: var(--accent); margin: 4px 0 12px; }
+#device-opts { margin-top: 12px; }
+#device-opts[hidden] { display: none; }

@@ -5,7 +5,7 @@ import { chat } from '../gemini.js';
 import { CATEGORIES, NONE, categoryById } from '../categories.js';
 import { classifyEntry, classifyPending, setCategory } from '../classifier.js';
 import { recall } from '../recall.js';
-import { canListen, listen, speak, stopSpeaking } from '../voice.js';
+import { canListen, listen, speak, stopSpeaking, unlockAudio } from '../voice.js';
 
 export const title = 'الرفيقة';
 
@@ -173,6 +173,7 @@ export async function mount(root) {
 
   form.addEventListener('submit', (e) => {
     e.preventDefault();
+    unlockAudio();
     send(input.value);
   });
 
@@ -241,12 +242,14 @@ export async function mount(root) {
       return;
     }
     speak(text, {
+      skin,
       onStart: () => companion?.setState('talking'),
       onEnd: () => companion?.state === 'talking' && companion.setState('idle'),
     });
   }
 
   mic?.addEventListener('click', () => {
+    unlockAudio();
     if (stopListening) { stopListening(); return; }
     if (busy) return;
     stopSpeaking();

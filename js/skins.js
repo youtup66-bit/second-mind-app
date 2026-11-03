@@ -6,6 +6,7 @@ export const SKINS = {
   star: {
     label: 'نجمة',
     note: 'شعر بنفسجي ونجمة',
+    voice: { pitch: 1.55, rate: 1.05, gender: 'female', gemini: 'Leda', style: 'Speak in Arabic with a sweet, gentle, slightly high-pitched young anime girl voice, warm and caring' },
     svg: `
 <svg class="companion__svg" viewBox="0 0 200 250" role="img" aria-label="الرفيقة">
   <defs>
@@ -138,6 +139,7 @@ export const SKINS = {
   neko: {
     label: 'نيكو',
     note: 'فتاة قطة بشعر أسود',
+    voice: { pitch: 1.7, rate: 1.1, gender: 'female', gemini: 'Aoede', style: 'Speak in Arabic with a cute, playful, high-pitched catgirl anime voice, a little mischievous and cheerful' },
     svg: `
 <svg class="companion__svg" viewBox="0 0 200 250" role="img" aria-label="الرفيقة">
   <defs>
@@ -288,6 +290,7 @@ export const SKINS = {
   mage: {
     label: 'لهب',
     note: 'ساحر بشعر أحمر',
+    voice: { pitch: 1.15, rate: 1.05, gender: 'male', gemini: 'Puck', style: 'Speak in Arabic with a lively, confident, youthful anime boy voice, energetic and friendly like a young wizard' },
     svg: `
 <svg class="companion__svg" viewBox="0 0 200 250" role="img" aria-label="الرفيقة">
   <defs>
@@ -444,6 +447,7 @@ export const SKINS = {
   bunny: {
     label: 'لولو',
     note: 'أرنبة بفستان وردي',
+    voice: { pitch: 1.85, rate: 1.12, gender: 'female', gemini: 'Laomedeia', style: 'Speak in Arabic with a very cute, bubbly, high-pitched little bunny girl anime voice, bouncy and joyful' },
     svg: `
 <svg class="companion__svg" viewBox="0 0 200 250" role="img" aria-label="الرفيقة">
   <defs>
@@ -604,3 +608,4 @@ export const SKINS = {
 
 export const DEFAULT_SKIN = 'star';
 export const skinSVG = (id) => (SKINS[id] || SKINS[DEFAULT_SKIN]).svg;
+export const skinVoice = (id) => (SKINS[id] || SKINS[DEFAULT_SKIN]).voice;

@@ -225,6 +225,51 @@ export async function summarize(notes, periodLabel) {
   }
 }
 
+// ---- تحويل النص إلى صوت (اختياري) ----
+// يُرسل نص رد الرفيقة فقط (وهو أصلاً من Gemini) ليعود صوتاً طبيعياً.
+export const DEFAULT_TTS_MODEL = 'gemini-3.8-flash-tts';
+
+async function findTtsModel(key) {
+  const data = await call('models?pageSize=200', key);
+  const names = (data.models || [])
+    .filter((m) => m.supportedGenerationMethods?.includes('generateContent'))
+    .map((m) => m.name.replace(/^models\//, ''))
+    .filter((n) => /tts/.test(n));
+  const sorted = names.sort((a, b) => b.localeCompare(a, 'en', { numeric: true }));
+  const pick = sorted.find((n) => /flash/.test(n) && !/preview/.test(n)) || sorted.find((n) => /flash/.test(n)) || sorted[0];
+  if (!pick) throw new GeminiError('لا يوجد نموذج صوت متاح لهذا المفتاح.', 'NO_MODEL');
+  return pick;
+}
+
+// يعيد { samples: Int16Array, rate }
+export async function tts(text, { voice, style }) {
+  const key = await getKey();
+  let model = await getSetting('geminiTtsModel', DEFAULT_TTS_MODEL);
+  const body = {
+    contents: [{ role: 'user', parts: [{ text: `${style}:\n${text}` }] }],
+    generationConfig: {
+      responseModalities: ['AUDIO'],
+      speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: voice } } },
+    },
+  };
+  let data;
+  try {
+    data = await call(`models/${model}:generateContent`, key, body);
+  } catch (err) {
+    if (err.code !== 'NO_MODEL') throw err;
+    model = await findTtsModel(key);
+    await setSetting('geminiTtsModel', model);
+    data = await call(`models/${model}:generateContent`, key, body);
+  }
+  const part = data?.candidates?.[0]?.content?.parts?.find((p) => p.inlineData?.data);
+  if (!part) throw new GeminiError('لم يصل صوت.', 'EMPTY');
+  const rate = Number(/rate=(\d+)/.exec(part.inlineData.mimeType || '')?.[1]) || 24000;
+  const bin = atob(part.inlineData.data);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return { samples: new Int16Array(bytes.buffer, 0, bytes.length >> 1), rate };
+}
+
 // للتحقق من المفتاح من الإعدادات
 export async function testKey(key) {
   const model = await findWorkingModel(key);

@@ -1,7 +1,7 @@
 // شاشة الإعدادات: مفتاح Gemini يُحفظ على الجهاز فقط
 import { getSetting, setSetting, deleteSetting, clearAll, clearMessages } from '../storage.js';
 import { DEFAULT_MODEL, testKey } from '../gemini.js';
-import { canSpeak } from '../voice.js';
+import { canSpeak, speak, stopSpeaking, unlockAudio, voicesReady } from '../voice.js';
 import { SKINS, DEFAULT_SKIN, skinSVG } from '../skins.js';
 import {
   downloadBackup, shareBackup, canShareFiles, importFile,
@@ -18,7 +18,11 @@ export async function mount(root) {
   const model = await getSetting('geminiModel', DEFAULT_MODEL);
   const speakOn = await getSetting('speakReplies', true);
   const memoryOn = await getSetting('useMemory', true);
-  const skin = await getSetting('companionSkin', DEFAULT_SKIN);
+  let skin = await getSetting('companionSkin', DEFAULT_SKIN);
+  const engine = await getSetting('voiceEngine', 'device');
+  const deviceVoice = await getSetting('deviceVoice', '');
+  const pitchShift = Number(await getSetting('voicePitchShift', 0));
+  const rateScale = Number(await getSetting('voiceRateScale', 1));
 
   root.innerHTML = `
     <section class="card">
@@ -31,6 +35,29 @@ export async function mount(root) {
             <span class="skin__note">${k.note}</span>
           </button>`).join('')}
       </div>
+    </section>
+
+    <section class="card" id="voice">
+      <h2>صوت الرفيقة</h2>
+      <p class="muted">لكل شخصية صوت يناسبها تلقائياً. البنات أعلى وأسرع قليلاً، ولهب صوت ولد شاب.</p>
+      <div class="radio-row" role="radiogroup" aria-label="محرك الصوت">
+        <label class="switch"><input type="radio" name="engine" value="device" ${engine === 'device' ? 'checked' : ''}><span>صوت الجهاز</span></label>
+        <label class="switch"><input type="radio" name="engine" value="gemini" ${engine === 'gemini' ? 'checked' : ''}><span>صوت Gemini الطبيعي</span></label>
+      </div>
+      <p class="muted" id="engine-note"></p>
+
+      <div id="device-opts">
+        <label for="device-voice">صوت الجهاز</label>
+        <select id="device-voice"><option value="">تلقائي (حسب الشخصية)</option></select>
+        <label for="pitch">حدّة الصوت <span class="muted" id="pitch-val"></span></label>
+        <input type="range" id="pitch" min="-0.6" max="0.4" step="0.05" value="${pitchShift}">
+        <label for="rate">السرعة <span class="muted" id="rate-val"></span></label>
+        <input type="range" id="rate" min="0.7" max="1.4" step="0.05" value="${rateScale}">
+      </div>
+      <div class="row">
+        <button class="btn" id="test-voice">🔊 جرّب الصوت</button>
+      </div>
+      <p class="status" id="voice-status" role="status"></p>
     </section>
 
     <section class="card">
@@ -56,7 +83,7 @@ export async function mount(root) {
       <h2>المحادثة</h2>
       <label class="switch">
         <input type="checkbox" id="speak" ${speakOn ? 'checked' : ''} ${canSpeak ? '' : 'disabled'}>
-        <span>الرفيقة تنطق ردودها بصوت</span>
+        <span>الرفيقة تنطق ردودها بصوت (اضبطه من "صوت الرفيقة")</span>
       </label>
       <label class="switch">
         <input type="checkbox" id="memory" ${memoryOn ? 'checked' : ''}>
@@ -148,9 +175,78 @@ export async function mount(root) {
     show(keyStatus, 'تم حفظ النموذج.');
   });
 
+  // ---- الصوت ----
+  const voiceStatus = root.querySelector('#voice-status');
+  const engineNote = root.querySelector('#engine-note');
+  const deviceOpts = root.querySelector('#device-opts');
+  const NOTES = {
+    device: 'فوري ومجاني ويعمل دون إنترنت، وجودته تعتمد على الأصوات المثبتة في جوالك.',
+    gemini: 'صوت طبيعي أجمل بكثير يناسب الشخصية. يُرسل نص الرد فقط إلى Gemini، ويستهلك من حصة مفتاحك، ويتأخر ثوانيَ قليلة. إن تعذّر يُستخدم صوت الجهاز تلقائياً.',
+  };
+  const syncEngine = () => {
+    const v = root.querySelector('input[name="engine"]:checked').value;
+    engineNote.textContent = NOTES[v];
+    deviceOpts.hidden = v !== 'device';
+  };
+  syncEngine();
+  root.querySelectorAll('input[name="engine"]').forEach((r) => r.addEventListener('change', async () => {
+    await setSetting('voiceEngine', r.value);
+    syncEngine();
+  }));
+
+  const sel = root.querySelector('#device-voice');
+  voicesReady().then((list) => {
+    if (!list.length) {
+      sel.innerHTML = '<option value="">لا توجد أصوات عربية مثبتة في هذا الجهاز</option>';
+      return;
+    }
+    sel.innerHTML += list.map((v) =>
+      `<option value="${v.voiceURI.replace(/"/g, '&quot;')}" ${v.voiceURI === deviceVoice ? 'selected' : ''}>${v.name.replace(/</g, '&lt;')}</option>`).join('');
+  });
+  sel.addEventListener('change', () => setSetting('deviceVoice', sel.value));
+
+  const pitch = root.querySelector('#pitch'), rate = root.querySelector('#rate');
+  const label = () => {
+    const p = Number(pitch.value);
+    root.querySelector('#pitch-val').textContent = p === 0 ? '(حسب الشخصية)' : p > 0 ? '(أعلى)' : '(أخفض)';
+    root.querySelector('#rate-val').textContent = `×${Number(rate.value).toFixed(2)}`;
+  };
+  label();
+  pitch.addEventListener('input', label);
+  rate.addEventListener('input', label);
+  pitch.addEventListener('change', () => setSetting('voicePitchShift', Number(pitch.value)));
+  rate.addEventListener('change', () => setSetting('voiceRateScale', Number(rate.value)));
+
+  const SAMPLES = {
+    star: 'مرحباً! أنا نجمة، أنا هنا أسمعك دائماً.',
+    neko: 'مياو! أنا نيكو، احكِ لي ما يدور في بالك.',
+    mage: 'أهلاً! أنا لهب، هيا نجد حلاً سحرياً معاً!',
+    bunny: 'هاي هاي! أنا لولو، يومك سيكون جميلاً!',
+  };
+  root.querySelector('#test-voice').addEventListener('click', (e) => {
+    unlockAudio();
+    const btn = e.currentTarget;
+    btn.disabled = true;
+    voiceStatus.className = 'status';
+    voiceStatus.textContent = root.querySelector('input[name="engine"]:checked').value === 'gemini' ? 'أجهّز الصوت…' : '';
+    let fellBack = false;
+    speak(SAMPLES[skin] || SAMPLES.star, {
+      skin,
+      onStart: () => { if (!fellBack) voiceStatus.textContent = ''; },
+      onEnd: () => { btn.disabled = false; },
+      onFallback: (err) => {
+        fellBack = true;
+        voiceStatus.className = 'status status--err';
+        voiceStatus.textContent = `تعذّر صوت Gemini (${err.message}) فاستخدمت صوت الجهاز.`;
+      },
+    });
+    setTimeout(() => { btn.disabled = false; }, 15000);
+  });
+
   root.querySelector('.skins').addEventListener('click', async (e) => {
     const b = e.target.closest('[data-skin]');
     if (!b) return;
+    skin = b.dataset.skin;
     await setSetting('companionSkin', b.dataset.skin);
     root.querySelectorAll('.skin').forEach((x) => {
       x.classList.toggle('is-active', x === b);
@@ -253,4 +349,8 @@ export async function mount(root) {
     input.value = '';
     show(root.querySelector('#wipe-status'), 'تم مسح كل البيانات.');
   });
+}
+
+export function unmount() {
+  stopSpeaking();
 }
