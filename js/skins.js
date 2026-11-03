@@ -237,6 +237,140 @@ export const SKINS = {
   </g>
 </svg>`,
   },
+  mage: {
+    label: 'لهب',
+    note: 'ساحر بشعر أحمر',
+    svg: `
+<svg class="companion__svg" viewBox="0 0 200 250" role="img" aria-label="الرفيقة">
+  <defs>
+    <linearGradient id="mage-hair" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ff7a52"/>
+      <stop offset="1" stop-color="#c62f2a"/>
+    </linearGradient>
+    <linearGradient id="mage-robe" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#4a3fb0"/>
+      <stop offset="1" stop-color="#231d63"/>
+    </linearGradient>
+    <linearGradient id="mage-hat" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#5a4bd1"/>
+      <stop offset="1" stop-color="#2a2275"/>
+    </linearGradient>
+    <radialGradient id="mage-iris" cx="50%" cy="30%" r="75%">
+      <stop offset="0" stop-color="#b8f5cf"/>
+      <stop offset=".5" stop-color="#3fb57a"/>
+      <stop offset="1" stop-color="#155c3a"/>
+    </radialGradient>
+    <radialGradient id="mage-aura" cx="50%" cy="50%" r="50%">
+      <stop offset="0" stop-color="#ff8a5c" stop-opacity=".32"/>
+      <stop offset="1" stop-color="#8b6cff" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="mage-glow" cx="50%" cy="50%" r="50%">
+      <stop offset="0" stop-color="#fff6c2"/>
+      <stop offset=".45" stop-color="#ffc857" stop-opacity=".8"/>
+      <stop offset="1" stop-color="#ffc857" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <ellipse class="cmp-shadow" cx="100" cy="240" rx="38" ry="6" fill="#000" opacity=".35"/>
+
+  <g class="cmp-float">
+    <circle class="cmp-aura" cx="100" cy="118" r="100" fill="url(#mage-aura)"/>
+
+    <!-- الشعر الخلفي القصير -->
+    <path class="cmp-hair-back" fill="url(#mage-hair)"
+      d="M44 100 C40 60 68 38 100 38 C132 38 160 60 156 100 C159 116 154 130 146 138
+         L138 128 L132 140 L68 140 L62 128 L54 138 C46 130 41 116 44 100 Z"/>
+
+    <!-- الرداء والذراعان -->
+    <g class="cmp-body">
+      <g transform="rotate(16 68 176)"><ellipse class="cmp-arm cmp-arm--r" cx="68" cy="176" rx="7" ry="15" fill="#ffe6d5"/></g>
+      <g transform="rotate(-34 134 170)"><ellipse cx="134" cy="170" rx="7" ry="15" fill="#ffe6d5"/></g>
+      <path fill="url(#mage-robe)" d="M80 140 C68 158 62 190 66 216 C82 230 118 230 134 216 C138 190 132 158 120 140 Z"/>
+      <path fill="#ffc857" d="M100 146 L96 228 L104 228 Z" opacity=".85"/>
+      <path fill="#3a2f99" d="M80 140 L100 160 L120 140 L114 136 L100 150 L86 136 Z"/>
+      <path fill="#ffc857" d="M82 141 L100 158 L118 141" stroke="#ffc857" stroke-width="2" fill-opacity="0"/>
+      <circle cx="80" cy="190" r="2" fill="#ffc857" opacity=".8"/>
+      <circle cx="120" cy="200" r="2.4" fill="#ffc857" opacity=".8"/>
+      <circle cx="84" cy="210" r="1.6" fill="#fff" opacity=".7"/>
+      <circle cx="116" cy="176" r="1.6" fill="#fff" opacity=".7"/>
+      <path d="M66 216 C82 230 118 230 134 216" fill="none" stroke="#ffc857" stroke-width="2.5" opacity=".8"/>
+    </g>
+
+    <!-- العصا السحرية -->
+    <g class="cmp-wand">
+      <path d="M138 182 L164 136" stroke="#7a4a2a" stroke-width="4" stroke-linecap="round"/>
+      <path d="M138 182 L164 136" stroke="#a8693d" stroke-width="1.5" stroke-linecap="round"/>
+      <circle class="cmp-wand-glow" cx="166" cy="132" r="14" fill="url(#mage-glow)"/>
+      <g transform="translate(166 132)"><path class="cmp-star" fill="#fff6c2"
+        d="M0 -7 L2 -2.2 L7 -2.2 L3 1.1 L4.4 6.2 L0 3.3 L-4.4 6.2 L-3 1.1 L-7 -2.2 L-2 -2.2 Z"/></g>
+    </g>
+
+    <!-- الوجه -->
+    <ellipse cx="100" cy="100" rx="49" ry="46" fill="#ffe6d5"/>
+
+    <!-- العينان -->
+    <g class="cmp-eyes cmp-eyes--open">
+      <g class="cmp-eye">
+        <ellipse cx="80" cy="109" rx="10" ry="12" fill="#fff"/>
+        <g class="cmp-pupil">
+          <ellipse cx="80" cy="110" rx="8.5" ry="10.5" fill="url(#mage-iris)"/>
+          <ellipse cx="80" cy="111.5" rx="4" ry="5" fill="#0f3322"/>
+          <circle cx="77" cy="105.5" r="2.8" fill="#fff"/>
+          <circle cx="83.5" cy="115" r="1.3" fill="#fff" opacity=".9"/>
+        </g>
+        <path d="M69 103 Q80 95 91 101" stroke="#3a1a14" stroke-width="2.6" fill="none" stroke-linecap="round"/>
+      </g>
+      <g class="cmp-eye">
+        <ellipse cx="120" cy="109" rx="10" ry="12" fill="#fff"/>
+        <g class="cmp-pupil">
+          <ellipse cx="120" cy="110" rx="8.5" ry="10.5" fill="url(#mage-iris)"/>
+          <ellipse cx="120" cy="111.5" rx="4" ry="5" fill="#0f3322"/>
+          <circle cx="117" cy="105.5" r="2.8" fill="#fff"/>
+          <circle cx="123.5" cy="115" r="1.3" fill="#fff" opacity=".9"/>
+        </g>
+        <path d="M109 101 Q120 95 131 103" stroke="#3a1a14" stroke-width="2.6" fill="none" stroke-linecap="round"/>
+      </g>
+      <path d="M69 92 Q79 87 90 91" stroke="#b0321f" stroke-width="3.2" fill="none" stroke-linecap="round"/>
+      <path d="M110 91 Q121 87 131 92" stroke="#b0321f" stroke-width="3.2" fill="none" stroke-linecap="round"/>
+    </g>
+    <g class="cmp-eyes cmp-eyes--happy" stroke="#3a1a14" stroke-width="3" fill="none" stroke-linecap="round">
+      <path d="M70 111 Q80 100 90 111"/>
+      <path d="M110 111 Q120 100 130 111"/>
+    </g>
+
+    <!-- الخدود والفم -->
+    <ellipse cx="68" cy="124" rx="7" ry="4" fill="#ff9a8a" opacity=".4"/>
+    <ellipse cx="132" cy="124" rx="7" ry="4" fill="#ff9a8a" opacity=".4"/>
+    <path class="cmp-mouth cmp-mouth--smile" d="M92 127 Q100 134 108 126" stroke="#9a3f4a" stroke-width="2.4" fill="none" stroke-linecap="round"/>
+    <ellipse class="cmp-mouth cmp-mouth--talk" cx="100" cy="129" rx="5" ry="4" fill="#9a3f4a"/>
+    <path class="cmp-mouth cmp-mouth--o" d="M97 129 a3 3 0 1 0 6 0 a3 3 0 1 0 -6 0" fill="#9a3f4a"/>
+
+    <!-- الغُرّة المدببة -->
+    <path fill="url(#mage-hair)"
+      d="M51 104 C48 68 70 50 100 50 C130 50 152 68 149 104 L142 86 L137 100 L127 78 L118 95
+         L106 72 L97 92 L86 74 L78 97 L67 82 L59 101 Z"/>
+
+    <!-- قبعة الساحر -->
+    <g class="cmp-hat">
+      <path fill="url(#mage-hat)" d="M64 56 C76 36 84 18 70 4 C96 8 122 28 138 56 Z"/>
+      <path fill="#ffc857" d="M66 50 Q100 40 136 50 L138 57 Q100 47 64 57 Z"/>
+      <ellipse cx="100" cy="58" rx="60" ry="10" fill="#2a2275"/>
+      <path d="M44 58 Q100 72 156 58" fill="none" stroke="#6a5ce0" stroke-width="2" opacity=".7"/>
+      <g transform="translate(103 32)"><path class="cmp-star" fill="#ffc857"
+        d="M0 -7 L2 -2.2 L7 -2.2 L3 1.1 L4.4 6.2 L0 3.3 L-4.4 6.2 L-3 1.1 L-7 -2.2 L-2 -2.2 Z"/></g>
+      <circle cx="86" cy="22" r="1.6" fill="#fff" opacity=".8"/>
+      <circle cx="118" cy="44" r="1.3" fill="#fff" opacity=".7"/>
+    </g>
+
+    <!-- فقاعات التفكير -->
+    <g class="cmp-think" fill="#ece9ff">
+      <circle cx="150" cy="44" r="4"/>
+      <circle cx="164" cy="30" r="6"/>
+      <circle cx="182" cy="14" r="8"/>
+    </g>
+  </g>
+</svg>`,
+  },
 };
 
 export const DEFAULT_SKIN = 'star';

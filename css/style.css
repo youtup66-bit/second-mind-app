@@ -161,7 +161,7 @@ input[dir="ltr"] { text-align: left; }
 .companion { cursor: pointer; user-select: none; -webkit-user-select: none; }
 .companion__svg { display: block; width: 100%; height: auto; overflow: visible; }
 .cmp-shadow, .cmp-aura, .cmp-hair-back, .cmp-ahoge, .cmp-star, .cmp-tail, .cmp-arm,
-.cmp-eye, .cmp-mouth, .cmp-think circle, .cmp-ear, .cmp-cattail { transform-box: fill-box; }
+.cmp-eye, .cmp-mouth, .cmp-think circle, .cmp-ear, .cmp-cattail, .cmp-hat, .cmp-wand, .cmp-wand-glow { transform-box: fill-box; }
 
 .cmp-float { animation: cmp-float 4.2s ease-in-out infinite; transform-origin: center; transform-box: view-box; }
 @keyframes cmp-float {
@@ -398,3 +398,13 @@ mark { background: color-mix(in srgb, #ffc857 45%, transparent); color: inherit;
 .skin .companion { pointer-events: none; width: 84px; margin: 0 auto; }
 .skin__name { display: block; font-weight: 700; margin-top: 2px; }
 .skin__note { display: block; font-size: .75rem; color: var(--muted); }
+
+.cmp-hat { transform-origin: 50% 100%; animation: cmp-hat 4.2s ease-in-out infinite; }
+@keyframes cmp-hat { 0%, 100% { transform: rotate(-2deg); } 50% { transform: rotate(2.5deg); } }
+.cmp-wand { transform-origin: 0% 100%; animation: cmp-wand 3s ease-in-out infinite; }
+@keyframes cmp-wand { 0%, 100% { transform: rotate(-3deg); } 50% { transform: rotate(4deg); } }
+.cmp-wand-glow { transform-origin: center; animation: cmp-glow 1.8s ease-in-out infinite; }
+@keyframes cmp-glow { 50% { transform: scale(1.25); opacity: .7; } }
+.companion.is-listening .cmp-wand-glow, .companion.is-thinking .cmp-wand-glow { animation-duration: .6s; }
+.companion.is-happy .cmp-wand { animation: cmp-wave .35s ease-in-out 4; }
+@keyframes cmp-wave { 50% { transform: rotate(-14deg); } }
