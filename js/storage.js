@@ -1,6 +1,6 @@
 // خدمة التخزين المحلي (IndexedDB). لا شيء هنا يغادر الجهاز.
 const DB_NAME = 'second-mind';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 let dbPromise;
 
@@ -17,6 +17,9 @@ function openDB() {
       }
       if (!db.objectStoreNames.contains('settings')) {
         db.createObjectStore('settings');
+      }
+      if (!db.objectStoreNames.contains('messages')) {
+        db.createObjectStore('messages', { keyPath: 'id' }).createIndex('createdAt', 'createdAt');
       }
     };
     req.onsuccess = () => resolve(req.result);
@@ -76,7 +79,24 @@ export async function getEntries({ category } = {}) {
 export const deleteEntry = (id) =>
   run('entries', 'readwrite', (s) => s.delete(id));
 
+// ---- سجل المحادثة ----
+// role: 'user' | 'model'
+export async function addMessage({ role, text, entryId = null }) {
+  const msg = { id: crypto.randomUUID(), role, text, entryId, createdAt: Date.now() };
+  await run('messages', 'readwrite', (s) => s.add(msg));
+  return msg;
+}
+
+export async function getMessages(limit = 100) {
+  const all = await run('messages', 'readonly', (s) => s.getAll());
+  return all.sort((a, b) => a.createdAt - b.createdAt).slice(-limit);
+}
+
+export const clearMessages = () =>
+  run('messages', 'readwrite', (s) => s.clear());
+
 export async function clearAll() {
+  await run('messages', 'readwrite', (s) => s.clear());
   await run('entries', 'readwrite', (s) => s.clear());
   await run('settings', 'readwrite', (s) => s.clear());
 }

@@ -1,10 +1,14 @@
 // شاشة الإعدادات: مفتاح Gemini يُحفظ على الجهاز فقط
-import { getSetting, setSetting, deleteSetting, clearAll } from '../storage.js';
+import { getSetting, setSetting, deleteSetting, clearAll, clearMessages } from '../storage.js';
+import { DEFAULT_MODEL, testKey } from '../gemini.js';
+import { canSpeak } from '../voice.js';
 
 export const title = 'الإعدادات';
 
 export async function mount(root) {
   const key = await getSetting('geminiApiKey', '');
+  const model = await getSetting('geminiModel', DEFAULT_MODEL);
+  const speakOn = await getSetting('speakReplies', true);
 
   root.innerHTML = `
     <section class="card">
@@ -16,14 +20,32 @@ export async function mount(root) {
       <div class="row">
         <button class="btn" id="save-key">حفظ</button>
         <button class="btn btn--ghost" id="toggle-key">إظهار</button>
+        <button class="btn btn--ghost" id="test-key">اختبار</button>
         <button class="btn btn--ghost" id="remove-key">حذف المفتاح</button>
       </div>
       <p class="status" id="key-status" role="status"></p>
+      <p class="muted">احصل على مفتاح مجاني من <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Google AI Studio</a>.</p>
+      <label for="model">النموذج</label>
+      <input id="model" type="text" dir="ltr" spellcheck="false" value="${model.replace(/"/g, '&quot;')}">
+      <p class="muted">إن لم يكن النموذج متاحاً لمفتاحك، يختار التطبيق نموذجاً مناسباً تلقائياً.</p>
+    </section>
+
+    <section class="card">
+      <h2>المحادثة</h2>
+      <label class="switch">
+        <input type="checkbox" id="speak" ${speakOn ? 'checked' : ''} ${canSpeak ? '' : 'disabled'}>
+        <span>الرفيقة تنطق ردودها بصوت</span>
+      </label>
+      <p class="muted">الإدخال الصوتي يعتمد على خدمة التعرف على الكلام في متصفحك، وقد يرسل المتصفح الصوت إلى خوادمه لتحويله إلى نص.</p>
+      <div class="row">
+        <button class="btn btn--ghost" id="clear-chat">مسح سجل المحادثة</button>
+      </div>
+      <p class="status" id="chat-status" role="status"></p>
     </section>
 
     <section class="card">
       <h2>الخصوصية</h2>
-      <p class="muted">كل ملاحظاتك محفوظة على هذا الجهاز. لا يُرسل شيء للخارج إلا نص المحادثة إلى Gemini عند استخدامها.</p>
+      <p class="muted">كل ملاحظاتك محفوظة على هذا الجهاز. لا يُرسل شيء للخارج إلا نص المحادثة الأخيرة إلى Gemini لتردّ الرفيقة.</p>
       <div class="row">
         <button class="btn btn--danger" id="wipe">مسح كل البيانات</button>
       </div>
@@ -49,6 +71,36 @@ export async function mount(root) {
     const hidden = input.type === 'password';
     input.type = hidden ? 'text' : 'password';
     e.currentTarget.textContent = hidden ? 'إخفاء' : 'إظهار';
+  });
+
+  root.querySelector('#test-key').addEventListener('click', async (e) => {
+    const v = input.value.trim();
+    if (!v) return show(keyStatus, 'أدخل المفتاح أولاً.', false);
+    e.currentTarget.disabled = true;
+    show(keyStatus, 'جارٍ الاختبار…');
+    try {
+      const m = await testKey(v);
+      await setSetting('geminiApiKey', v);
+      show(keyStatus, `المفتاح يعمل ✓ (مثلاً: ${m})`);
+    } catch (err) {
+      show(keyStatus, err.message, false);
+    } finally {
+      e.currentTarget.disabled = false;
+    }
+  });
+
+  root.querySelector('#model').addEventListener('change', async (e) => {
+    const v = e.target.value.trim();
+    if (v) await setSetting('geminiModel', v); else { await deleteSetting('geminiModel'); e.target.value = DEFAULT_MODEL; }
+    show(keyStatus, 'تم حفظ النموذج.');
+  });
+
+  root.querySelector('#speak').addEventListener('change', (e) => setSetting('speakReplies', e.target.checked));
+
+  root.querySelector('#clear-chat').addEventListener('click', async () => {
+    if (!confirm('سيُمسح سجل المحادثة فقط، وتبقى ملاحظاتك. متابعة؟')) return;
+    await clearMessages();
+    show(root.querySelector('#chat-status'), 'تم مسح سجل المحادثة.');
   });
 
   root.querySelector('#remove-key').addEventListener('click', async () => {

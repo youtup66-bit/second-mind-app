@@ -1,5 +1,5 @@
 // عامل الخدمة: يجعل التطبيق يعمل دون اتصال
-const CACHE = 'second-mind-v3';
+const CACHE = 'second-mind-v4';
 const ASSETS = [
   './',
   './index.html',
@@ -11,6 +11,8 @@ const ASSETS = [
   './js/categories.js',
   './js/mind-graph.js',
   './js/companion.js',
+  './js/gemini.js',
+  './js/voice.js',
   './js/screens/home.js',
   './js/screens/mind.js',
   './js/screens/settings.js',
