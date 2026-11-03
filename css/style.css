@@ -161,7 +161,7 @@ input[dir="ltr"] { text-align: left; }
 .companion { cursor: pointer; user-select: none; -webkit-user-select: none; }
 .companion__svg { display: block; width: 100%; height: auto; overflow: visible; }
 .cmp-shadow, .cmp-aura, .cmp-hair-back, .cmp-ahoge, .cmp-star, .cmp-tail, .cmp-arm,
-.cmp-eye, .cmp-mouth, .cmp-think circle, .cmp-ear, .cmp-cattail, .cmp-hat, .cmp-wand, .cmp-wand-glow { transform-box: fill-box; }
+.cmp-eye, .cmp-mouth, .cmp-think circle, .cmp-ear, .cmp-cattail, .cmp-hat, .cmp-wand, .cmp-wand-glow, .cmp-pom { transform-box: fill-box; }
 
 .cmp-float { animation: cmp-float 4.2s ease-in-out infinite; transform-origin: center; transform-box: view-box; }
 @keyframes cmp-float {
@@ -408,3 +408,8 @@ mark { background: color-mix(in srgb, #ffc857 45%, transparent); color: inherit;
 .companion.is-listening .cmp-wand-glow, .companion.is-thinking .cmp-wand-glow { animation-duration: .6s; }
 .companion.is-happy .cmp-wand { animation: cmp-wave .35s ease-in-out 4; }
 @keyframes cmp-wave { 50% { transform: rotate(-14deg); } }
+
+.cmp-pom { transform-origin: center; animation: cmp-pom 2.4s ease-in-out infinite; }
+@keyframes cmp-pom { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.08) translateY(-1px); } }
+.companion.is-happy .cmp-pom { animation: cmp-pom-wiggle .25s ease-in-out 6; }
+@keyframes cmp-pom-wiggle { 50% { transform: translateX(3px) scale(1.1); } }
