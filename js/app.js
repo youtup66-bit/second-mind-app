@@ -1,9 +1,11 @@
 // الموجّه البسيط بين الشاشات
 import * as home from './screens/home.js';
 import * as mind from './screens/mind.js';
+import * as folder from './screens/folder.js';
 import * as settings from './screens/settings.js';
+import { autoSnapshot } from './backup.js';
 
-const routes = { home, mind, settings };
+const routes = { home, mind, folder, settings };
 const app = document.getElementById('app');
 const titleEl = document.getElementById('screen-title');
 
@@ -12,7 +14,7 @@ let navId = 0;
 
 async function navigate() {
   const myNav = ++navId;
-  const name = location.hash.replace(/^#\//, '') || 'home';
+  const name = location.hash.replace(/^#\//, '').split('?')[0] || 'home';
   const screen = routes[name] || home;
 
   current?.unmount?.();
@@ -37,6 +39,9 @@ async function navigate() {
 
 window.addEventListener('hashchange', navigate);
 navigate();
+
+// لقطة يومية على الجهاز (لا شيء يغادره)
+autoSnapshot().catch((err) => console.warn('snapshot:', err));
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {

@@ -2,6 +2,13 @@
 import { getSetting, setSetting, deleteSetting, clearAll, clearMessages } from '../storage.js';
 import { DEFAULT_MODEL, testKey } from '../gemini.js';
 import { canSpeak } from '../voice.js';
+import {
+  downloadBackup, shareBackup, canShareFiles, importFile,
+  listSnapshots, restoreSnapshot, backupStatus, requestPersistence,
+} from '../backup.js';
+
+const fmt = new Intl.DateTimeFormat('ar', { dateStyle: 'medium', timeStyle: 'short' });
+const REASONS = { auto: 'تلقائية', 'before-import': 'قبل الاستيراد', 'before-restore': 'قبل الاستعادة' };
 
 export const title = 'الإعدادات';
 
@@ -41,6 +48,32 @@ export async function mount(root) {
         <button class="btn btn--ghost" id="clear-chat">مسح سجل المحادثة</button>
       </div>
       <p class="status" id="chat-status" role="status"></p>
+    </section>
+
+    <section class="card" id="backup">
+      <h2>النسخ الاحتياطي</h2>
+      <p class="muted" id="backup-info"></p>
+      <div class="row">
+        <button class="btn" id="export">حفظ نسخة ZIP</button>
+        ${canShareFiles() ? '<button class="btn btn--ghost" id="share">مشاركة النسخة</button>' : ''}
+      </div>
+      <p class="muted">الملف يحوي ملاحظاتك ومحادثتك، ونسخة مقروءة مقسّمة حسب الأقسام. لا يحوي مفتاح Gemini.</p>
+
+      <h3 class="subhead">استيراد نسخة</h3>
+      <div class="radio-row" role="radiogroup" aria-label="طريقة الاستيراد">
+        <label class="switch"><input type="radio" name="mode" value="merge" checked><span>دمج مع الموجود</span></label>
+        <label class="switch"><input type="radio" name="mode" value="replace"><span>استبدال الكل</span></label>
+      </div>
+      <div class="row">
+        <label class="btn btn--ghost file-btn">اختيار ملف…
+          <input type="file" id="import" accept=".zip,application/zip,.json,application/json" hidden>
+        </label>
+      </div>
+      <p class="status" id="backup-status" role="status"></p>
+
+      <h3 class="subhead">لقطات على الجهاز</h3>
+      <p class="muted">يحفظ التطبيق لقطة يومية تلقائياً (آخر ٧)، لتستعيد ما حذفته بالخطأ. هذه اللقطات لا تحميك إن مُسح المتصفح، فاحفظ ملف ZIP بين حين وآخر.</p>
+      <ul class="snaps" id="snaps"></ul>
     </section>
 
     <section class="card">
@@ -102,6 +135,80 @@ export async function mount(root) {
     await clearMessages();
     show(root.querySelector('#chat-status'), 'تم مسح سجل المحادثة.');
   });
+
+  // ---- النسخ الاحتياطي ----
+  const backupMsg = root.querySelector('#backup-status');
+
+  async function renderBackupInfo() {
+    const st = await backupStatus();
+    const parts = [st.lastExportAt ? `آخر نسخة محفوظة: ${fmt.format(st.lastExportAt)}.` : 'لم تحفظ نسخة بعد.'];
+    parts.push(st.persisted ? 'المتصفح لن يحذف بياناتك تلقائياً ✓' : 'قد يحذف المتصفح البيانات عند امتلاء التخزين؛ ثبّت التطبيق على الشاشة الرئيسية لتقليل ذلك.');
+    root.querySelector('#backup-info').textContent = parts.join(' ');
+  }
+
+  async function renderSnaps() {
+    const snaps = await listSnapshots();
+    root.querySelector('#snaps').innerHTML = snaps.length
+      ? snaps.map((s) => `
+        <li class="snap">
+          <span>${fmt.format(s.createdAt)} <span class="muted">· ${REASONS[s.reason] || s.reason} · ${s.count} ملاحظة</span></span>
+          <button class="link-btn" data-restore="${s.id}">استعادة</button>
+        </li>`).join('')
+      : '<li class="muted">لا لقطات بعد. تُنشأ أول لقطة بعد أن تكتب ملاحظات.</li>';
+  }
+
+  await Promise.all([renderBackupInfo(), renderSnaps()]);
+
+  async function withBusy(btn, fn) {
+    btn.disabled = true;
+    try { await fn(); } catch (err) {
+      if (err?.name !== 'AbortError') show(backupMsg, err.message || 'حدث خطأ.', false);
+    } finally { btn.disabled = false; }
+  }
+
+  root.querySelector('#export').addEventListener('click', (e) => withBusy(e.currentTarget, async () => {
+    const { filename, count } = await downloadBackup();
+    requestPersistence();
+    show(backupMsg, `تم حفظ ${filename} (${count} ملاحظة).`);
+    renderBackupInfo();
+  }));
+
+  root.querySelector('#share')?.addEventListener('click', (e) => withBusy(e.currentTarget, async () => {
+    const { count } = await shareBackup();
+    show(backupMsg, `تمت مشاركة النسخة (${count} ملاحظة).`);
+    renderBackupInfo();
+  }));
+
+  root.querySelector('#import').addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    e.target.value = '';
+    if (!file) return;
+    const mode = root.querySelector('input[name="mode"]:checked').value;
+    if (mode === 'replace' && !confirm('سيُستبدل كل ما في التطبيق بمحتوى الملف (مع حفظ لقطة قبلها). متابعة؟')) return;
+    show(backupMsg, 'جارٍ الاستيراد…');
+    try {
+      const r = await importFile(file, mode);
+      show(backupMsg, `تم استيراد ${r.entries} ملاحظة و${r.messages} رسالة.`);
+      renderSnaps();
+    } catch (err) {
+      show(backupMsg, err instanceof SyntaxError ? 'الملف تالف أو غير مقروء.' : err.message, false);
+    }
+  });
+
+  root.querySelector('#snaps').addEventListener('click', async (e) => {
+    const id = e.target.closest('[data-restore]')?.dataset.restore;
+    if (!id) return;
+    if (!confirm('ستعود ملاحظاتك ومحادثتك إلى حالها في هذه اللقطة (مع حفظ لقطة للحال الحالي). متابعة؟')) return;
+    try {
+      const r = await restoreSnapshot(id);
+      show(backupMsg, `تمت الاستعادة: ${r.entries} ملاحظة.`);
+      renderSnaps();
+    } catch (err) {
+      show(backupMsg, err.message, false);
+    }
+  });
+
+  if (location.hash.includes('backup')) root.querySelector('#backup').scrollIntoView({ block: 'start' });
 
   root.querySelector('#remove-key').addEventListener('click', async () => {
     await deleteSetting('geminiApiKey');

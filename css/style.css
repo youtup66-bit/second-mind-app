@@ -45,7 +45,7 @@ body {
 
 .tabbar {
   position: fixed; inset-inline: 0; bottom: 0; z-index: 10;
-  display: grid; grid-template-columns: repeat(3, 1fr);
+  display: grid; grid-template-columns: repeat(4, 1fr);
   height: calc(var(--tabbar-h) + env(safe-area-inset-bottom));
   padding-bottom: env(safe-area-inset-bottom);
   background: var(--bg-2);
@@ -288,3 +288,36 @@ input[dir="ltr"] { text-align: left; }
 }
 .link-btn--danger { color: var(--danger); }
 .chip--tiny { font-size: .78rem; padding: 4px 10px; min-height: 30px; }
+
+/* ---- المجلد ---- */
+.banner {
+  display: block; text-decoration: none; color: var(--text);
+  background: color-mix(in srgb, #ffc857 14%, var(--surface)); border: 1px solid #ffc85766;
+  border-radius: 14px; padding: 10px 14px; margin-bottom: 12px; font-size: .9rem;
+}
+.banner strong { color: #ffc857; margin-inline-start: 4px; }
+.search input[type="search"] { width: 100%; font: inherit; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 12px 14px; outline: none; }
+.search input:focus { border-color: var(--accent); }
+.filters {
+  display: flex; gap: 8px; overflow-x: auto; padding: 12px 0; margin: 0 -16px; padding-inline: 16px;
+  scrollbar-width: none;
+}
+.filters::-webkit-scrollbar { display: none; }
+.filters .chip { flex: none; }
+.chip.is-active { background: color-mix(in srgb, var(--c) 45%, var(--surface)); border-color: var(--c); }
+.chip__n { opacity: .7; font-weight: 500; margin-inline-start: 2px; }
+.chip--static { cursor: default; display: inline-block; margin-bottom: 6px; }
+.day { font-size: .85rem; color: var(--muted); font-weight: 700; margin: 16px 0 8px; }
+.day:first-child { margin-top: 4px; }
+.empty { text-align: center; padding: 32px 0; }
+.empty a { color: var(--accent); }
+mark { background: color-mix(in srgb, #ffc857 45%, transparent); color: inherit; border-radius: 3px; padding: 0 1px; }
+
+/* ---- النسخ الاحتياطي ---- */
+.subhead { font-size: .95rem; margin: 20px 0 8px; }
+.radio-row { display: flex; gap: 16px; flex-wrap: wrap; }
+.file-btn { display: inline-flex; align-items: center; margin: 0; }
+.snaps { list-style: none; padding: 0; margin: 8px 0 0; display: grid; gap: 6px; }
+.snap { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: .9rem;
+  background: var(--bg-2); border: 1px solid var(--border); border-radius: 12px; padding: 6px 10px; }
+#backup { scroll-margin-top: 80px; }

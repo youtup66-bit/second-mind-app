@@ -2,10 +2,10 @@
 // - حجم الكرة = عدد ملاحظاتها.
 // - الخط بين قسمين يقوى كلما تحدثت عنهما في الجلسة نفسها (ملاحظات متقاربة زمنياً).
 // - لمس الكرة يفتح ملاحظاتها، ويمكن نقلها لقسم آخر أو حذفها.
-import { CATEGORIES, NONE, categoryById } from '../categories.js';
-import { getEntries, deleteEntry } from '../storage.js';
-import { setCategory } from '../classifier.js';
+import { CATEGORIES, categoryById } from '../categories.js';
+import { getEntries } from '../storage.js';
 import { createMindGraph } from '../mind-graph.js';
+import { noteHTML, bindNoteActions } from '../notes-view.js';
 
 export const title = 'العقل';
 
@@ -48,9 +48,6 @@ function buildModel(entries) {
   }
   return { weights, links, total: known.length };
 }
-
-const fmtDate = new Intl.DateTimeFormat('ar', { dateStyle: 'medium', timeStyle: 'short' });
-const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
 export async function mount(root) {
   let entries = await getEntries();
@@ -124,42 +121,13 @@ export async function mount(root) {
       notesEl.innerHTML = `<li class="notes__empty muted">لا توجد ملاحظات هنا بعد.</li>`;
       return;
     }
-    notesEl.innerHTML = list.map((e) => `
-      <li class="note" data-id="${e.id}">
-        ${e.meta?.title ? `<p class="note__title">${esc(e.meta.title)}</p>` : ''}
-        <p class="note__text">${esc(e.text)}</p>
-        <div class="note__foot">
-          <time class="muted">${fmtDate.format(e.createdAt)}${e.source === 'voice' ? ' · 🎙' : ''}</time>
-          <span class="note__actions">
-            <button class="link-btn" data-act="move">نقل</button>
-            <button class="link-btn link-btn--danger" data-act="delete">حذف</button>
-          </span>
-        </div>
-        <div class="note__move" hidden>
-          ${[...CATEGORIES, NONE].filter((c) => c.id !== openCat).map((c) => `
-            <button class="chip chip--tiny" data-cat="${c.id}" style="--c:${c.color}">${c.label}</button>`).join('')}
-        </div>
-      </li>`).join('');
+    notesEl.innerHTML = list.map((e) => noteHTML(e)).join('');
   }
 
-  sheet.addEventListener('click', async (e) => {
-    if (e.target === sheet || e.target.closest('#sheet-close')) return closeSheet();
-    const li = e.target.closest('.note');
-    if (!li) return;
-    const id = li.dataset.id;
-    const act = e.target.closest('[data-act]')?.dataset.act;
-    if (act === 'move') {
-      const box = li.querySelector('.note__move');
-      box.hidden = !box.hidden;
-    } else if (act === 'delete') {
-      if (!confirm('حذف هذه الملاحظة نهائياً؟')) return;
-      await deleteEntry(id);
-      await refresh();
-    } else if (e.target.closest('[data-cat]')) {
-      await setCategory(id, e.target.closest('[data-cat]').dataset.cat);
-      await refresh();
-    }
+  sheet.addEventListener('click', (e) => {
+    if (e.target === sheet || e.target.closest('#sheet-close')) closeSheet();
   });
+  bindNoteActions(notesEl, refresh);
 }
 
 export function unmount() {
