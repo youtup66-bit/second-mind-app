@@ -1,0 +1,16 @@
+{
+  "name": "عقلي الثاني",
+  "short_name": "عقلي الثاني",
+  "description": "رفيقة تسجّل أفكارك وتصنّفها، وكل شيء يبقى على جهازك.",
+  "lang": "ar",
+  "dir": "rtl",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0b0820",
+  "theme_color": "#140f2e",
+  "icons": [
+    { "src": "icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}
