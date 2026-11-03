@@ -105,6 +105,10 @@ export async function getMessages(limit = 100) {
   return all.sort((a, b) => a.createdAt - b.createdAt).slice(-limit);
 }
 
+export const getMessage = (id) => run('messages', 'readonly', (s) => s.get(id));
+export const updateMessage = (msg) => run('messages', 'readwrite', (s) => s.put(msg));
+export const deleteMessage = (id) => run('messages', 'readwrite', (s) => s.delete(id));
+
 export const clearMessages = () =>
   run('messages', 'readwrite', (s) => s.clear());
 

@@ -1,6 +1,9 @@
 // شاشة الرفيقة: الشخصية الطافية + المحادثة صوتاً أو كتابة + تصنيف كل ملاحظة
 import { createCompanion } from '../companion.js';
-import { addEntry, addMessage, getEntries, getMessages, getSetting, getSummaries } from '../storage.js';
+import {
+  addEntry, addMessage, getEntries, getEntry, getMessage, getMessages, getSetting, getSummaries,
+  setSetting, updateEntry, updateMessage, deleteMessage, deleteEntry,
+} from '../storage.js';
 import { chat, transcribe } from '../gemini.js';
 import { CATEGORIES, NONE, categoryById } from '../categories.js';
 import { classifyEntry, classifyPending, setCategory } from '../classifier.js';
@@ -27,23 +30,33 @@ function bubbleText(reply) {
   return cut + (cut.length < reply.length && !cut.endsWith('…') ? ' …' : '');
 }
 
-const escapeHtml = (s) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const escapeHtml = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
 let companion = null;
 let stopListening = null;
 let busy = false;
 
 export async function mount(root) {
+  const textOnly = await getSetting('textOnly', false);
+  let speakOn = !textOnly && await getSetting('speakReplies', true);
+  const showMic = canListen && !textOnly;
+
   root.innerHTML = `
     <section class="chat">
       <div class="chat__hero">
+        <div class="chat__tools">
+          <button type="button" class="tool" id="voice-toggle" ${textOnly ? 'hidden' : ''}></button>
+          <button type="button" class="tool tool--stop" id="stop-voice" hidden aria-label="أوقف الصوت">⏹ أوقف الصوت</button>
+          ${textOnly ? '<a class="tool" href="#/settings?talk" title="غيّره من الإعدادات">⌨️ كتابة فقط</a>' : ''}
+        </div>
         <p class="bubble" id="bubble" role="status">${greeting()}</p>
         <div class="chat__stage" id="stage"></div>
       </div>
       <ol class="chat__log" id="log" aria-label="المحادثة"></ol>
       <form class="composer" id="composer" autocomplete="off">
-        <button type="button" class="composer__mic" id="mic" aria-label="تحدّث" ${canListen ? '' : 'hidden'}>🎙</button>
+        <button type="button" class="composer__mic" id="mic" aria-label="تحدّث" ${showMic ? '' : 'hidden'}>🎙</button>
         <textarea id="input" rows="1" placeholder="اكتب ما في بالك..." aria-label="رسالتك"></textarea>
+        <button type="button" class="composer__clear" id="clear" aria-label="مسح النص" hidden>✕</button>
         <button type="submit" class="composer__send" id="send" aria-label="إرسال">➤</button>
       </form>
       <div class="sheet" id="sheet" hidden>
@@ -59,6 +72,14 @@ export async function mount(root) {
   `;
 
   const bubble = root.querySelector('#bubble');
+  const log = root.querySelector('#log');
+  const form = root.querySelector('#composer');
+  const input = root.querySelector('#input');
+  const mic = root.querySelector('#mic');
+  const clearBtn = root.querySelector('#clear');
+  const voiceToggle = root.querySelector('#voice-toggle');
+  const stopVoiceBtn = root.querySelector('#stop-voice');
+  let tapIdx = 0;
 
   // مساءً، إن كتبت أشياء كثيرة اليوم ولم تلخصه بعد، تقترح الرفيقة ملخصاً
   (async () => {
@@ -70,17 +91,16 @@ export async function mount(root) {
       bubble.innerHTML = `${greeting()} قلتَ لي أشياء كثيرة اليوم، <a href="#/folder?summaries">أجهّز لك ملخص يومك؟</a>`;
     }
   })();
-  const log = root.querySelector('#log');
-  const form = root.querySelector('#composer');
-  const input = root.querySelector('#input');
-  const mic = root.querySelector('#mic');
-  let tapIdx = 0;
 
   const skin = await getSetting('companionSkin', 'star');
   if (!root.isConnected) return;
   companion = createCompanion(root.querySelector('#stage'), {
     skin,
-    onTap: () => !busy && say(TAP_LINES[tapIdx++ % TAP_LINES.length]),
+    onTap: () => {
+      // لمس الرفيقة وهي تتكلم يوقف صوتها
+      if (companion?.state === 'talking') return stopVoice();
+      if (!busy) say(TAP_LINES[tapIdx++ % TAP_LINES.length]);
+    },
   });
 
   function say(text) {
@@ -90,12 +110,39 @@ export async function mount(root) {
     bubble.classList.add('is-shown');
   }
 
-  function append(role, text, extra = '', entry = null, used = []) {
+  // ---- التحكم في الصوت ----
+  const renderVoiceToggle = () => {
+    voiceToggle.textContent = speakOn ? '🔊 الصوت يعمل' : '🔇 بلا صوت';
+    voiceToggle.setAttribute('aria-pressed', String(speakOn));
+  };
+  renderVoiceToggle();
+  voiceToggle.addEventListener('click', async () => {
+    speakOn = !speakOn;
+    await setSetting('speakReplies', speakOn);
+    if (!speakOn) stopVoice();
+    renderVoiceToggle();
+  });
+
+  const setTalking = (on) => {
+    stopVoiceBtn.hidden = !on;
+    if (on) companion?.setState('talking');
+    else if (companion?.state === 'talking') companion.setState('idle');
+  };
+  function stopVoice() {
+    stopSpeaking();
+    setTalking(false);
+  }
+  stopVoiceBtn.addEventListener('click', stopVoice);
+
+  // ---- عرض الرسائل ----
+  function append(msg, { entry = null, used = [], pending = false } = {}) {
     const li = document.createElement('li');
-    li.className = `msg msg--${role} ${extra}`;
+    li.className = `msg msg--${msg.role}${pending ? ' msg--pending' : ''}`;
+    if (msg.id) li.dataset.id = msg.id;
+    li.dataset.role = msg.role;
     const body = document.createElement('span');
     body.className = 'msg__text';
-    body.textContent = text;
+    body.textContent = msg.text;
     li.append(body);
     if (used.length) renderUsed(li, used);
     if (entry) {
@@ -114,6 +161,8 @@ export async function mount(root) {
 
   // "استعنتُ بملاحظاتك": يوضح أي ملاحظات قرأتها الرفيقة قبل ردها
   function renderUsed(li, used) {
+    li.querySelector('.used')?.remove();
+    if (!used.length) return;
     const box = document.createElement('details');
     box.className = 'used';
     box.innerHTML = `<summary>📎 استعنتُ بـ${used.length === 1 ? 'ملاحظة واحدة' : ` ${used.length} من ملاحظاتك`}</summary>
@@ -121,7 +170,7 @@ export async function mount(root) {
         const c = categoryById(e.category);
         return `<li><span class="used__dot" style="background:${c ? c.color : 'var(--muted)'}"></span>${escapeHtml(e.meta?.title || e.text.slice(0, 50))}</li>`;
       }).join('')}</ul>`;
-    li.append(box);
+    li.querySelector('.msg__text').after(box);
   }
 
   function renderChip(chip, entry) {
@@ -139,43 +188,170 @@ export async function mount(root) {
   }
 
   const entriesById = Object.fromEntries((await getEntries()).map((e) => [e.id, e]));
-  (await getMessages(50)).forEach((m) =>
-    append(m.role, m.text, '',
-      m.role === 'user' && m.entryId ? entriesById[m.entryId] || null : null,
-      (m.used || []).map((id) => entriesById[id]).filter(Boolean)));
+  (await getMessages(50)).forEach((m) => append(m, {
+    entry: m.role === 'user' && m.entryId ? entriesById[m.entryId] || null : null,
+    used: (m.used || []).map((id) => entriesById[id]).filter(Boolean),
+  }));
 
   // ما فات تصنيفه سابقاً (بلا مفتاح أو اتصال) نصنّفه الآن بهدوء
   classifyPending(refreshChip);
 
   // ---- تصحيح التصنيف يدوياً ----
   const sheet = root.querySelector('#sheet');
-  let editing = null;
-  log.addEventListener('click', (e) => {
-    const chip = e.target.closest('.chip[data-entry]');
-    if (!chip) return;
-    editing = chip.dataset.entry;
-    sheet.hidden = false;
-  });
+  let editingCat = null;
   sheet.addEventListener('click', async (e) => {
     const pick = e.target.closest('.chip[data-cat]');
-    if (pick && editing) refreshChip(await setCategory(editing, pick.dataset.cat));
-    if (pick || e.target === sheet) { sheet.hidden = true; editing = null; }
+    if (pick && editingCat) refreshChip(await setCategory(editingCat, pick.dataset.cat));
+    if (pick || e.target === sheet) { sheet.hidden = true; editingCat = null; }
   });
 
-  // تكبير خانة الكتابة مع النص
-  const autosize = () => { input.style.height = 'auto'; input.style.height = `${Math.min(input.scrollHeight, 120)}px`; };
+  // ---- خيارات الرسالة: نسخ، تعديل، حذف، استماع، رد جديد ----
+  function closeActions() {
+    log.querySelectorAll('.msg__actions').forEach((a) => a.remove());
+  }
+
+  function openActions(li) {
+    const had = li.querySelector('.msg__actions');
+    closeActions();
+    if (had || li.classList.contains('msg--pending') || li.classList.contains('is-editing')) return;
+    const isUser = li.dataset.role === 'user';
+    const bar = document.createElement('div');
+    bar.className = 'msg__actions';
+    bar.innerHTML = `
+      <button type="button" data-act="copy">📋 نسخ</button>
+      ${isUser ? '<button type="button" data-act="edit">✏️ تعديل</button>' : ''}
+      ${!isUser && !textOnly ? '<button type="button" data-act="listen">🔊 استمع</button>' : ''}
+      ${!isUser ? '<button type="button" data-act="regen">🔄 رد جديد</button>' : ''}
+      <button type="button" data-act="delete" class="is-danger">🗑 حذف</button>`;
+    li.append(bar);
+  }
+
+  log.addEventListener('click', async (e) => {
+    const chip = e.target.closest('.chip[data-entry]');
+    if (chip) { editingCat = chip.dataset.entry; sheet.hidden = false; return; }
+    const li = e.target.closest('.msg');
+    if (!li || e.target.closest('details, .msg__edit')) return;
+    const act = e.target.closest('[data-act]')?.dataset.act;
+    if (!act) return openActions(li);
+    closeActions();
+    const id = li.dataset.id;
+    const text = li.querySelector('.msg__text').textContent;
+    if (act === 'copy') {
+      try { await navigator.clipboard.writeText(text); say('نسختُ الرسالة ✓'); }
+      catch { say('تعذّر النسخ في هذا المتصفح.'); }
+    } else if (act === 'edit') {
+      startEdit(li);
+    } else if (act === 'listen') {
+      talk(text, true);
+    } else if (act === 'regen') {
+      regenerate(li);
+    } else if (act === 'delete') {
+      await removeMessage(li);
+    }
+  });
+
+  // تعديل رسالة المستخدم في مكانها، مع تحديث ملاحظتها وإعادة تصنيفها
+  async function startEdit(li) {
+    const msg = await getMessage(li.dataset.id);
+    if (!msg) return;
+    const next = li.nextElementSibling;
+    const hasReply = next?.dataset.role === 'model';
+    li.classList.add('is-editing');
+    const box = document.createElement('div');
+    box.className = 'msg__edit';
+    box.innerHTML = `
+      <textarea rows="3" aria-label="تعديل الرسالة"></textarea>
+      <div class="msg__edit-row">
+        <button type="button" data-edit="save">حفظ</button>
+        ${hasReply ? '<button type="button" data-edit="save-regen">حفظ وأعد الرد</button>' : ''}
+        <button type="button" data-edit="cancel">إلغاء</button>
+      </div>`;
+    const ta = box.querySelector('textarea');
+    ta.value = msg.text;
+    li.querySelector('.msg__text').hidden = true;
+    li.querySelector('.msg__text').after(box);
+    ta.focus();
+
+    box.addEventListener('click', async (e) => {
+      const b = e.target.closest('[data-edit]');
+      if (!b) return;
+      const done = () => { box.remove(); li.classList.remove('is-editing'); li.querySelector('.msg__text').hidden = false; };
+      if (b.dataset.edit === 'cancel') return done();
+      const val = ta.value.trim();
+      if (!val) return;
+      msg.text = val;
+      await updateMessage(msg);
+      li.querySelector('.msg__text').textContent = val;
+      if (msg.entryId) {
+        const entry = await getEntry(msg.entryId);
+        if (entry) {
+          entry.text = val;
+          // إن لم يختر المستخدم القسم بنفسه نعيد التصنيف للنص الجديد
+          if (entry.meta?.classifiedBy !== 'user') { entry.category = null; entry.meta = { ...entry.meta, title: '' }; }
+          await updateEntry(entry);
+          refreshChip(entry);
+          if (!entry.category) classifyEntry(entry.id).then(refreshChip).catch(() => {});
+        }
+      }
+      done();
+      say('عدّلتُ الرسالة ✓');
+      if (b.dataset.edit === 'save-regen' && hasReply) regenerate(next);
+    });
+  }
+
+  async function removeMessage(li) {
+    const msg = await getMessage(li.dataset.id);
+    if (!msg) { li.remove(); return; }
+    if (msg.role === 'user' && msg.entryId) {
+      if (!confirm('حذف هذه الرسالة وملاحظتها من عقلك؟')) return;
+      await deleteEntry(msg.entryId);
+    } else if (!confirm('حذف هذا الرد؟')) return;
+    await deleteMessage(msg.id);
+    li.remove();
+  }
+
+  // ---- كتابة الرسالة ----
+  const autosize = () => {
+    input.style.height = 'auto';
+    input.style.height = `${Math.min(input.scrollHeight, 140)}px`;
+    clearBtn.hidden = !input.value;
+  };
   input.addEventListener('input', autosize);
   input.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && !e.shiftKey && !matchMedia('(pointer: coarse)').matches) {
       e.preventDefault(); form.requestSubmit();
     }
   });
+  clearBtn.addEventListener('click', () => { input.value = ''; autosize(); input.focus(); });
 
   form.addEventListener('submit', (e) => {
     e.preventDefault();
     unlockAudio();
     send(input.value);
   });
+
+  // يجمع ملاحظات العقل الثاني ذات الصلة لرسالة معيّنة
+  async function memoriesFor(text, recent) {
+    if (!(await getSetting('useMemory', true))) return { used: [], memories: [] };
+    const inChat = recent.map((m) => m.entryId).filter(Boolean);
+    const prevUser = recent.filter((m) => m.role === 'user').at(-2)?.text || '';
+    const used = recall(await getEntries(), text, { previous: prevUser, exclude: inChat });
+    return {
+      used,
+      memories: used.map((e) => ({
+        createdAt: e.createdAt, text: e.text, done: !!e.meta?.done,
+        categoryLabel: categoryById(e.category)?.label || '',
+      })),
+    };
+  }
+
+  function showError(err) {
+    if (err.code === 'NO_KEY' || err.code === 'BAD_KEY') {
+      say(`${err.message} <a href="#/settings">افتح الإعدادات</a> لإضافته. كلامك محفوظ على أي حال 💜`);
+    } else {
+      say(`${escapeHtml(err.message)} كلامك محفوظ.`);
+    }
+  }
 
   async function send(raw, source = 'text') {
     const text = raw.trim();
@@ -187,62 +363,80 @@ export async function mount(root) {
       return;
     }
     busy = true;
-    stopSpeaking();
+    stopVoice();
+    closeActions();
     input.value = ''; autosize();
 
     // نحفظ كلام المستخدم أولاً حتى لا يضيع شيء
     const entry = await addEntry({ text, source });
-    await addMessage({ role: 'user', text, entryId: entry.id });
-    append('user', text, '', entry);
+    const userMsg = await addMessage({ role: 'user', text, entryId: entry.id });
+    append(userMsg, { entry });
 
     // التصنيف يعمل بالتوازي مع رد الرفيقة
     classifyEntry(entry).then(refreshChip).catch(() => {});
 
     companion.setState('thinking');
     say('<span class="dots"><i></i><i></i><i></i></span>');
-    const pending = append('model', '…', 'msg--pending');
+    const pending = append({ role: 'model', text: '…' }, { pending: true });
 
     try {
       const recent = await getMessages(HISTORY_LIMIT);
-      const history = recent.map(({ role, text }) => ({ role, text }));
-
-      // نبحث محلياً في العقل الثاني عمّا له صلة، ونستبعد ما هو موجود أصلاً في المحادثة الحالية
-      let used = [];
-      if (await getSetting('useMemory', true)) {
-        const inChat = recent.map((m) => m.entryId).filter(Boolean);
-        const prevUser = recent.filter((m) => m.role === 'user').at(-2)?.text || '';
-        used = recall(await getEntries(), text, { previous: prevUser, exclude: inChat });
-      }
-      const memories = used.map((e) => ({
-        createdAt: e.createdAt, text: e.text, done: !!e.meta?.done,
-        categoryLabel: categoryById(e.category)?.label || '',
-      }));
-
-      const reply = await chat(history, { memories });
-      await addMessage({ role: 'model', text: reply, used: used.map((e) => e.id) });
+      const { used, memories } = await memoriesFor(text, recent);
+      const reply = await chat(recent.map(({ role, text: t }) => ({ role, text: t })), { memories });
+      const modelMsg = await addMessage({ role: 'model', text: reply, used: used.map((e) => e.id) });
+      pending.dataset.id = modelMsg.id;
       pending.querySelector('.msg__text').textContent = reply;
       pending.classList.remove('msg--pending');
-      if (used.length) renderUsed(pending, used);
+      renderUsed(pending, used);
       say(escapeHtml(bubbleText(reply)));
       log.scrollTop = log.scrollHeight;
-      await talk(reply);
+      talk(reply);
     } catch (err) {
       pending.remove();
       companion.setState('idle');
-      if (err.code === 'NO_KEY' || err.code === 'BAD_KEY') {
-        say(`${err.message} <a href="#/settings">افتح الإعدادات</a> لإضافته. كلامك محفوظ على أي حال 💜`);
-      } else {
-        say(`${escapeHtml(err.message)} كلامك محفوظ.`);
-      }
+      showError(err);
     } finally {
       busy = false;
       if (companion?.state === 'thinking') companion.setState('idle');
     }
   }
 
-  async function talk(text) {
-    const voiceOn = await getSetting('speakReplies', true);
-    if (!voiceOn) {
+  // رد جديد بدل رد سابق: نعيد السؤال بنفس السياق الذي سبقه
+  async function regenerate(li) {
+    if (busy || !li?.dataset.id) return;
+    const msg = await getMessage(li.dataset.id);
+    if (!msg) return;
+    busy = true;
+    stopVoice();
+    const all = await getMessages(500);
+    const before = all.filter((m) => m.createdAt < msg.createdAt).slice(-HISTORY_LIMIT);
+    const lastUser = before.filter((m) => m.role === 'user').at(-1);
+    if (!lastUser) { busy = false; return; }
+    li.classList.add('msg--pending');
+    companion.setState('thinking');
+    say('<span class="dots"><i></i><i></i><i></i></span>');
+    try {
+      const { used, memories } = await memoriesFor(lastUser.text, before);
+      const reply = await chat(before.map(({ role, text }) => ({ role, text })), { memories });
+      msg.text = reply;
+      msg.used = used.map((e) => e.id);
+      await updateMessage(msg);
+      li.querySelector('.msg__text').textContent = reply;
+      renderUsed(li, used);
+      say(escapeHtml(bubbleText(reply)));
+      talk(reply);
+    } catch (err) {
+      showError(err);
+    } finally {
+      li.classList.remove('msg--pending');
+      busy = false;
+      if (companion?.state === 'thinking') companion.setState('idle');
+    }
+  }
+
+  // force: "استمع" لرسالة معيّنة حتى لو كان النطق التلقائي مطفأً
+  function talk(text, force = false) {
+    if (textOnly || (!speakOn && !force)) {
       companion.setState('talking');
       setTimeout(() => companion?.state === 'talking' && companion.setState('idle'), Math.min(4000, 600 + text.length * 45));
       return;
@@ -253,10 +447,10 @@ export async function mount(root) {
       skin,
       onWaiting: () => { bubble.innerHTML = `${shown} <span class="voice-note">🔊 أجهّز صوتي…</span>`; },
       onStart: () => {
-        companion?.setState('talking');
+        setTalking(true);
         bubble.innerHTML = note ? `${shown} <span class="voice-note">${note}</span>` : shown;
       },
-      onEnd: () => companion?.state === 'talking' && companion.setState('idle'),
+      onEnd: () => setTalking(false),
       onFallback: (err) => { note = `(تعذّر صوت Gemini: ${escapeHtml(err.message)})`; bubble.innerHTML = `${shown} <span class="voice-note">${note}</span>`; },
       onSilent: () => {
         bubble.innerHTML = `${shown} <span class="voice-note">${note ? note + ' ' : ''}(لا يوجد صوت عربي يعمل على جهازك. جرّب "🔊 جرّب الصوت" في الإعدادات)</span>`;
@@ -264,6 +458,7 @@ export async function mount(root) {
     });
   }
 
+  // ---- الإدخال الصوتي ----
   const micOff = () => {
     stopListening = null;
     mic.classList.remove('is-on');
@@ -282,6 +477,19 @@ export async function mount(root) {
     else if (code !== 'aborted') say(`تعذّر الاستماع (${code}). جرّب الكتابة.`);
   };
 
+  // النص المسموع: إما يُرسل مباشرة، أو يوضع في الخانة لتراجعه وتعدّله أولاً
+  async function heard(text) {
+    if (await getSetting('voiceReview', true)) {
+      input.value = (input.value ? `${input.value} ` : '') + text;
+      autosize();
+      input.focus();
+      say('هذا ما سمعته ✍️ عدّله إن شئت، ثم اضغط ➤');
+    } else {
+      input.value = ''; autosize();
+      send(text, 'voice');
+    }
+  }
+
   // الطريقة الافتراضية: نسجّل الصوت ونفرّغه عبر Gemini (تعمل حتى لو كانت خدمة المتصفح معطلة)
   async function listenWithGemini() {
     let rec = null;
@@ -290,16 +498,16 @@ export async function mount(root) {
       onStart: () => say('أسمعك… تكلّم، وسأتوقف حين تسكت (أو المس 🎙).'),
       onLevel: (l) => mic.style.setProperty('--lvl', l.toFixed(2)),
       onError: (code) => { micOff(); micError(code); },
-      onDone: async (blob, heard) => {
+      onDone: async (blob, wasHeard) => {
         micOff();
-        if (!heard || blob.size < 2000) { say('لم أسمع شيئاً، جرّب مرة أخرى وتكلّم قريباً من الجوال.'); return; }
+        if (!wasHeard || blob.size < 2000) { say('لم أسمع شيئاً، جرّب مرة أخرى وتكلّم قريباً من الجوال.'); return; }
         companion.setState('thinking');
         say('<span class="dots"><i></i><i></i><i></i></span> أحوّل كلامك إلى نص…');
         try {
           const text = await transcribe(blob);
           companion.setState('idle');
           if (!text) { say('لم أفهم الكلام جيداً، جرّب مرة أخرى.'); return; }
-          send(text, 'voice');
+          heard(text);
         } catch (err) {
           companion.setState('idle');
           say(`${escapeHtml(err.message)} جرّب مرة أخرى أو اكتب.`);
@@ -309,16 +517,17 @@ export async function mount(root) {
   }
 
   function listenWithBrowser() {
+    const before = input.value;
     stopListening = listen({
       onStart: () => say('أسمعك… تكلّم، ثم المس 🎙 لتنهي.'),
-      onInterim: (t) => { input.value = t; autosize(); },
-      onText: (t) => { input.value = ''; autosize(); send(t, 'voice'); },
+      onInterim: (t) => { input.value = (before ? `${before} ` : '') + t; autosize(); },
+      onText: (t) => { input.value = before; heard(t); },
       onError: micError,
       onEnd: () => { if (stopListening) micOff(); },
     });
   }
 
-  mic?.addEventListener('click', async () => {
+  mic.addEventListener('click', async () => {
     // ضغطة ثانية: إيقاف فوري
     if (stopListening) {
       const stop = stopListening;
@@ -335,6 +544,7 @@ export async function mount(root) {
       say(hasKey ? 'الإدخال الصوتي غير متاح هنا. استخدم مايك لوحة المفاتيح 🎤.' : 'أضف مفتاح Gemini في <a href="#/settings">الإعدادات</a> لأفهم كلامك الصوتي.');
       return;
     }
+    stopVoice();
     companion.setState('listening');
     mic.classList.add('is-on');
     mic.setAttribute('aria-label', 'أوقف الاستماع');

@@ -19,6 +19,8 @@ export async function mount(root) {
   const speakOn = await getSetting('speakReplies', true);
   const memoryOn = await getSetting('useMemory', true);
   const stt = await getSetting('sttEngine', canRecord ? 'gemini' : 'browser');
+  const textOnly = await getSetting('textOnly', false);
+  const voiceReview = await getSetting('voiceReview', true);
   let skin = await getSetting('companionSkin', DEFAULT_SKIN);
   const engine = await getSetting('voiceEngine', 'device');
   const deviceVoice = await getSetting('deviceVoice', '');
@@ -80,8 +82,14 @@ export async function mount(root) {
       <p class="muted">إن لم يكن النموذج متاحاً لمفتاحك، يختار التطبيق نموذجاً مناسباً تلقائياً.</p>
     </section>
 
-    <section class="card">
+    <section class="card" id="talk">
       <h2>المحادثة</h2>
+      <h3 class="subhead">طريقة التواصل</h3>
+      <div class="radio-row" role="radiogroup" aria-label="طريقة التواصل">
+        <label class="switch"><input type="radio" name="mode-talk" value="both" ${textOnly ? '' : 'checked'}><span>كتابة وصوت</span></label>
+        <label class="switch"><input type="radio" name="mode-talk" value="text" ${textOnly ? 'checked' : ''}><span>كتابة فقط ⌨️</span></label>
+      </div>
+      <p class="muted">"كتابة فقط" يُخفي الميكروفون ويوقف نطق الردود تماماً.</p>
       <label class="switch">
         <input type="checkbox" id="speak" ${speakOn ? 'checked' : ''} ${canSpeak ? '' : 'disabled'}>
         <span>الرفيقة تنطق ردودها بصوت (اضبطه من "صوت الرفيقة")</span>
@@ -92,6 +100,10 @@ export async function mount(root) {
       </label>
       <p class="muted">يبحث التطبيق في ملاحظاتك على جهازك، ويرفق مع رسالتك أقرب ٥ ملاحظات صلة بها فقط، لتقترح الرفيقة حلولاً مبنية على ما دوّنته.</p>
       <h3 class="subhead">التعرف على كلامك 🎙</h3>
+      <label class="switch">
+        <input type="checkbox" id="voice-review" ${voiceReview ? 'checked' : ''}>
+        <span>أراجع النص المسموع وأعدّله قبل إرساله</span>
+      </label>
       <div class="radio-row" role="radiogroup" aria-label="التعرف على الكلام">
         <label class="switch"><input type="radio" name="stt" value="gemini" ${stt === 'gemini' ? 'checked' : ''} ${canRecord ? '' : 'disabled'}><span>Gemini (أدق ويفهم العامية)</span></label>
         <label class="switch"><input type="radio" name="stt" value="browser" ${stt === 'browser' ? 'checked' : ''} ${canBrowserListen ? '' : 'disabled'}><span>خدمة المتصفح</span></label>
@@ -269,6 +281,14 @@ export async function mount(root) {
 
   root.querySelector('#speak').addEventListener('change', (e) => setSetting('speakReplies', e.target.checked));
   root.querySelector('#memory').addEventListener('change', (e) => setSetting('useMemory', e.target.checked));
+  root.querySelectorAll('input[name="mode-talk"]').forEach((r) => r.addEventListener('change', async () => {
+    const only = r.value === 'text';
+    await setSetting('textOnly', only);
+    if (only) stopSpeaking();
+    root.querySelector('#speak').disabled = only;
+  }));
+  root.querySelector('#speak').disabled = textOnly;
+  root.querySelector('#voice-review').addEventListener('change', (e) => setSetting('voiceReview', e.target.checked));
   root.querySelectorAll('input[name="stt"]').forEach((r) => r.addEventListener('change', () => setSetting('sttEngine', r.value)));
 
   root.querySelector('#clear-chat').addEventListener('click', async () => {
@@ -350,6 +370,7 @@ export async function mount(root) {
   });
 
   if (location.hash.includes('backup')) root.querySelector('#backup').scrollIntoView({ block: 'start' });
+  if (location.hash.includes('talk')) root.querySelector('#talk').scrollIntoView({ block: 'start' });
 
   root.querySelector('#remove-key').addEventListener('click', async () => {
     await deleteSetting('geminiApiKey');

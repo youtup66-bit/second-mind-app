@@ -1,6 +1,6 @@
 // عرض الملاحظات وأزرارها (نقل، حذف)، مشترك بين شاشة العقل وشاشة المجلد
 import { CATEGORIES, NONE, categoryById } from './categories.js';
-import { deleteEntry, getEntry, updateEntry } from './storage.js';
+import { deleteEntry, getEntry, updateEntry, getMessages, updateMessage } from './storage.js';
 import { setCategory } from './classifier.js';
 
 const fmtDate = new Intl.DateTimeFormat('ar', { dateStyle: 'medium', timeStyle: 'short' });
@@ -27,6 +27,7 @@ export function noteHTML(e, { showCategory = false, highlight = '' } = {}) {
       <div class="note__foot">
         <time class="muted">${fmtDate.format(e.createdAt)}${e.source === 'voice' ? ' · 🎙' : ''}</time>
         <span class="note__actions">
+          <button class="link-btn" data-act="edit">تعديل</button>
           <button class="link-btn" data-act="move">نقل</button>
           <button class="link-btn link-btn--danger" data-act="delete">حذف</button>
         </span>
@@ -45,7 +46,38 @@ export function bindNoteActions(container, onChange) {
     if (!li) return;
     const id = li.dataset.id;
     const act = e.target.closest('[data-act]')?.dataset.act;
-    if (act === 'done') {
+    if (act === 'edit') {
+      if (li.querySelector('.note__edit')) return;
+      const entry = await getEntry(id);
+      const box = document.createElement('div');
+      box.className = 'note__edit';
+      box.innerHTML = `
+        <input type="text" aria-label="العنوان" placeholder="العنوان (اختياري)">
+        <textarea rows="4" aria-label="النص"></textarea>
+        <div class="msg__edit-row">
+          <button type="button" data-edit="save">حفظ</button>
+          <button type="button" data-edit="cancel">إلغاء</button>
+        </div>`;
+      box.querySelector('input').value = entry.meta?.title || '';
+      box.querySelector('textarea').value = entry.text;
+      li.querySelector('.note__text').after(box);
+      box.querySelector('textarea').focus();
+      box.addEventListener('click', async (ev) => {
+        const b = ev.target.closest('[data-edit]');
+        if (!b) return;
+        if (b.dataset.edit === 'cancel') { box.remove(); return; }
+        const text = box.querySelector('textarea').value.trim();
+        if (!text) return;
+        entry.text = text;
+        entry.meta = { ...entry.meta, title: box.querySelector('input').value.trim(), editedAt: Date.now() };
+        await updateEntry(entry);
+        // نحدّث رسالة المحادثة المرتبطة بها أيضاً
+        for (const m of await getMessages(1000)) {
+          if (m.entryId === id && m.text !== text) { m.text = text; await updateMessage(m); }
+        }
+        await onChange();
+      });
+    } else if (act === 'done') {
       const entry = await getEntry(id);
       entry.meta = { ...entry.meta, done: e.target.checked, doneAt: e.target.checked ? Date.now() : null };
       await updateEntry(entry);

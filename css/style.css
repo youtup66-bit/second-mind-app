@@ -439,3 +439,36 @@ input[type="range"] { width: 100%; accent-color: var(--accent); margin: 4px 0 12
 
 /* مؤشر مستوى الصوت على زر الميكروفون */
 .composer__mic.is-on { --lvl: 0; box-shadow: 0 0 0 calc(4px + var(--lvl) * 14px) color-mix(in srgb, var(--danger) 35%, transparent); transition: box-shadow .08s linear; animation: none; }
+
+/* ---- أدوات المحادثة ---- */
+.chat__hero { position: relative; }
+.chat__tools { position: absolute; inset-inline-end: 0; bottom: 8px; display: flex; flex-direction: column; gap: 6px; z-index: 2; align-items: flex-end; }
+.tool {
+  font: inherit; font-size: .78rem; font-weight: 700; color: var(--text); text-decoration: none; cursor: pointer;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 999px; padding: 6px 10px; min-height: 32px;
+}
+.tool[hidden] { display: none; }
+.tool--stop { background: color-mix(in srgb, var(--danger) 25%, var(--surface)); border-color: var(--danger); }
+
+/* ---- خيارات الرسالة ---- */
+.msg { cursor: pointer; }
+.msg__actions { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; white-space: normal; }
+.msg__actions button, .msg__edit-row button {
+  font: inherit; font-size: .78rem; font-weight: 700; cursor: pointer; color: var(--text);
+  background: rgba(0,0,0,.25); border: 1px solid rgba(255,255,255,.18); border-radius: 999px; padding: 4px 10px; min-height: 30px;
+}
+.msg__actions .is-danger { color: #ffd0da; border-color: color-mix(in srgb, var(--danger) 60%, transparent); }
+.msg__edit, .note__edit { width: 100%; display: grid; gap: 8px; margin-top: 4px; white-space: normal; }
+.msg__edit textarea, .note__edit textarea, .note__edit input {
+  width: 100%; min-width: 220px; font: inherit; color: var(--text); background: var(--bg-2);
+  border: 1px solid var(--border); border-radius: 12px; padding: 10px; resize: vertical;
+}
+.msg__edit-row { display: flex; gap: 6px; flex-wrap: wrap; }
+.msg__edit-row button:first-child { background: linear-gradient(135deg, var(--accent), var(--accent-2)); border: 0; }
+.msg.is-editing { max-width: 92%; }
+.composer__clear {
+  flex: none; width: 32px; height: 32px; align-self: center; border-radius: 50%; border: 0; cursor: pointer;
+  background: transparent; color: var(--muted); font-size: .9rem;
+}
+.composer__clear[hidden] { display: none; }
+.note__edit { margin-top: 8px; }
