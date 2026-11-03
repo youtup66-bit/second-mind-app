@@ -3,7 +3,7 @@
 import { classify } from './gemini.js';
 import { getEntries, getEntry, getMessages, updateEntry } from './storage.js';
 
-const STOP_CODES = new Set(['NO_KEY', 'BAD_KEY', 'RATE', 'NETWORK']);
+const STOP_CODES = new Set(['NO_KEY', 'BAD_KEY', 'RATE', 'NETWORK', 'TIMEOUT']);
 const inFlight = new Map();
 
 // يعيد آخر رسالتين قبل الملاحظة كسياق

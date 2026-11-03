@@ -38,7 +38,20 @@ async function navigate() {
 }
 
 window.addEventListener('hashchange', navigate);
-navigate();
+navigate().finally(() => { window.__appReady = true; });
+
+// أي خطأ غير متوقع يظهر كشريط صغير بدل أن يتعطل التطبيق بصمت
+function toast(msg) {
+  let el = document.getElementById('toast');
+  if (!el) {
+    el = Object.assign(document.createElement('div'), { id: 'toast', className: 'toast', role: 'alert' });
+    el.addEventListener('click', () => el.remove());
+    document.body.append(el);
+  }
+  el.textContent = `حدث خطأ: ${msg} (المس للإغلاق)`;
+}
+window.addEventListener('error', (e) => { if (e.message) toast(e.message); });
+window.addEventListener('unhandledrejection', (e) => toast(e.reason?.message || String(e.reason)));
 
 // لقطة يومية على الجهاز (لا شيء يغادره)
 autoSnapshot().catch((err) => console.warn('snapshot:', err));

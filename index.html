@@ -39,6 +39,30 @@
     </a>
   </nav>
 
+  <div class="boot-fail" id="boot-fail" hidden>
+    <p>تعذّر تحميل التطبيق كاملاً. ربما وصل جزء من تحديث جديد قبل غيره.</p>
+    <button class="btn" id="boot-reload">إعادة التحميل</button>
+    <p class="muted" id="boot-err"></p>
+  </div>
+  <script>
+    // فحص الإقلاع: إن لم يبدأ التطبيق خلال ٦ ثوانٍ نعرض زر إعادة تحميل نظيفة (بياناتك لا تُمس)
+    (function () {
+      var errs = [];
+      window.addEventListener('error', function (e) { errs.push(e.message || String(e)); }, true);
+      setTimeout(function () {
+        if (window.__appReady) return;
+        document.getElementById('boot-err').textContent = errs.slice(-2).join(' | ');
+        document.getElementById('boot-fail').hidden = false;
+      }, 6000);
+      document.getElementById('boot-reload').onclick = function () {
+        var done = function () { location.reload(); };
+        Promise.all([
+          window.caches ? caches.keys().then(function (k) { return Promise.all(k.map(function (n) { return caches.delete(n); })); }) : 0,
+          navigator.serviceWorker ? navigator.serviceWorker.getRegistrations().then(function (r) { return Promise.all(r.map(function (x) { return x.unregister(); })); }) : 0,
+        ]).then(done, done);
+      };
+    })();
+  </script>
   <script type="module" src="js/app.js"></script>
 </body>
 </html>

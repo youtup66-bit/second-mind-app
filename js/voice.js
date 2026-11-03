@@ -65,19 +65,47 @@ function pickVoice(gender, preferred) {
   return list.find((v) => re.test(v.name)) || list.find((v) => !(gender === 'male' ? FEMALE : MALE).test(v.name)) || list[0] || null;
 }
 
-function speakDevice(text, profile, opts, { onStart, onEnd }) {
+// Chrome يقطع النطق الطويل بعد ~١٥ ثانية، وبعض الجوالات تُسقط النطق الذي يبدأ مباشرة بعد الإلغاء؛
+// لذلك نقسّم الرد إلى جمل وننطقها بالتتابع، ونبدأ بعد مهلة قصيرة، ونراقب إن لم يبدأ الصوت أبداً.
+function sentences(text) {
+  const parts = text.replace(/\s+/g, ' ').match(/[^.!?؟،\n]+[.!?؟،]*/g) || [text];
+  const out = [];
+  for (const p of parts) {
+    const last = out[out.length - 1];
+    if (last && (last + p).length < 160) out[out.length - 1] = last + p;
+    else out.push(p.trim());
+  }
+  return out.filter(Boolean);
+}
+
+function speakDevice(text, profile, opts, { onStart, onEnd }, my) {
   if (!canSpeak) { onEnd?.(); return; }
   speechSynthesis.cancel();
-  const u = new SpeechSynthesisUtterance(text);
-  u.lang = 'ar-SA';
   const v = pickVoice(profile.gender, opts.voiceURI);
-  try { if (v) u.voice = v; } catch { /* صوت غير صالح: نكمل بالافتراضي */ }
-  // الصوت يُضبط بحسب الشخصية، ثم بتعديل المستخدم
-  u.pitch = Math.max(0, Math.min(2, profile.pitch + opts.pitchShift));
-  u.rate = Math.max(0.5, Math.min(2, profile.rate * opts.rateScale));
-  u.onstart = () => onStart?.();
-  u.onend = u.onerror = () => onEnd?.();
-  speechSynthesis.speak(u);
+  const pitch = Math.max(0, Math.min(2, profile.pitch + opts.pitchShift));
+  const rate = Math.max(0.5, Math.min(2, profile.rate * opts.rateScale));
+  const queue = sentences(text);
+  let started = false, finished = false;
+  const finish = () => { if (!finished) { finished = true; clearTimeout(watchdog); onEnd?.(); } };
+  // إن لم يبدأ الصوت خلال ٤ ثوانٍ (لا أصوات مثبتة مثلاً) نعيد الرفيقة لحالها
+  const watchdog = setTimeout(() => { if (!started) finish(); }, 4000);
+
+  const next = () => {
+    if (my !== token) return finish();
+    const chunk = queue.shift();
+    if (!chunk) return finish();
+    const u = new SpeechSynthesisUtterance(chunk);
+    u.lang = v?.lang || 'ar-SA';
+    try { if (v) u.voice = v; } catch { /* صوت غير صالح: نكمل بالافتراضي */ }
+    u.pitch = pitch;
+    u.rate = rate;
+    u.onstart = () => { if (!started) { started = true; onStart?.(); } };
+    u.onend = next;
+    u.onerror = (e) => (e.error === 'interrupted' || e.error === 'canceled' ? finish() : next());
+    speechSynthesis.resume?.();
+    speechSynthesis.speak(u);
+  };
+  setTimeout(next, 80);
 }
 
 // ---- صوت Gemini عبر Web Audio ----
@@ -129,6 +157,7 @@ export async function speak(text, { skin, onStart, onEnd, onFallback } = {}) {
     try {
       const audio = await tts(text.slice(0, MAX_TTS_CHARS), { voice: profile.gemini, style: profile.style });
       if (my !== token) return; // أُلغي أثناء الانتظار
+      if (!ctx || ctx.state !== 'running') throw new Error('الصوت لم يُفعَّل بعد، المس الشاشة مرة');
       playPCM(audio, { onStart, onEnd });
       return;
     } catch (err) {
@@ -136,7 +165,7 @@ export async function speak(text, { skin, onStart, onEnd, onFallback } = {}) {
       onFallback?.(err);
     }
   }
-  speakDevice(text, profile, opts, { onStart, onEnd });
+  speakDevice(text, profile, opts, { onStart, onEnd }, my);
 }
 
 export function stopSpeaking() {

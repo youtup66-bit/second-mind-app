@@ -179,7 +179,13 @@ export async function mount(root) {
 
   async function send(raw, source = 'text') {
     const text = raw.trim();
-    if (!text || busy) return;
+    if (!text) return;
+    if (busy) {
+      // نُبقي النص في الخانة ونخبره بدل التجاهل الصامت
+      input.value = text; autosize();
+      say('لحظة، ما زلت أفكر في رسالتك السابقة… أرسلها بعد قليل 💭');
+      return;
+    }
     busy = true;
     stopSpeaking();
     input.value = ''; autosize();
@@ -251,7 +257,7 @@ export async function mount(root) {
   mic?.addEventListener('click', () => {
     unlockAudio();
     if (stopListening) { stopListening(); return; }
-    if (busy) return;
+    if (busy) { say('لحظة، ما زلت أفكر… 💭'); return; }
     stopSpeaking();
     companion.setState('listening');
     mic.classList.add('is-on');
@@ -261,8 +267,11 @@ export async function mount(root) {
         onInterim: (t) => { input.value = t; autosize(); },
         onText: (t) => send(t, 'voice'),
         onError: (code) => {
-          if (code === 'not-allowed') say('أحتاج إذن الميكروفون لأسمعك.');
+          if (code === 'not-allowed' || code === 'service-not-allowed') say('أحتاج إذن الميكروفون لأسمعك. فعّله من إعدادات المتصفح للموقع.');
           else if (code === 'no-speech') say('لم أسمع شيئاً، جرّب مرة أخرى.');
+          else if (code === 'network') say('التعرف على الكلام يحتاج إنترنت، تحقق من الاتصال.');
+          else if (code === 'audio-capture') say('لا أستطيع الوصول إلى الميكروفون.');
+          else if (code !== 'aborted') say(`تعذّر الاستماع (${code}). جرّب الكتابة.`);
         },
         onEnd: () => {
           stopListening = null;

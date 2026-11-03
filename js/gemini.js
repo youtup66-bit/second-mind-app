@@ -43,18 +43,25 @@ async function getKey() {
   return key;
 }
 
-async function call(path, key, body) {
-  let res;
+// كل طلب له مهلة، حتى لا تبقى الرفيقة "تفكر" إلى الأبد إن تعلّق الاتصال
+async function call(path, key, body, timeoutMs = 60_000) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  let res, data;
   try {
     res = await fetch(`${API}/${path}`, {
       method: body ? 'POST' : 'GET',
       headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
       body: body ? JSON.stringify(body) : undefined,
+      signal: ctrl.signal,
     });
-  } catch {
+    data = await res.json().catch(() => ({}));
+  } catch (err) {
+    if (err?.name === 'AbortError') throw new GeminiError('تأخر الرد كثيراً، جرّب مرة أخرى.', 'TIMEOUT');
     throw new GeminiError('تعذّر الاتصال. تحقق من الإنترنت.', 'NETWORK');
+  } finally {
+    clearTimeout(timer);
   }
-  const data = await res.json().catch(() => ({}));
   if (!res.ok) {
     const msg = data?.error?.message || `HTTP ${res.status}`;
     if (res.status === 400 && /api key/i.test(msg)) throw new GeminiError('المفتاح غير صالح.', 'BAD_KEY');
@@ -254,12 +261,12 @@ export async function tts(text, { voice, style }) {
   };
   let data;
   try {
-    data = await call(`models/${model}:generateContent`, key, body);
+    data = await call(`models/${model}:generateContent`, key, body, 30_000);
   } catch (err) {
     if (err.code !== 'NO_MODEL') throw err;
     model = await findTtsModel(key);
     await setSetting('geminiTtsModel', model);
-    data = await call(`models/${model}:generateContent`, key, body);
+    data = await call(`models/${model}:generateContent`, key, body, 30_000);
   }
   const part = data?.candidates?.[0]?.content?.parts?.find((p) => p.inlineData?.data);
   if (!part) throw new GeminiError('لم يصل صوت.', 'EMPTY');

@@ -28,8 +28,14 @@ function openDB() {
         db.createObjectStore('summaries', { keyPath: 'id' });
       }
     };
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
+    req.onsuccess = () => {
+      const db = req.result;
+      // إن فُتحت نسخة أحدث من التطبيق في نافذة أخرى، نغلق اتصالنا ونعيد التحميل حتى لا نعطّلها
+      db.onversionchange = () => { db.close(); location.reload(); };
+      resolve(db);
+    };
+    req.onerror = () => { dbPromise = null; reject(req.error); };
+    req.onblocked = () => console.warn('IndexedDB: بانتظار إغلاق نافذة قديمة من التطبيق');
   });
   return dbPromise;
 }

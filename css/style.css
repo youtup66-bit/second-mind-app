@@ -422,3 +422,15 @@ select {
 input[type="range"] { width: 100%; accent-color: var(--accent); margin: 4px 0 12px; }
 #device-opts { margin-top: 12px; }
 #device-opts[hidden] { display: none; }
+
+/* ---- فحص الإقلاع والأخطاء ---- */
+.boot-fail {
+  position: fixed; inset: auto 16px calc(var(--tabbar-h) + 24px); z-index: 50; text-align: center;
+  background: var(--surface); border: 1px solid var(--danger); border-radius: var(--radius); padding: 16px;
+}
+.boot-fail[hidden] { display: none; }
+.toast {
+  position: fixed; inset-inline: 16px; bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom) + 12px); z-index: 40;
+  background: color-mix(in srgb, var(--danger) 22%, var(--bg-2)); border: 1px solid var(--danger);
+  border-radius: 12px; padding: 10px 14px; font-size: .85rem; cursor: pointer;
+}
