@@ -156,7 +156,8 @@ export async function mount(root) {
   root.querySelector('#test-key').addEventListener('click', async (e) => {
     const v = input.value.trim();
     if (!v) return show(keyStatus, 'أدخل المفتاح أولاً.', false);
-    e.currentTarget.disabled = true;
+    const btn = e.currentTarget; // currentTarget يصبح null بعد أي انتظار
+    btn.disabled = true;
     show(keyStatus, 'جارٍ الاختبار…');
     try {
       const m = await testKey(v);
@@ -165,7 +166,7 @@ export async function mount(root) {
     } catch (err) {
       show(keyStatus, err.message, false);
     } finally {
-      e.currentTarget.disabled = false;
+      btn.disabled = false;
     }
   });
 
@@ -234,6 +235,11 @@ export async function mount(root) {
       skin,
       onStart: () => { if (!fellBack) voiceStatus.textContent = ''; },
       onEnd: () => { btn.disabled = false; },
+      onSilent: () => {
+        voiceStatus.className = 'status status--err';
+        voiceStatus.textContent = (fellBack ? voiceStatus.textContent + ' ' : '') +
+          'ولم يعمل صوت الجهاز أيضاً: ثبّت أو فعّل محرك نطق يدعم العربية (مثل Google Text-to-Speech) من إعدادات الجوال.';
+      },
       onFallback: (err) => {
         fellBack = true;
         voiceStatus.className = 'status status--err';

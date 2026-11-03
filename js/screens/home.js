@@ -247,10 +247,20 @@ export async function mount(root) {
       setTimeout(() => companion?.state === 'talking' && companion.setState('idle'), Math.min(4000, 600 + text.length * 45));
       return;
     }
+    const shown = bubble.innerHTML;
+    let note = '';
     speak(text, {
       skin,
-      onStart: () => companion?.setState('talking'),
+      onWaiting: () => { bubble.innerHTML = `${shown} <span class="voice-note">🔊 أجهّز صوتي…</span>`; },
+      onStart: () => {
+        companion?.setState('talking');
+        bubble.innerHTML = note ? `${shown} <span class="voice-note">${note}</span>` : shown;
+      },
       onEnd: () => companion?.state === 'talking' && companion.setState('idle'),
+      onFallback: (err) => { note = `(تعذّر صوت Gemini: ${escapeHtml(err.message)})`; bubble.innerHTML = `${shown} <span class="voice-note">${note}</span>`; },
+      onSilent: () => {
+        bubble.innerHTML = `${shown} <span class="voice-note">${note ? note + ' ' : ''}(لا يوجد صوت عربي يعمل على جهازك. جرّب "🔊 جرّب الصوت" في الإعدادات)</span>`;
+      },
     });
   }
 

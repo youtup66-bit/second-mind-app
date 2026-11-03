@@ -434,3 +434,5 @@ input[type="range"] { width: 100%; accent-color: var(--accent); margin: 4px 0 12
   background: color-mix(in srgb, var(--danger) 22%, var(--bg-2)); border: 1px solid var(--danger);
   border-radius: 12px; padding: 10px 14px; font-size: .85rem; cursor: pointer;
 }
+
+.voice-note { display: block; font-size: .75rem; color: var(--muted); margin-top: 4px; font-weight: 500; }

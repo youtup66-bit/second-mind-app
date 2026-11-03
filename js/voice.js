@@ -78,7 +78,7 @@ function sentences(text) {
   return out.filter(Boolean);
 }
 
-function speakDevice(text, profile, opts, { onStart, onEnd }, my) {
+function speakDevice(text, profile, opts, { onStart, onEnd, onSilent }, my) {
   if (!canSpeak) { onEnd?.(); return; }
   speechSynthesis.cancel();
   const v = pickVoice(profile.gender, opts.voiceURI);
@@ -88,7 +88,7 @@ function speakDevice(text, profile, opts, { onStart, onEnd }, my) {
   let started = false, finished = false;
   const finish = () => { if (!finished) { finished = true; clearTimeout(watchdog); onEnd?.(); } };
   // إن لم يبدأ الصوت خلال ٤ ثوانٍ (لا أصوات مثبتة مثلاً) نعيد الرفيقة لحالها
-  const watchdog = setTimeout(() => { if (!started) finish(); }, 4000);
+  const watchdog = setTimeout(() => { if (!started) { onSilent?.(); finish(); } }, 4000);
 
   const next = () => {
     if (my !== token) return finish();
@@ -146,7 +146,8 @@ async function voiceSettings() {
 }
 
 // skin: معرّف الشخصية لاختيار صوتها. onFallback: يُستدعى إن فشل صوت Gemini وعدنا لصوت الجهاز
-export async function speak(text, { skin, onStart, onEnd, onFallback } = {}) {
+// onWaiting: يُستدعى أثناء انتظار صوت Gemini. onSilent: إن لم يبدأ صوت الجهاز أبداً
+export async function speak(text, { skin, onStart, onEnd, onFallback, onWaiting, onSilent } = {}) {
   stopSpeaking();
   const my = ++token;
   const profile = skinVoice(skin);
@@ -155,6 +156,7 @@ export async function speak(text, { skin, onStart, onEnd, onFallback } = {}) {
 
   if (opts.engine === 'gemini') {
     try {
+      onWaiting?.();
       const audio = await tts(text.slice(0, MAX_TTS_CHARS), { voice: profile.gemini, style: profile.style });
       if (my !== token) return; // أُلغي أثناء الانتظار
       if (!ctx || ctx.state !== 'running') throw new Error('الصوت لم يُفعَّل بعد، المس الشاشة مرة');
@@ -165,7 +167,7 @@ export async function speak(text, { skin, onStart, onEnd, onFallback } = {}) {
       onFallback?.(err);
     }
   }
-  speakDevice(text, profile, opts, { onStart, onEnd }, my);
+  speakDevice(text, profile, opts, { onStart, onEnd, onSilent }, my);
 }
 
 export function stopSpeaking() {
