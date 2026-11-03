@@ -8,13 +8,18 @@ const app = document.getElementById('app');
 const titleEl = document.getElementById('screen-title');
 
 let current = null;
+let navId = 0;
 
 async function navigate() {
+  const myNav = ++navId;
   const name = location.hash.replace(/^#\//, '') || 'home';
   const screen = routes[name] || home;
 
   current?.unmount?.();
-  app.replaceChildren();
+  // كل شاشة تحصل على حاوية خاصة، فلا تتداخل شاشة بطيئة مع التالية
+  const view = document.createElement('div');
+  view.className = 'view';
+  app.replaceChildren(view);
   titleEl.textContent = screen.title;
   document.title = `${screen.title} · عقلي الثاني`;
 
@@ -25,7 +30,9 @@ async function navigate() {
   });
 
   current = screen;
-  await screen.mount(app);
+  await screen.mount(view);
+  // إن انتقل المستخدم لشاشة أخرى أثناء التحميل نُنهي هذه
+  if (myNav !== navId && current !== screen) screen.unmount?.();
 }
 
 window.addEventListener('hashchange', navigate);

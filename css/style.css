@@ -262,3 +262,29 @@ input[dir="ltr"] { text-align: left; }
 @keyframes sheet-up { from { transform: translateY(100%); } }
 .sheet__title { margin: 0 0 12px; font-weight: 700; }
 .sheet__chips { display: flex; flex-wrap: wrap; gap: 8px; }
+
+/* ---- شاشة العقل ---- */
+.mind-hint { margin: 0 0 8px; text-align: center; }
+.sheet__panel--tall { max-height: 75dvh; display: flex; flex-direction: column; }
+.sheet__head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.sheet__head .sheet__title { margin: 0; flex: 1; font-size: 1.1rem; }
+.sheet__dot { width: 14px; height: 14px; border-radius: 50%; flex: none; }
+.sheet__close { min-height: 36px; padding: 4px 12px; }
+.notes { list-style: none; margin: 0; padding: 0; overflow-y: auto; display: grid; gap: 10px; }
+.notes__empty { padding: 16px 0; text-align: center; }
+.note {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 12px;
+}
+.note p { margin: 0; }
+.note__title { font-weight: 700; margin-bottom: 4px !important; }
+.note__text { white-space: pre-wrap; word-break: break-word; }
+.note__foot { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: 8px; font-size: .8rem; }
+.note__actions { display: flex; gap: 4px; }
+.note__move { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.note__move[hidden] { display: none; }
+.link-btn {
+  font: inherit; font-size: .85rem; font-weight: 700; background: none; border: 0; cursor: pointer;
+  color: var(--accent); padding: 6px 8px; min-height: 32px;
+}
+.link-btn--danger { color: var(--danger); }
+.chip--tiny { font-size: .78rem; padding: 4px 10px; min-height: 30px; }
