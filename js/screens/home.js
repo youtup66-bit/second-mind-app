@@ -76,7 +76,10 @@ export async function mount(root) {
   const mic = root.querySelector('#mic');
   let tapIdx = 0;
 
+  const skin = await getSetting('companionSkin', 'star');
+  if (!root.isConnected) return;
   companion = createCompanion(root.querySelector('#stage'), {
+    skin,
     onTap: () => !busy && say(TAP_LINES[tapIdx++ % TAP_LINES.length]),
   });
 

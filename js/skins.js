@@ -1,0 +1,243 @@
+// أشكال الرفيقة (تشيبي). كل شكل رسم SVG أصلي يشترك في أسماء الأجزاء نفسها
+// (cmp-eye, cmp-pupil, cmp-mouth--*, ...) حتى تعمل معه الحركات والحالات كلها.
+// لإضافة شكل جديد: أضف عنصراً هنا بمعرّفات تدرّج فريدة (مثل neko-*).
+
+export const SKINS = {
+  star: {
+    label: 'نجمة',
+    note: 'شعر بنفسجي ونجمة',
+    svg: `
+<svg class="companion__svg" viewBox="0 0 200 250" role="img" aria-label="الرفيقة">
+  <defs>
+    <linearGradient id="cmp-hair" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#7a5cff"/>
+      <stop offset="1" stop-color="#3b56d6"/>
+    </linearGradient>
+    <linearGradient id="cmp-dress" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2e2675"/>
+      <stop offset="1" stop-color="#4f7dff"/>
+    </linearGradient>
+    <linearGradient id="cmp-tail" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#4f7dff" stop-opacity=".9"/>
+      <stop offset="1" stop-color="#8b6cff" stop-opacity="0"/>
+    </linearGradient>
+    <radialGradient id="cmp-iris" cx="50%" cy="35%" r="70%">
+      <stop offset="0" stop-color="#b9a6ff"/>
+      <stop offset=".55" stop-color="#6c4dff"/>
+      <stop offset="1" stop-color="#2a2a8a"/>
+    </radialGradient>
+    <radialGradient id="cmp-aura" cx="50%" cy="50%" r="50%">
+      <stop offset="0" stop-color="#8b6cff" stop-opacity=".55"/>
+      <stop offset="1" stop-color="#8b6cff" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <ellipse class="cmp-shadow" cx="100" cy="238" rx="38" ry="6" fill="#000" opacity=".35"/>
+
+  <g class="cmp-float">
+    <circle class="cmp-aura" cx="100" cy="115" r="100" fill="url(#cmp-aura)"/>
+
+    <!-- الشعر الخلفي -->
+    <path class="cmp-hair-back" fill="url(#cmp-hair)"
+      d="M40 100 C35 45 70 24 100 24 C130 24 165 45 160 100 C163 140 152 168 138 182
+         L62 182 C48 168 37 140 40 100 Z"/>
+
+    <!-- الجسم: فستان صغير وذراعان -->
+    <g class="cmp-body">
+      <g transform="rotate(20 70 168)"><ellipse class="cmp-arm cmp-arm--r" cx="70" cy="168" rx="9" ry="20" fill="#ffe3d6"/></g>
+      <g transform="rotate(-20 130 168)"><ellipse class="cmp-arm cmp-arm--l" cx="130" cy="168" rx="9" ry="20" fill="#ffe3d6"/></g>
+      <path class="cmp-tail" fill="url(#cmp-tail)"
+        d="M78 205 C88 225 112 225 122 205 C116 228 104 240 100 246 C96 240 84 228 78 205 Z"/>
+      <path fill="url(#cmp-dress)" d="M80 140 C70 155 64 185 68 205 C82 222 118 222 132 205 C136 185 130 155 120 140 Z"/>
+      <path fill="#ece9ff" d="M86 141 L100 156 L114 141 Z"/>
+      <circle cx="100" cy="160" r="4" fill="#ffc857"/>
+    </g>
+
+    <!-- الوجه -->
+    <ellipse cx="100" cy="98" rx="50" ry="47" fill="#ffe8dc"/>
+
+    <!-- العينان -->
+    <g class="cmp-eyes cmp-eyes--open">
+      <g class="cmp-eye">
+        <ellipse cx="80" cy="106" rx="10" ry="13" fill="#fff"/>
+        <g class="cmp-pupil">
+          <ellipse cx="80" cy="107" rx="8" ry="11" fill="url(#cmp-iris)"/>
+          <ellipse cx="80" cy="109" rx="4" ry="5.5" fill="#1a1450"/>
+          <circle cx="77" cy="102" r="3" fill="#fff"/>
+          <circle cx="83" cy="112" r="1.4" fill="#fff" opacity=".85"/>
+        </g>
+      </g>
+      <g class="cmp-eye">
+        <ellipse cx="120" cy="106" rx="10" ry="13" fill="#fff"/>
+        <g class="cmp-pupil">
+          <ellipse cx="120" cy="107" rx="8" ry="11" fill="url(#cmp-iris)"/>
+          <ellipse cx="120" cy="109" rx="4" ry="5.5" fill="#1a1450"/>
+          <circle cx="117" cy="102" r="3" fill="#fff"/>
+          <circle cx="123" cy="112" r="1.4" fill="#fff" opacity=".85"/>
+        </g>
+      </g>
+      <path d="M68 92 Q80 86 91 92" stroke="#3b2a7a" stroke-width="2.4" fill="none" stroke-linecap="round"/>
+      <path d="M109 92 Q120 86 132 92" stroke="#3b2a7a" stroke-width="2.4" fill="none" stroke-linecap="round"/>
+    </g>
+    <g class="cmp-eyes cmp-eyes--happy" stroke="#3b2a7a" stroke-width="3" fill="none" stroke-linecap="round">
+      <path d="M70 108 Q80 96 90 108"/>
+      <path d="M110 108 Q120 96 130 108"/>
+    </g>
+
+    <!-- الخدود -->
+    <ellipse cx="68" cy="122" rx="8" ry="4.5" fill="#ff8fb1" opacity=".45"/>
+    <ellipse cx="132" cy="122" rx="8" ry="4.5" fill="#ff8fb1" opacity=".45"/>
+
+    <!-- الفم -->
+    <path class="cmp-mouth cmp-mouth--smile" d="M93 126 Q100 132 107 126" stroke="#a8466a" stroke-width="2.4" fill="none" stroke-linecap="round"/>
+    <ellipse class="cmp-mouth cmp-mouth--talk" cx="100" cy="128" rx="5" ry="4" fill="#a8466a"/>
+    <path class="cmp-mouth cmp-mouth--o" d="M97 128 a3 3 0 1 0 6 0 a3 3 0 1 0 -6 0" fill="#a8466a"/>
+
+    <!-- الغُرّة وخصلة الرأس -->
+    <path fill="url(#cmp-hair)"
+      d="M48 102 C44 55 70 34 100 34 C130 34 156 55 152 102 Q147 90 141 80 Q136 91 129 96
+         Q123 84 118 70 Q112 82 105 91 Q99 80 93 68 Q87 82 81 93 Q75 86 69 76 Q63 89 58 100 Z"/>
+    <path class="cmp-ahoge" d="M100 36 C96 18 110 10 118 14 C108 16 104 24 104 36 Z" fill="#7a5cff"/>
+    <g transform="translate(138 52)"><path class="cmp-star" fill="#ffc857"
+      d="M0 -9 L2.6 -2.8 L9 -2.8 L3.8 1.4 L5.6 8 L0 4.2 L-5.6 8 L-3.8 1.4 L-9 -2.8 L-2.6 -2.8 Z"/></g>
+
+    <!-- فقاعات التفكير -->
+    <g class="cmp-think" fill="#ece9ff">
+      <circle cx="158" cy="44" r="4"/>
+      <circle cx="170" cy="30" r="6"/>
+      <circle cx="186" cy="14" r="8"/>
+    </g>
+  </g>
+</svg>`,
+  },
+  neko: {
+    label: 'نيكو',
+    note: 'فتاة قطة بشعر أسود',
+    svg: `
+<svg class="companion__svg" viewBox="0 0 200 250" role="img" aria-label="الرفيقة">
+  <defs>
+    <linearGradient id="neko-hair" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#34303d"/>
+      <stop offset="1" stop-color="#16141b"/>
+    </linearGradient>
+    <linearGradient id="neko-dress" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#3a3644"/>
+      <stop offset="1" stop-color="#25222c"/>
+    </linearGradient>
+    <radialGradient id="neko-iris" cx="50%" cy="30%" r="75%">
+      <stop offset="0" stop-color="#e2b88a"/>
+      <stop offset=".5" stop-color="#9a6238"/>
+      <stop offset="1" stop-color="#3f2114"/>
+    </radialGradient>
+    <radialGradient id="neko-aura" cx="50%" cy="50%" r="50%">
+      <stop offset="0" stop-color="#ff9aa8" stop-opacity=".35"/>
+      <stop offset="1" stop-color="#8b6cff" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <ellipse class="cmp-shadow" cx="100" cy="240" rx="38" ry="6" fill="#000" opacity=".35"/>
+
+  <g class="cmp-float">
+    <circle class="cmp-aura" cx="100" cy="118" r="100" fill="url(#neko-aura)"/>
+
+    <!-- ذيل القطة -->
+    <path class="cmp-cattail" fill="#24212b" stroke="#0f0d12" stroke-width="1.5"
+      d="M122 204 C150 210 172 196 170 170 C168 150 152 146 148 158 C156 158 160 168 154 180
+         C146 194 132 196 120 194 Z"/>
+
+    <!-- الشعر الخلفي الطويل -->
+    <path class="cmp-hair-back" fill="url(#neko-hair)"
+      d="M38 104 C33 48 70 26 100 26 C130 26 167 48 162 104 C166 140 162 168 148 188
+         C142 178 136 184 128 192 L72 192 C64 184 58 178 52 188 C38 168 34 140 38 104 Z"/>
+
+    <!-- الأذنان -->
+    <g class="cmp-ear cmp-ear--r">
+      <path d="M46 76 L40 16 L90 46 Z" fill="#24212b" stroke="#0f0d12" stroke-width="1.5" stroke-linejoin="round"/>
+      <path d="M52 66 L48 30 L78 48 Z" fill="#f4a3a0"/>
+    </g>
+    <g class="cmp-ear cmp-ear--l">
+      <path d="M154 76 L160 16 L110 46 Z" fill="#24212b" stroke="#0f0d12" stroke-width="1.5" stroke-linejoin="round"/>
+      <path d="M148 66 L152 30 L122 48 Z" fill="#f4a3a0"/>
+    </g>
+
+    <!-- الجسم: قميص أبيض بأكمام منفوخة وفستان أسود -->
+    <g class="cmp-body">
+      <ellipse cx="88" cy="226" rx="8" ry="12" fill="#1d1a22"/>
+      <ellipse cx="112" cy="226" rx="8" ry="12" fill="#1d1a22"/>
+      <g transform="rotate(18 69 174)"><ellipse class="cmp-arm cmp-arm--r" cx="69" cy="174" rx="7" ry="15" fill="#ffe8dc"/></g>
+      <g transform="rotate(-18 131 174)"><ellipse class="cmp-arm cmp-arm--l" cx="131" cy="174" rx="7" ry="15" fill="#ffe8dc"/></g>
+      <path fill="#f3f1f6" d="M80 140 C72 150 68 165 70 182 L130 182 C132 165 128 150 120 140 Z"/>
+      <ellipse cx="73" cy="153" rx="12" ry="10" fill="#f3f1f6" stroke="#d6d2dd" stroke-width="1"/>
+      <ellipse cx="127" cy="153" rx="12" ry="10" fill="#f3f1f6" stroke="#d6d2dd" stroke-width="1"/>
+      <path fill="url(#neko-dress)" d="M86 146 L114 146 L116 176 C128 182 132 196 132 210 C116 222 84 222 68 210 C68 196 72 182 84 176 Z"/>
+      <path d="M70 208 Q76 216 82 210 Q88 218 94 211 Q100 219 106 211 Q112 218 118 210 Q124 216 130 208"
+        fill="none" stroke="#4a4654" stroke-width="3" stroke-linecap="round"/>
+      <path d="M88 146 L86 140 M112 146 L114 140" stroke="#25222c" stroke-width="4" stroke-linecap="round"/>
+      <circle cx="91" cy="153" r="2.6" fill="#b47c6a"/>
+      <circle cx="109" cy="153" r="2.6" fill="#b47c6a"/>
+      <circle cx="91" cy="166" r="2.6" fill="#b47c6a"/>
+      <circle cx="109" cy="166" r="2.6" fill="#b47c6a"/>
+    </g>
+
+    <!-- الوجه -->
+    <ellipse cx="100" cy="98" rx="50" ry="47" fill="#fff1e8"/>
+
+    <!-- العينان -->
+    <g class="cmp-eyes cmp-eyes--open">
+      <g class="cmp-eye">
+        <ellipse cx="80" cy="108" rx="12" ry="15" fill="#fff"/>
+        <g class="cmp-pupil">
+          <ellipse cx="80" cy="109.5" rx="10.5" ry="13.5" fill="url(#neko-iris)"/>
+          <ellipse cx="80" cy="110" rx="4.5" ry="6" fill="#2a140a"/>
+          <circle cx="76.5" cy="102.5" r="3.4" fill="#fff"/>
+          <circle cx="84" cy="114" r="1.6" fill="#fff" opacity=".9"/>
+        </g>
+        <path d="M66 103 Q70 92 81 92.5 Q90 93 94 100" stroke="#1a1418" stroke-width="3.4" fill="none" stroke-linecap="round"/><path d="M66 103 l-3 -2" stroke="#1a1418" stroke-width="2.4" stroke-linecap="round"/>
+      </g>
+      <g class="cmp-eye">
+        <ellipse cx="120" cy="108" rx="12" ry="15" fill="#fff"/>
+        <g class="cmp-pupil">
+          <ellipse cx="120" cy="109.5" rx="10.5" ry="13.5" fill="url(#neko-iris)"/>
+          <ellipse cx="120" cy="110" rx="4.5" ry="6" fill="#2a140a"/>
+          <circle cx="116.5" cy="102.5" r="3.4" fill="#fff"/>
+          <circle cx="124" cy="114" r="1.6" fill="#fff" opacity=".9"/>
+        </g>
+        <path d="M134 103 Q130 92 119 92.5 Q110 93 106 100" stroke="#1a1418" stroke-width="3.4" fill="none" stroke-linecap="round"/><path d="M134 103 l3 -2" stroke="#1a1418" stroke-width="2.4" stroke-linecap="round"/>
+      </g>
+      <path d="M73 84 Q80 82 87 84" stroke="#3a2a2a" stroke-width="1.4" fill="none" stroke-linecap="round" opacity=".5"/>
+      <path d="M113 84 Q120 82 127 84" stroke="#3a2a2a" stroke-width="1.4" fill="none" stroke-linecap="round" opacity=".5"/>
+    </g>
+    <g class="cmp-eyes cmp-eyes--happy" stroke="#1a1418" stroke-width="3.2" fill="none" stroke-linecap="round">
+      <path d="M69 109 Q80 97 91 109"/>
+      <path d="M109 109 Q120 97 131 109"/>
+    </g>
+
+    <!-- الخدود -->
+    <ellipse cx="67" cy="123" rx="8" ry="4.5" fill="#ff9aa8" opacity=".5"/>
+    <ellipse cx="133" cy="123" rx="8" ry="4.5" fill="#ff9aa8" opacity=".5"/>
+    <path d="M63 122 l3 -3 M68 123 l3 -3 M129 122 l3 -3 M134 123 l3 -3" stroke="#ff7f93" stroke-width="1" opacity=".6"/>
+
+    <!-- الفم (فم قطة صغير) -->
+    <path class="cmp-mouth cmp-mouth--smile" d="M93 126 Q96.5 130 100 126 Q103.5 130 107 126" stroke="#a8466a" stroke-width="2.2" fill="none" stroke-linecap="round"/>
+    <ellipse class="cmp-mouth cmp-mouth--talk" cx="100" cy="128" rx="5" ry="4" fill="#a8466a"/>
+    <path class="cmp-mouth cmp-mouth--o" d="M97 128 a3 3 0 1 0 6 0 a3 3 0 1 0 -6 0" fill="#a8466a"/>
+
+    <!-- الغُرّة -->
+    <path fill="url(#neko-hair)"
+      d="M50 104 C46 56 72 36 100 36 C128 36 154 56 150 104 Q146 86 139 76 Q133 92 124 99
+         Q120 80 112 64 Q108 84 101 95 Q96 78 89 64 Q84 84 76 97 Q70 86 64 78 Q58 92 54 102 Z"/>
+    <path d="M70 52 Q86 40 104 42" stroke="#fff" stroke-width="3" fill="none" stroke-linecap="round" opacity=".18"/>
+
+    <!-- فقاعات التفكير -->
+    <g class="cmp-think" fill="#ece9ff">
+      <circle cx="158" cy="44" r="4"/>
+      <circle cx="170" cy="30" r="6"/>
+      <circle cx="186" cy="14" r="8"/>
+    </g>
+  </g>
+</svg>`,
+  },
+};
+
+export const DEFAULT_SKIN = 'star';
+export const skinSVG = (id) => (SKINS[id] || SKINS[DEFAULT_SKIN]).svg;

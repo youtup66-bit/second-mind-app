@@ -2,6 +2,7 @@
 import { getSetting, setSetting, deleteSetting, clearAll, clearMessages } from '../storage.js';
 import { DEFAULT_MODEL, testKey } from '../gemini.js';
 import { canSpeak } from '../voice.js';
+import { SKINS, DEFAULT_SKIN, skinSVG } from '../skins.js';
 import {
   downloadBackup, shareBackup, canShareFiles, importFile,
   listSnapshots, restoreSnapshot, backupStatus, requestPersistence,
@@ -17,8 +18,21 @@ export async function mount(root) {
   const model = await getSetting('geminiModel', DEFAULT_MODEL);
   const speakOn = await getSetting('speakReplies', true);
   const memoryOn = await getSetting('useMemory', true);
+  const skin = await getSetting('companionSkin', DEFAULT_SKIN);
 
   root.innerHTML = `
+    <section class="card">
+      <h2>شكل الرفيقة</h2>
+      <div class="skins" role="radiogroup" aria-label="شكل الرفيقة">
+        ${Object.entries(SKINS).map(([id, k]) => `
+          <button class="skin ${id === skin ? 'is-active' : ''}" role="radio" aria-checked="${id === skin}" data-skin="${id}">
+            <div class="companion is-idle">${skinSVG(id)}</div>
+            <span class="skin__name">${k.label}</span>
+            <span class="skin__note">${k.note}</span>
+          </button>`).join('')}
+      </div>
+    </section>
+
     <section class="card">
       <h2>مفتاح Gemini API</h2>
       <p class="muted">يُحفظ المفتاح على جهازك فقط، ويُستخدم للمحادثة والتصنيف.</p>
@@ -132,6 +146,16 @@ export async function mount(root) {
     const v = e.target.value.trim();
     if (v) await setSetting('geminiModel', v); else { await deleteSetting('geminiModel'); e.target.value = DEFAULT_MODEL; }
     show(keyStatus, 'تم حفظ النموذج.');
+  });
+
+  root.querySelector('.skins').addEventListener('click', async (e) => {
+    const b = e.target.closest('[data-skin]');
+    if (!b) return;
+    await setSetting('companionSkin', b.dataset.skin);
+    root.querySelectorAll('.skin').forEach((x) => {
+      x.classList.toggle('is-active', x === b);
+      x.setAttribute('aria-checked', x === b);
+    });
   });
 
   root.querySelector('#speak').addEventListener('change', (e) => setSetting('speakReplies', e.target.checked));

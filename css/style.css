@@ -161,7 +161,7 @@ input[dir="ltr"] { text-align: left; }
 .companion { cursor: pointer; user-select: none; -webkit-user-select: none; }
 .companion__svg { display: block; width: 100%; height: auto; overflow: visible; }
 .cmp-shadow, .cmp-aura, .cmp-hair-back, .cmp-ahoge, .cmp-star, .cmp-tail, .cmp-arm,
-.cmp-eye, .cmp-mouth, .cmp-think circle { transform-box: fill-box; }
+.cmp-eye, .cmp-mouth, .cmp-think circle, .cmp-ear, .cmp-cattail { transform-box: fill-box; }
 
 .cmp-float { animation: cmp-float 4.2s ease-in-out infinite; transform-origin: center; transform-box: view-box; }
 @keyframes cmp-float {
@@ -372,3 +372,29 @@ mark { background: color-mix(in srgb, #ffc857 45%, transparent); color: inherit;
 .chat--active .chat__stage { width: min(26vw, 110px); }
 .chat--active .bubble { font-size: .9rem; padding: 8px 14px; }
 .chat__stage { transition: width .3s ease; }
+
+/* ---- أجزاء خاصة ببعض الأشكال ---- */
+.cmp-ear { transform-origin: 50% 100%; }
+.cmp-ear--r { animation: cmp-ear 7s ease-in-out infinite; }
+.cmp-ear--l { animation: cmp-ear 7s ease-in-out 2.3s infinite reverse; }
+@keyframes cmp-ear {
+  0%, 86%, 100% { transform: rotate(0); }
+  89% { transform: rotate(-9deg); }
+  92% { transform: rotate(4deg); }
+}
+.cmp-cattail { transform-origin: 0% 90%; animation: cmp-cattail 3.2s ease-in-out infinite; }
+@keyframes cmp-cattail { 0%, 100% { transform: rotate(-6deg); } 50% { transform: rotate(8deg); } }
+.companion.is-listening .cmp-ear { animation: cmp-ear-perk 1s ease-in-out infinite; }
+@keyframes cmp-ear-perk { 50% { transform: rotate(-5deg) scaleY(1.06); } }
+.companion.is-happy .cmp-cattail { animation-duration: .8s; }
+
+/* ---- اختيار شكل الرفيقة ---- */
+.skins { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 10px; margin-top: 8px; }
+.skin {
+  font: inherit; color: var(--text); cursor: pointer; text-align: center;
+  background: var(--bg-2); border: 2px solid var(--border); border-radius: 16px; padding: 8px 8px 10px;
+}
+.skin.is-active { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, var(--bg-2)); }
+.skin .companion { pointer-events: none; width: 84px; margin: 0 auto; }
+.skin__name { display: block; font-weight: 700; margin-top: 2px; }
+.skin__note { display: block; font-size: .75rem; color: var(--muted); }
