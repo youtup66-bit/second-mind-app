@@ -355,3 +355,20 @@ mark { background: color-mix(in srgb, #ffc857 45%, transparent); color: inherit;
 /* ---- المهام المنجزة ---- */
 .note__done { margin-top: 8px; font-size: .9rem; }
 .note.is-done .note__text, .note.is-done .note__title { text-decoration: line-through; opacity: .6; }
+
+/* ---- "استعنتُ بملاحظاتك" ---- */
+.used { margin-top: 8px; font-size: .8rem; color: var(--muted); }
+.used summary { cursor: pointer; list-style: none; }
+.used summary::-webkit-details-marker { display: none; }
+.used[open] summary { color: var(--text); }
+.used ul { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 4px; }
+.used li { display: flex; align-items: center; gap: 6px; }
+.used__dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+.card .switch + .muted { margin-top: 4px; }
+.card .switch { margin-top: 10px; }
+.used { white-space: normal; }
+
+/* بعد بدء المحادثة تصغر الرفيقة لتتسع الردود */
+.chat--active .chat__stage { width: min(26vw, 110px); }
+.chat--active .bubble { font-size: .9rem; padding: 8px 14px; }
+.chat__stage { transition: width .3s ease; }

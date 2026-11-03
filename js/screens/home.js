@@ -4,6 +4,7 @@ import { addEntry, addMessage, getEntries, getMessages, getSetting, getSummaries
 import { chat } from '../gemini.js';
 import { CATEGORIES, NONE, categoryById } from '../categories.js';
 import { classifyEntry, classifyPending, setCategory } from '../classifier.js';
+import { recall } from '../recall.js';
 import { canListen, listen, speak, stopSpeaking } from '../voice.js';
 
 export const title = 'الرفيقة';
@@ -17,6 +18,13 @@ function greeting() {
   if (h < 12) return 'صباح الخير! كيف تشعر اليوم؟';
   if (h < 18) return 'أهلاً! ماذا يدور في بالك؟';
   return 'مساء الخير، كيف كان يومك؟';
+}
+
+// الفقاعة فوق الرفيقة تعرض بداية الرد فقط؛ الرد كاملاً في المحادثة
+function bubbleText(reply) {
+  const first = reply.split(/\n/)[0];
+  const cut = first.length > 140 ? `${first.slice(0, 140).replace(/\s+\S*$/, '')}…` : first;
+  return cut + (cut.length < reply.length && !cut.endsWith('…') ? ' …' : '');
 }
 
 const escapeHtml = (s) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -79,13 +87,14 @@ export async function mount(root) {
     bubble.classList.add('is-shown');
   }
 
-  function append(role, text, extra = '', entry = null) {
+  function append(role, text, extra = '', entry = null, used = []) {
     const li = document.createElement('li');
     li.className = `msg msg--${role} ${extra}`;
     const body = document.createElement('span');
     body.className = 'msg__text';
     body.textContent = text;
     li.append(body);
+    if (used.length) renderUsed(li, used);
     if (entry) {
       const chip = document.createElement('button');
       chip.type = 'button';
@@ -95,8 +104,21 @@ export async function mount(root) {
       renderChip(chip, entry);
     }
     log.append(li);
+    log.closest('.chat').classList.add('chat--active');
     log.scrollTop = log.scrollHeight;
     return li;
+  }
+
+  // "استعنتُ بملاحظاتك": يوضح أي ملاحظات قرأتها الرفيقة قبل ردها
+  function renderUsed(li, used) {
+    const box = document.createElement('details');
+    box.className = 'used';
+    box.innerHTML = `<summary>📎 استعنتُ بـ${used.length === 1 ? 'ملاحظة واحدة' : ` ${used.length} من ملاحظاتك`}</summary>
+      <ul>${used.map((e) => {
+        const c = categoryById(e.category);
+        return `<li><span class="used__dot" style="background:${c ? c.color : 'var(--muted)'}"></span>${escapeHtml(e.meta?.title || e.text.slice(0, 50))}</li>`;
+      }).join('')}</ul>`;
+    li.append(box);
   }
 
   function renderChip(chip, entry) {
@@ -115,7 +137,9 @@ export async function mount(root) {
 
   const entriesById = Object.fromEntries((await getEntries()).map((e) => [e.id, e]));
   (await getMessages(50)).forEach((m) =>
-    append(m.role, m.text, '', m.role === 'user' && m.entryId ? entriesById[m.entryId] || null : null));
+    append(m.role, m.text, '',
+      m.role === 'user' && m.entryId ? entriesById[m.entryId] || null : null,
+      (m.used || []).map((id) => entriesById[id]).filter(Boolean)));
 
   // ما فات تصنيفه سابقاً (بلا مفتاح أو اتصال) نصنّفه الآن بهدوء
   classifyPending(refreshChip);
@@ -169,12 +193,27 @@ export async function mount(root) {
     const pending = append('model', '…', 'msg--pending');
 
     try {
-      const history = (await getMessages(HISTORY_LIMIT)).map(({ role, text }) => ({ role, text }));
-      const reply = await chat(history);
-      await addMessage({ role: 'model', text: reply });
-      pending.textContent = reply;
+      const recent = await getMessages(HISTORY_LIMIT);
+      const history = recent.map(({ role, text }) => ({ role, text }));
+
+      // نبحث محلياً في العقل الثاني عمّا له صلة، ونستبعد ما هو موجود أصلاً في المحادثة الحالية
+      let used = [];
+      if (await getSetting('useMemory', true)) {
+        const inChat = recent.map((m) => m.entryId).filter(Boolean);
+        const prevUser = recent.filter((m) => m.role === 'user').at(-2)?.text || '';
+        used = recall(await getEntries(), text, { previous: prevUser, exclude: inChat });
+      }
+      const memories = used.map((e) => ({
+        createdAt: e.createdAt, text: e.text, done: !!e.meta?.done,
+        categoryLabel: categoryById(e.category)?.label || '',
+      }));
+
+      const reply = await chat(history, { memories });
+      await addMessage({ role: 'model', text: reply, used: used.map((e) => e.id) });
+      pending.querySelector('.msg__text').textContent = reply;
       pending.classList.remove('msg--pending');
-      say(escapeHtml(reply));
+      if (used.length) renderUsed(pending, used);
+      say(escapeHtml(bubbleText(reply)));
       log.scrollTop = log.scrollHeight;
       await talk(reply);
     } catch (err) {

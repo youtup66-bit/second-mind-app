@@ -87,8 +87,9 @@ export const deleteEntry = (id) =>
 
 // ---- سجل المحادثة ----
 // role: 'user' | 'model'
-export async function addMessage({ role, text, entryId = null }) {
-  const msg = { id: crypto.randomUUID(), role, text, entryId, createdAt: Date.now() };
+// used: معرّفات الملاحظات التي استعانت بها الرفيقة في ردها
+export async function addMessage({ role, text, entryId = null, used = [] }) {
+  const msg = { id: crypto.randomUUID(), role, text, entryId, used, createdAt: Date.now() };
   await run('messages', 'readwrite', (s) => s.add(msg));
   return msg;
 }

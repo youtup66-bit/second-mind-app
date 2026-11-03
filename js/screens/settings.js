@@ -16,6 +16,7 @@ export async function mount(root) {
   const key = await getSetting('geminiApiKey', '');
   const model = await getSetting('geminiModel', DEFAULT_MODEL);
   const speakOn = await getSetting('speakReplies', true);
+  const memoryOn = await getSetting('useMemory', true);
 
   root.innerHTML = `
     <section class="card">
@@ -43,6 +44,11 @@ export async function mount(root) {
         <input type="checkbox" id="speak" ${speakOn ? 'checked' : ''} ${canSpeak ? '' : 'disabled'}>
         <span>الرفيقة تنطق ردودها بصوت</span>
       </label>
+      <label class="switch">
+        <input type="checkbox" id="memory" ${memoryOn ? 'checked' : ''}>
+        <span>الرفيقة تستعين بملاحظاتي في ردودها</span>
+      </label>
+      <p class="muted">يبحث التطبيق في ملاحظاتك على جهازك، ويرفق مع رسالتك أقرب ٥ ملاحظات صلة بها فقط، لتقترح الرفيقة حلولاً مبنية على ما دوّنته.</p>
       <p class="muted">الإدخال الصوتي يعتمد على خدمة التعرف على الكلام في متصفحك، وقد يرسل المتصفح الصوت إلى خوادمه لتحويله إلى نص.</p>
       <div class="row">
         <button class="btn btn--ghost" id="clear-chat">مسح سجل المحادثة</button>
@@ -78,7 +84,7 @@ export async function mount(root) {
 
     <section class="card">
       <h2>الخصوصية</h2>
-      <p class="muted">كل ملاحظاتك محفوظة على هذا الجهاز. لا يُرسل شيء للخارج إلا نص المحادثة الأخيرة إلى Gemini لتردّ الرفيقة.</p>
+      <p class="muted">كل ملاحظاتك محفوظة على هذا الجهاز. لا يُرسل شيء للخارج إلا إلى Gemini: نص المحادثة الأخيرة، والملاحظات القليلة ذات الصلة بها (إن فعّلت ذلك)، وما تطلب تلخيصه.</p>
       <div class="row">
         <button class="btn btn--danger" id="wipe">مسح كل البيانات</button>
       </div>
@@ -129,6 +135,7 @@ export async function mount(root) {
   });
 
   root.querySelector('#speak').addEventListener('change', (e) => setSetting('speakReplies', e.target.checked));
+  root.querySelector('#memory').addEventListener('change', (e) => setSetting('useMemory', e.target.checked));
 
   root.querySelector('#clear-chat').addEventListener('click', async () => {
     if (!confirm('سيُمسح سجل المحادثة فقط، وتبقى ملاحظاتك. متابعة؟')) return;

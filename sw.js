@@ -1,7 +1,7 @@
 // عامل الخدمة: يجعل التطبيق يعمل دون اتصال.
 // ملفات التطبيق: الشبكة أولاً (لتصلك آخر نسخة فوراً)، والمخزّن عند انقطاع الاتصال.
 // الخطوط: المخزّن أولاً. طلبات Gemini لا تمر عبر المخزّن أبداً.
-const CACHE = 'second-mind-v8';
+const CACHE = 'second-mind-v9';
 const ASSETS = [
   './',
   './index.html',
@@ -23,6 +23,7 @@ const ASSETS = [
   './js/backup.js',
   './js/notes-view.js',
   './js/summaries.js',
+  './js/recall.js',
   './js/screens/home.js',
   './js/screens/mind.js',
   './js/screens/folder.js',
