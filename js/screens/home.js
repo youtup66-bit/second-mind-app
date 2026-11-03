@@ -1,7 +1,9 @@
-// شاشة الرفيقة: الشخصية الطافية + المحادثة صوتاً أو كتابة
+// شاشة الرفيقة: الشخصية الطافية + المحادثة صوتاً أو كتابة + تصنيف كل ملاحظة
 import { createCompanion } from '../companion.js';
-import { addEntry, addMessage, getMessages, getSetting } from '../storage.js';
+import { addEntry, addMessage, getEntries, getMessages, getSetting } from '../storage.js';
 import { chat } from '../gemini.js';
+import { CATEGORIES, NONE, categoryById } from '../categories.js';
+import { classifyEntry, classifyPending, setCategory } from '../classifier.js';
 import { canListen, listen, speak, stopSpeaking } from '../voice.js';
 
 export const title = 'الرفيقة';
@@ -36,6 +38,15 @@ export async function mount(root) {
         <textarea id="input" rows="1" placeholder="اكتب ما في بالك..." aria-label="رسالتك"></textarea>
         <button type="submit" class="composer__send" id="send" aria-label="إرسال">➤</button>
       </form>
+      <div class="sheet" id="sheet" hidden>
+        <div class="sheet__panel" role="dialog" aria-label="اختر القسم">
+          <p class="sheet__title">إلى أي قسم تنتمي هذه الملاحظة؟</p>
+          <div class="sheet__chips">
+            ${[...CATEGORIES, NONE].map((c) => `
+              <button type="button" class="chip" data-cat="${c.id}" style="--c:${c.color}">${c.label}</button>`).join('')}
+          </div>
+        </div>
+      </div>
     </section>
   `;
 
@@ -57,16 +68,61 @@ export async function mount(root) {
     bubble.classList.add('is-shown');
   }
 
-  function append(role, text, extra = '') {
+  function append(role, text, extra = '', entry = null) {
     const li = document.createElement('li');
     li.className = `msg msg--${role} ${extra}`;
-    li.textContent = text;
+    const body = document.createElement('span');
+    body.className = 'msg__text';
+    body.textContent = text;
+    li.append(body);
+    if (entry) {
+      const chip = document.createElement('button');
+      chip.type = 'button';
+      chip.className = 'chip chip--small';
+      chip.dataset.entry = entry.id;
+      li.append(chip);
+      renderChip(chip, entry);
+    }
     log.append(li);
     log.scrollTop = log.scrollHeight;
     return li;
   }
 
-  (await getMessages(50)).forEach((m) => append(m.role, m.text));
+  function renderChip(chip, entry) {
+    const c = categoryById(entry?.category);
+    chip.classList.toggle('is-pending', !c);
+    chip.style.setProperty('--c', c ? c.color : 'var(--muted)');
+    chip.textContent = c ? c.label : 'يُصنَّف…';
+    chip.title = entry?.meta?.title || '';
+  }
+
+  function refreshChip(entry) {
+    if (!entry) return;
+    const chip = log.querySelector(`.chip[data-entry="${entry.id}"]`);
+    if (chip) renderChip(chip, entry);
+  }
+
+  const entriesById = Object.fromEntries((await getEntries()).map((e) => [e.id, e]));
+  (await getMessages(50)).forEach((m) =>
+    append(m.role, m.text, '', m.role === 'user' && m.entryId ? entriesById[m.entryId] || null : null));
+
+  // ما فات تصنيفه سابقاً (بلا مفتاح أو اتصال) نصنّفه الآن بهدوء
+  classifyPending(refreshChip);
+
+  // ---- تصحيح التصنيف يدوياً ----
+  const sheet = root.querySelector('#sheet');
+  let editing = null;
+  log.addEventListener('click', (e) => {
+    const chip = e.target.closest('.chip[data-entry]');
+    if (!chip) return;
+    editing = chip.dataset.entry;
+    sheet.hidden = false;
+  });
+  sheet.addEventListener('click', async (e) => {
+    const pick = e.target.closest('.chip[data-cat]');
+    if (pick && editing) refreshChip(await setCategory(editing, pick.dataset.cat));
+    if (pick || e.target === sheet) { sheet.hidden = true; editing = null; }
+  });
 
   // تكبير خانة الكتابة مع النص
   const autosize = () => { input.style.height = 'auto'; input.style.height = `${Math.min(input.scrollHeight, 120)}px`; };
@@ -89,10 +145,13 @@ export async function mount(root) {
     stopSpeaking();
     input.value = ''; autosize();
 
-    // نحفظ كلام المستخدم أولاً، والتصنيف يأتي في المرحلة ٤
+    // نحفظ كلام المستخدم أولاً حتى لا يضيع شيء
     const entry = await addEntry({ text, source });
     await addMessage({ role: 'user', text, entryId: entry.id });
-    append('user', text);
+    append('user', text, '', entry);
+
+    // التصنيف يعمل بالتوازي مع رد الرفيقة
+    classifyEntry(entry).then(refreshChip).catch(() => {});
 
     companion.setState('thinking');
     say('<span class="dots"><i></i><i></i><i></i></span>');

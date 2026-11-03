@@ -11,4 +11,7 @@ export const CATEGORIES = [
   { id: 'question',  label: 'سؤال',         color: '#e2e2ff' },
 ];
 
-export const categoryById = (id) => CATEGORIES.find((c) => c.id === id);
+// "بلا تصنيف": تحيات وردود قصيرة لا تظهر في شاشة العقل
+export const NONE = { id: 'none', label: 'بلا تصنيف', color: '#6b6690' };
+
+export const categoryById = (id) => CATEGORIES.find((c) => c.id === id) || (id === 'none' ? NONE : null);

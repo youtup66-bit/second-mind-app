@@ -70,16 +70,10 @@ function toContents(history) {
   return out;
 }
 
-// history: [{ role: 'user'|'model', text }]
-export async function chat(history) {
+// طلب توليد مع اختيار نموذج بديل تلقائياً إن لم يكن المحفوظ متاحاً
+async function generate(body) {
   const key = await getKey();
   let model = await getSetting('geminiModel', DEFAULT_MODEL);
-  const body = {
-    systemInstruction: { parts: [{ text: PERSONA }] },
-    contents: toContents(history),
-    generationConfig: { temperature: 0.8, maxOutputTokens: 400 },
-  };
-
   let data;
   try {
     data = await call(`models/${model}:generateContent`, key, body);
@@ -89,10 +83,71 @@ export async function chat(history) {
     await setSetting('geminiModel', model);
     data = await call(`models/${model}:generateContent`, key, body);
   }
-
-  const text = data?.candidates?.[0]?.content?.parts?.map((p) => p.text || '').join('').trim();
+  const text = data?.candidates?.[0]?.content?.parts
+    ?.filter((p) => !p.thought).map((p) => p.text || '').join('').trim();
   if (!text) throw new GeminiError('لم يصلني رد، جرّب مرة أخرى.', 'EMPTY');
   return text;
+}
+
+// history: [{ role: 'user'|'model', text }]
+// ملاحظة: الحد الأعلى للرموز واسع لأن نماذج التفكير تحتسب تفكيرها منه.
+export function chat(history) {
+  return generate({
+    systemInstruction: { parts: [{ text: PERSONA }] },
+    contents: toContents(history),
+    generationConfig: { temperature: 0.8, maxOutputTokens: 2048 },
+  });
+}
+
+// ---- التصنيف ----
+const CLASSIFIER = `أنت مصنِّف لملاحظات شخصية مكتوبة بالعربية (فصحى أو عامية).
+صنّف "الملاحظة الحالية" فقط إلى قسم واحد هو الأنسب، واستعن بالسياق إن كانت قصيرة.
+الأقسام:
+- worry (قلق): خوف، توتر، همّ، انزعاج من أمر قادم أو حاصل.
+- thought (تفكير): تأمل، رأي، تحليل، مشاعر عامة أو وصف لحال اليوم.
+- idea (فكرة إبداعية): فكرة مشروع، اختراع، كتابة، تصميم، حل جديد.
+- task (مهمة): شيء يجب فعله أو تذكّره، موعد، التزام.
+- memory (ذكرى): حدث من الماضي يستعيده.
+- gratitude (امتنان): شكر، تقدير، شيء جميل يحمد عليه.
+- dream (حلم): حلم منام، أو أمنية وطموح بعيد.
+- decision (قرار): قرار اتخذه أو يحسمه أو حيرة بين خيارين.
+- question (سؤال): سؤال يشغله أو يريد معرفة جوابه.
+- none: تحية أو رد قصير بلا مضمون (مثل: مرحبا، شكراً، تمام).
+أعد أيضاً عنواناً قصيراً من ٢ إلى ٦ كلمات يلخّص الملاحظة.`;
+
+const CATEGORY_IDS = ['worry', 'thought', 'idea', 'task', 'memory', 'gratitude', 'dream', 'decision', 'question', 'none'];
+
+// context: رسائل سابقة قصيرة [{ role, text }] للمساعدة في فهم الردود القصيرة
+export async function classify(text, context = []) {
+  const ctx = context.map((m) => `${m.role === 'user' ? 'المستخدم' : 'الرفيقة'}: ${m.text}`).join('\n');
+  const raw = await generate({
+    systemInstruction: { parts: [{ text: CLASSIFIER }] },
+    contents: [{
+      role: 'user',
+      parts: [{ text: `${ctx ? `السياق:\n${ctx}\n\n` : ''}الملاحظة الحالية:\n${text}` }],
+    }],
+    generationConfig: {
+      temperature: 0,
+      maxOutputTokens: 1024,
+      responseMimeType: 'application/json',
+      responseSchema: {
+        type: 'OBJECT',
+        properties: {
+          category: { type: 'STRING', enum: CATEGORY_IDS },
+          title: { type: 'STRING' },
+        },
+        required: ['category', 'title'],
+      },
+    },
+  });
+  let out;
+  try {
+    out = JSON.parse(raw.replace(/^```(?:json)?\s*|\s*```$/g, ''));
+  } catch {
+    throw new GeminiError('رد التصنيف غير مفهوم.', 'PARSE');
+  }
+  const category = CATEGORY_IDS.includes(out.category) ? out.category : 'thought';
+  return { category, title: String(out.title || '').trim().slice(0, 60) };
 }
 
 // للتحقق من المفتاح من الإعدادات
