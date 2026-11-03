@@ -9,30 +9,60 @@ const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 export const canListen = !!Recognition;
 export const canSpeak = 'speechSynthesis' in window;
 
-// يبدأ الاستماع ويعيد دالة للإيقاف
-export function listen({ onText, onInterim, onEnd, onError }) {
+// يبدأ الاستماع ويعيد دالة للإيقاف.
+// - نوقف أي صوت ونعلّق محرك الصوت قبل الاستماع، لأن أندرويد قد يمنح الصوت للتشغيل بدل الميكروفون.
+// - الإيقاف لا ينتظر المتصفح إلى الأبد: إن لم ينتهِ خلال ثانية ونصف نُنهيه بالقوة.
+// - عند الإيقاف اليدوي نرسل ما سُمع حتى الآن، حتى لو لم يكتمل.
+export function listen({ onText, onInterim, onEnd, onError, onStart }) {
+  stopSpeaking();
+  suspendAudio();
   const rec = new Recognition();
   rec.lang = 'ar-SA';
   rec.interimResults = true;
   rec.continuous = false;
-  let finalText = '';
+  rec.maxAlternatives = 1;
+  let finalText = '', interimText = '', started = false, ended = false, forceTimer = 0;
 
-  rec.onresult = (e) => {
-    let interim = '';
-    for (let i = e.resultIndex; i < e.results.length; i++) {
-      const r = e.results[i];
-      if (r.isFinal) finalText += r[0].transcript;
-      else interim += r[0].transcript;
-    }
-    onInterim?.(finalText + interim);
-  };
-  rec.onerror = (e) => onError?.(e.error);
-  rec.onend = () => {
-    if (finalText.trim()) onText?.(finalText.trim());
+  const finish = () => {
+    if (ended) return;
+    ended = true;
+    clearTimeout(startTimer);
+    clearTimeout(forceTimer);
+    const text = (finalText + ' ' + interimText).replace(/\s+/g, ' ').trim();
+    if (text) onText?.(text);
     onEnd?.();
   };
+
+  rec.onaudiostart = () => { started = true; onStart?.(); };
+  rec.onstart = () => { started = true; onStart?.(); };
+  rec.onresult = (e) => {
+    let interim = '';
+    finalText = '';
+    // نعيد بناء النص من كل النتائج (أندرويد يكرر النتائج أحياناً إن جمعناها تراكمياً)
+    for (let i = 0; i < e.results.length; i++) {
+      const r = e.results[i];
+      if (r.isFinal) finalText += r[0].transcript + ' ';
+      else interim += r[0].transcript;
+    }
+    interimText = interim;
+    onInterim?.((finalText + interim).trim());
+  };
+  rec.onerror = (e) => onError?.(e.error);
+  rec.onend = finish;
+
+  // إن لم يبدأ الميكروفون فعلاً خلال ٦ ثوانٍ نخبره ونوقف
+  const startTimer = setTimeout(() => {
+    if (started || ended) return;
+    onError?.('no-start');
+    try { rec.abort(); } catch { /* انتهى */ }
+    finish();
+  }, 6000);
+
   rec.start();
-  return () => rec.stop();
+  return () => {
+    try { rec.stop(); } catch { /* انتهى */ }
+    forceTimer = setTimeout(() => { try { rec.abort(); } catch { /* انتهى */ } finish(); }, 1500);
+  };
 }
 
 // ---- أصوات الجهاز ----
@@ -113,23 +143,37 @@ let ctx = null;
 let source = null;
 let token = 0;
 
-// يُستدعى داخل لمسة المستخدم (زر الإرسال أو الميكروفون) ليسمح المتصفح بالتشغيل لاحقاً
+// يُستدعى داخل لمسة المستخدم (زر الإرسال) ليسمح المتصفح بالتشغيل لاحقاً
 export function unlockAudio() {
   try {
     ctx ||= new (window.AudioContext || window.webkitAudioContext)();
-    if (ctx.state === 'suspended') ctx.resume();
+    if (ctx.state === 'suspended') ctx.resume().catch(() => {});
   } catch { /* غير مدعوم */ }
 }
 
-function playPCM({ samples, rate }, { onStart, onEnd }) {
+// نعلّق محرك الصوت حين لا نحتاجه، فيتحرر الصوت للميكروفون
+function suspendAudio() {
+  if (ctx && ctx.state === 'running') ctx.suspend().catch(() => {});
+}
+
+// يتأكد أن محرك الصوت يعمل قبل التشغيل (ينتظر حتى ثانية)
+async function ensureAudio() {
   unlockAudio();
+  if (!ctx) return false;
+  if (ctx.state !== 'running') {
+    await Promise.race([ctx.resume().catch(() => {}), new Promise((r) => setTimeout(r, 1000))]);
+  }
+  return ctx.state === 'running';
+}
+
+function playPCM({ samples, rate }, { onStart, onEnd }) {
   const buf = ctx.createBuffer(1, samples.length, rate);
   const ch = buf.getChannelData(0);
   for (let i = 0; i < samples.length; i++) ch[i] = samples[i] / 32768;
   source = ctx.createBufferSource();
   source.buffer = buf;
   source.connect(ctx.destination);
-  source.onended = () => { source = null; onEnd?.(); };
+  source.onended = () => { source = null; suspendAudio(); onEnd?.(); };
   onStart?.();
   source.start();
 }
@@ -159,7 +203,8 @@ export async function speak(text, { skin, onStart, onEnd, onFallback, onWaiting,
       onWaiting?.();
       const audio = await tts(text.slice(0, MAX_TTS_CHARS), { voice: profile.gemini, style: profile.style });
       if (my !== token) return; // أُلغي أثناء الانتظار
-      if (!ctx || ctx.state !== 'running') throw new Error('الصوت لم يُفعَّل بعد، المس الشاشة مرة');
+      if (!(await ensureAudio())) throw new Error('الصوت لم يُفعَّل بعد، المس الشاشة مرة');
+      if (my !== token) return;
       playPCM(audio, { onStart, onEnd });
       return;
     } catch (err) {

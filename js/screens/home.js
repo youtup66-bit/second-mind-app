@@ -264,36 +264,46 @@ export async function mount(root) {
     });
   }
 
+  const micOff = () => {
+    stopListening = null;
+    mic.classList.remove('is-on');
+    mic.setAttribute('aria-label', 'تحدّث');
+    if (companion?.state === 'listening') companion.setState('idle');
+  };
+
   mic?.addEventListener('click', () => {
-    unlockAudio();
-    if (stopListening) { stopListening(); return; }
+    // ضغطة ثانية: إيقاف فوري للواجهة، وإرسال ما سُمع
+    if (stopListening) {
+      const stop = stopListening;
+      micOff();
+      say('أوقفتُ الاستماع.');
+      stop();
+      return;
+    }
     if (busy) { say('لحظة، ما زلت أفكر… 💭'); return; }
-    stopSpeaking();
     companion.setState('listening');
     mic.classList.add('is-on');
-    say('أسمعك…');
+    mic.setAttribute('aria-label', 'أوقف الاستماع');
+    say('أجهّز الميكروفون…');
     try {
       stopListening = listen({
+        onStart: () => say('أسمعك… تكلّم، ثم المس 🎙 لتنهي.'),
         onInterim: (t) => { input.value = t; autosize(); },
-        onText: (t) => send(t, 'voice'),
+        onText: (t) => { input.value = ''; autosize(); send(t, 'voice'); },
         onError: (code) => {
           if (code === 'not-allowed' || code === 'service-not-allowed') say('أحتاج إذن الميكروفون لأسمعك. فعّله من إعدادات المتصفح للموقع.');
           else if (code === 'no-speech') say('لم أسمع شيئاً، جرّب مرة أخرى.');
           else if (code === 'network') say('التعرف على الكلام يحتاج إنترنت، تحقق من الاتصال.');
-          else if (code === 'audio-capture') say('لا أستطيع الوصول إلى الميكروفون.');
+          else if (code === 'audio-capture') say('لا أستطيع الوصول إلى الميكروفون. ربما يستخدمه تطبيق آخر.');
+          else if (code === 'no-start') say('لم يبدأ الميكروفون. جرّب مرة أخرى، أو استخدم مايك لوحة المفاتيح 🎤 في خانة الكتابة.');
+          else if (code === 'language-not-supported') say('خدمة الكلام لا تدعم العربية في هذا المتصفح. استخدم مايك لوحة المفاتيح 🎤.');
           else if (code !== 'aborted') say(`تعذّر الاستماع (${code}). جرّب الكتابة.`);
         },
-        onEnd: () => {
-          stopListening = null;
-          mic.classList.remove('is-on');
-          if (companion?.state === 'listening') companion.setState('idle');
-        },
+        onEnd: () => { if (stopListening) micOff(); },
       });
     } catch {
-      stopListening = null;
-      mic.classList.remove('is-on');
-      companion.setState('idle');
-      say('الإدخال الصوتي غير متاح في هذا المتصفح.');
+      micOff();
+      say('الإدخال الصوتي غير متاح في هذا المتصفح. استخدم مايك لوحة المفاتيح 🎤.');
     }
   });
 }
