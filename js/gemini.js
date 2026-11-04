@@ -420,6 +420,36 @@ async function ttsRequest(text, { voice, style }) {
   return { samples: new Int16Array(bytes.buffer, 0, bytes.length >> 1), rate };
 }
 
+// ---- البحث في الملاحظات القديمة عمّا يناسب قسماً جديداً ----
+// notes: [{ key, text }] (key رمز قصير توفيراً للحصة). يعيد مفاتيح الملاحظات المناسبة.
+export async function matchNotes(category, notes) {
+  if (!notes.length) return [];
+  const raw = await generate({
+    systemInstruction: { parts: [{ text: `أنت تساعد في ترتيب ملاحظات شخصية بالعربية.
+أضاف المستخدم قسماً جديداً. اختر من ملاحظاته القديمة ما ينتمي بوضوح إلى هذا القسم فقط.
+لا تختر ملاحظة إلا إن كان موضوعها الأساسي يناسب القسم؛ إن شككت فلا تخترها.
+أعد مفاتيح الملاحظات المختارة فقط.` }] },
+    contents: [{ role: 'user', parts: [{ text: `القسم: ${category.label}
+وصفه: ${category.desc || category.label}
+
+الملاحظات:
+${notes.map((n) => `[${n.key}] ${n.text}`).join('\n')}` }] }],
+    generationConfig: {
+      temperature: 0,
+      maxOutputTokens: 2048,
+      responseMimeType: 'application/json',
+      responseSchema: { type: 'OBJECT', properties: { keys: { type: 'ARRAY', items: { type: 'STRING' } } }, required: ['keys'] },
+    },
+  }, 'classify');
+  try {
+    const keys = JSON.parse(raw.replace(/^```(?:json)?\s*|\s*```$/g, '')).keys;
+    const valid = new Set(notes.map((n) => n.key));
+    return Array.isArray(keys) ? [...new Set(keys.map(String))].filter((k) => valid.has(k)) : [];
+  } catch {
+    throw new GeminiError('رد البحث غير مفهوم، جرّب مرة أخرى.', 'PARSE');
+  }
+}
+
 // ---- تفريغ الكلام إلى نص ----
 // يُرسل التسجيل الصوتي إلى Gemini (بديل خدمة الكلام في المتصفح التي لا تعمل على بعض الجوالات).
 const TRANSCRIBER = `فرّغ هذا التسجيل الصوتي إلى نص عربي حرفياً كما قيل، فصحى كان أو عامية، مع علامات ترقيم بسيطة.

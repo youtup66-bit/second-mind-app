@@ -31,6 +31,18 @@ function bubbleText(reply) {
   return cut + (cut.length < reply.length && !cut.endsWith('…') ? ' …' : '');
 }
 
+// مسودة خانة الكتابة (على هذا الجهاز فقط)
+const DRAFT_KEY = 'sm-draft';
+function saveDraft(text) {
+  try {
+    if (text.trim()) localStorage.setItem(DRAFT_KEY, text);
+    else localStorage.removeItem(DRAFT_KEY);
+  } catch { /* التخزين غير متاح */ }
+}
+function loadDraft() {
+  try { return localStorage.getItem(DRAFT_KEY) || ''; } catch { return ''; }
+}
+
 const escapeHtml = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
 let companion = null;
@@ -322,12 +334,20 @@ export async function mount(root) {
   }
 
   // ---- كتابة الرسالة ----
+  // المسودة تُحفظ على الجهاز مع كل تغيير، فلا يضيع ما كتبته إن خرجت فجأة قبل الإرسال
   const autosize = () => {
     input.style.height = 'auto';
     input.style.height = `${Math.min(input.scrollHeight, 140)}px`;
     clearBtn.hidden = !input.value;
+    saveDraft(input.value);
   };
   input.addEventListener('input', autosize);
+  const draft = loadDraft();
+  if (draft) {
+    input.value = draft;
+    autosize();
+    say('رجعتُ لك ما كنت تكتبه ✍️ أكمله ثم اضغط ➤');
+  }
   input.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && !e.shiftKey && !matchMedia('(pointer: coarse)').matches) {
       e.preventDefault(); form.requestSubmit();

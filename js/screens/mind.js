@@ -11,6 +11,8 @@ import { getEntries } from '../storage.js';
 import { createMindGraph } from '../mind-graph.js';
 import { noteHTML, bindNoteActions, esc } from '../notes-view.js';
 import { createSummary, summaryHTML } from '../summaries.js';
+import { findOldNotesFor } from '../suggest.js';
+import { setCategory } from '../classifier.js';
 
 export const title = 'العقل';
 
@@ -77,6 +79,8 @@ export async function mount(root) {
         </div>
         <p class="muted sheet__desc" id="sheet-desc" hidden></p>
         <div class="sheet__body">
+          <button class="btn btn--ghost sheet__sum" id="find-old" hidden>🔎 ابحث في ملاحظاتي القديمة عمّا يناسبه</button>
+          <div id="find-results"></div>
           <button class="btn btn--ghost sheet__sum" id="sum-cat">✨ لخّص هذا القسم</button>
           <div id="cat-sum"></div>
           <ul class="notes" id="notes"></ul>
@@ -190,9 +194,69 @@ export async function mount(root) {
     desc.hidden = !isCustom(catId) || !c.desc;
     desc.textContent = c.desc || '';
     root.querySelector('#edit-cat').hidden = !isCustom(catId);
+    findBtn.hidden = !isCustom(catId);
+    findBox.innerHTML = '';
     renderNotes();
     show(sheet);
   }
+
+  // ---- البحث في الملاحظات القديمة (للأقسام المضافة) ----
+  const findBtn = root.querySelector('#find-old');
+  const findBox = root.querySelector('#find-results');
+  let found = [];
+
+  findBtn.addEventListener('click', async () => {
+    const cat = categoryById(openCat);
+    if (!cat) return;
+    findBtn.disabled = true;
+    findBox.innerHTML = '<p class="muted"><span class="dots"><i></i><i></i><i></i></span> أبحث في ملاحظاتك…</p>';
+    try {
+      const { entries: list, mode, reason } = await findOldNotesFor(cat);
+      found = list;
+      const how = mode === 'local'
+        ? `<p class="muted find__note">بحث محلي بكلمات القسم${reason ? ` (${esc(reason)})` : ''}، فقد تفوته ملاحظات.</p>` : '';
+      if (!list.length) {
+        findBox.innerHTML = `${how}<p class="muted">لم أجد ملاحظات قديمة تناسب هذا القسم.</p>`;
+        return;
+      }
+      findBox.innerHTML = `
+        ${how}
+        <p class="find__title">وجدت ${list.length} ${list.length === 1 ? 'ملاحظة قد تناسبه' : 'ملاحظات قد تناسبه'}. اختر ما تريد نقله:</p>
+        <ul class="find__list">${list.map((e, i) => {
+          const from = categoryById(e.category);
+          return `<li><label class="switch">
+            <input type="checkbox" data-pick="${i}" checked>
+            <span><b>${esc(e.meta?.title || e.text.slice(0, 40))}</b>
+              <span class="muted"> · من ${esc(from?.label || '')}</span><br>
+              <span class="find__text">${esc(e.text.slice(0, 120))}${e.text.length > 120 ? '…' : ''}</span></span>
+          </label></li>`;
+        }).join('')}</ul>
+        <div class="row">
+          <button class="btn" id="move-picked">انقل المحدد (${list.length})</button>
+          <button class="btn btn--ghost" id="cancel-picked">إلغاء</button>
+        </div>`;
+    } catch (err) {
+      findBox.innerHTML = `<p class="status status--err">${esc(err.message)}</p>`;
+    } finally {
+      findBtn.disabled = false;
+    }
+  });
+
+  findBox.addEventListener('change', () => {
+    const n = findBox.querySelectorAll('[data-pick]:checked').length;
+    const b = findBox.querySelector('#move-picked');
+    if (b) { b.textContent = `انقل المحدد (${n})`; b.disabled = !n; }
+  });
+
+  findBox.addEventListener('click', async (e) => {
+    if (e.target.closest('#cancel-picked')) { findBox.innerHTML = ''; return; }
+    if (!e.target.closest('#move-picked')) return;
+    const picked = [...findBox.querySelectorAll('[data-pick]:checked')].map((x) => found[Number(x.dataset.pick)]);
+    for (const entry of picked) await setCategory(entry.id, openCat);
+    findBox.innerHTML = `<p class="status status--ok">نقلتُ ${picked.length} ${picked.length === 1 ? 'ملاحظة' : 'ملاحظات'} إلى هذا القسم ✓</p>`;
+    sumBtn.hidden = false;
+    await refresh();
+  });
 
   function closeSheet() {
     sheet.hidden = true;
@@ -282,11 +346,17 @@ export async function mount(root) {
     formStatus.className = 'status';
     try {
       const data = { label: nameIn.value, desc: descIn.value, color };
+      let created = null;
       if (editingId) await updateCategory(editingId, data);
-      else await addCategory(data);
+      else created = await addCategory(data);
       form.hidden = true;
       await rebuild();
       hint.textContent = editingId ? 'عدّلتُ القسم ✓' : `أضفتُ "${data.label.trim()}" ✓ ستصنّف الرفيقة فيه ما يناسبه من كلامك القادم.`;
+      // قسم جديد: نفتح نافذته ونقترح البحث في الملاحظات القديمة
+      if (created && entries.some((e) => e.category && e.category !== 'none')) {
+        openSheet(created.id);
+        findBox.innerHTML = '<p class="muted">قسمك جاهز. هل أبحث في ملاحظاتك القديمة عمّا يناسبه؟ اضغط 🔎 بالأعلى.</p>';
+      }
     } catch (err) {
       formStatus.className = 'status status--err';
       formStatus.textContent = err.message;
