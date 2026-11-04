@@ -117,6 +117,7 @@ export async function mount(root) {
   root.innerHTML = `
     <div class="mind-bar">
       <p class="mind-hint muted" id="hint"></p>
+      <button class="tool" id="toggle-empty" hidden></button>
       <button class="tool" id="add-cat">＋ قسم جديد</button>
     </div>
     <div class="mind-stage">
@@ -124,7 +125,7 @@ export async function mount(root) {
       <div class="zoom-ctrl" role="group" aria-label="التكبير">
         <button type="button" data-zoom="in" aria-label="تكبير">＋</button>
         <button type="button" data-zoom="out" aria-label="تصغير">－</button>
-        <button type="button" data-zoom="reset" aria-label="الوضع الأصلي">⟲</button>
+        <button type="button" data-zoom="reset" aria-label="ملاءمة الشاشة">⟲</button>
       </div>
     </div>
 
@@ -183,7 +184,7 @@ export async function mount(root) {
 
   const setHint = () => {
     hint.textContent = model.total
-      ? 'المس كرة لترى ملاحظاتها، أو اسم مجموعة لتغييره · بإصبعين كبّر وصغّر'
+      ? 'المس كرة أو اسم مجموعة · بإصبعين كبّر وصغّر'
       : 'تحدّث مع الرفيقة، وستكبر الكرات مع كل ما تقوله.';
   };
   setHint();
@@ -195,9 +196,16 @@ export async function mount(root) {
   // ---- اللوحة ----
   function buildGraph() {
     graph?.destroy();
+    // الأقسام الأساسية الفارغة تُخفى (إلا إن طلب إظهارها أو لا توجد ملاحظات بعد)؛ أقسامك المضافة تظهر دائماً
+    const hideEmpty = !showEmpty && model.total > 0;
+    const visible = CATEGORIES.filter((c) => !hideEmpty || model.weights[c.id] || isCustom(c.id));
+    const hiddenCount = CATEGORIES.length - visible.length;
+    const tgl = root.querySelector('#toggle-empty');
+    tgl.hidden = model.total === 0 || (!showEmpty && !hiddenCount);
+    tgl.textContent = showEmpty ? 'إخفاء الفارغة' : `+${hiddenCount} فارغة`;
     const nodes = [
       { id: 'me', label: 'أنا', color: '#ffffff', weight: 0, fixedR: 22 },
-      ...CATEGORIES.map((c) => ({ id: c.id, label: c.label, color: c.color, weight: model.weights[c.id] || 0 })),
+      ...visible.map((c) => ({ id: c.id, label: c.label, color: c.color, weight: model.weights[c.id] || 0 })),
     ];
     graph = createMindGraph(canvas, nodes, model.links, {
       groups: model.groups,
@@ -206,6 +214,13 @@ export async function mount(root) {
       onGroupTap: renameGroup,
     });
   }
+
+  let showEmpty = await getSetting('showEmptyCats', false);
+  root.querySelector('#toggle-empty').addEventListener('click', async () => {
+    showEmpty = !showEmpty;
+    await setSetting('showEmptyCats', showEmpty);
+    buildGraph();
+  });
 
   let savedNames = await getSetting('groupNames', {});
   function labelsFor(m) {
@@ -258,7 +273,7 @@ export async function mount(root) {
     const z = e.target.closest('[data-zoom]')?.dataset.zoom;
     if (z === 'in') graph.zoomBy(1.35);
     else if (z === 'out') graph.zoomBy(1 / 1.35);
-    else if (z === 'reset') graph.resetView();
+    else if (z === 'reset') graph.resetView(); // ⟲ = ملاءمة كل الكرات للشاشة
   });
 
   async function refresh() {

@@ -7,8 +7,14 @@ export function createMindGraph(canvas, nodesIn, linksIn, { onTap, onGroupTap, g
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
   let W = 0, H = 0;
 
-  const radiusFor = (n, maxW) =>
-    n.fixedR ?? (n.weight ? 18 + 26 * Math.sqrt(n.weight / maxW) : 11);
+  // حجم الكرات يتناسب مع عرض الشاشة: على الجوال الضيق تصغر الكبيرة منها حتى لا تزدحم
+  const radiusFor = (n, maxW) => {
+    if (n.fixedR) return n.fixedR;
+    const width = W || canvas.clientWidth || 360;
+    const maxR = Math.max(24, Math.min(44, width * 0.085));
+    const minR = Math.max(12, maxR * 0.4);
+    return n.weight ? minR + (maxR - minR) * Math.sqrt(n.weight / maxW) : 9;
+  };
 
   const nodes = nodesIn.map((n, i) => {
     const a = (i / nodesIn.length) * Math.PI * 2;
@@ -80,6 +86,17 @@ export function createMindGraph(canvas, nodesIn, linksIn, { onTap, onGroupTap, g
     };
   }
 
+  // ملاءمة: أصغر تكبير يُظهر كل الكرات وأسماءها (لا نكبّر فوق 1)
+  function fitTarget() {
+    if (!nodes.length) return { s: 1, x: 0, y: 0 };
+    const minX = Math.min(...nodes.map((n) => n.x - n.r)) - 12, maxX = Math.max(...nodes.map((n) => n.x + n.r)) + 12;
+    const minY = Math.min(...nodes.map((n) => n.y - n.r)) - 30, maxY = Math.max(...nodes.map((n) => n.y + n.r)) + 26;
+    const sc = clampS(Math.min(1, W / (maxX - minX), H / (maxY - minY)));
+    return { s: sc, x: W / 2 - ((minX + maxX) / 2) * sc, y: H / 2 - ((minY + maxY) / 2) * sc };
+  }
+  let touched = false; // إن تحكّم المستخدم بالعرض لا نغيّره عليه تلقائياً
+  setTimeout(() => { if (!touched) animateTo(fitTarget()); }, 1600);
+
   // ---- اللمس: إصبع على كرة يسحبها، على الفراغ يحرّك المشهد، وإصبعان للتكبير والتصغير ----
   const pointers = new Map(); // معرّف الإصبع ← موضعه على الشاشة
   let drag = null;   // سحب كرة
@@ -103,6 +120,7 @@ export function createMindGraph(canvas, nodesIn, linksIn, { onTap, onGroupTap, g
     canvas.setPointerCapture(e.pointerId);
     e.preventDefault();
     viewAnim = null;
+    touched = true;
     // الإصبع يهتز أكثر من الفأرة، فنتسامح معه أكثر قبل اعتبار اللمسة سحباً
     const slop = e.pointerType === 'mouse' ? 6 : 16;
     if (pointers.size === 2) {
@@ -186,6 +204,7 @@ export function createMindGraph(canvas, nodesIn, linksIn, { onTap, onGroupTap, g
   function onWheel(e) {
     e.preventDefault();
     viewAnim = null;
+    touched = true;
     const p = pointerPos(e);
     zoomAt(p.x, p.y, view.s * Math.exp(-e.deltaY * 0.0015));
   }
@@ -236,7 +255,7 @@ export function createMindGraph(canvas, nodesIn, linksIn, { onTap, onGroupTap, g
       const d = Math.hypot(dx, dy) || 0.01;
       let rest, k;
       if (e.hub) { rest = base * 1.05 + (a.r + b.r) * 0.5; k = 0.0006; }
-      else { rest = base * (0.62 - 0.34 * e.w) + (a.r + b.r) * 0.6; k = 0.002 + 0.005 * e.w; }
+      else { rest = base * (0.5 - 0.25 * e.w) + (a.r + b.r) + 26; k = 0.002 + 0.004 * e.w; }
       const f = (d - rest) * k;
       a.vx += (dx / d) * f; a.vy += (dy / d) * f;
       b.vx -= (dx / d) * f; b.vy -= (dy / d) * f;
@@ -247,7 +266,7 @@ export function createMindGraph(canvas, nodesIn, linksIn, { onTap, onGroupTap, g
       for (const n of g.members) { gx += n.x; gy += n.y; }
       gx /= g.members.length; gy /= g.members.length;
       g.cx = gx; g.cy = gy;
-      for (const n of g.members) { n.vx += (gx - n.x) * 0.006; n.vy += (gy - n.y) * 0.006; }
+      for (const n of g.members) { n.vx += (gx - n.x) * 0.0025; n.vy += (gy - n.y) * 0.0025; }
     }
     for (const n of nodes) {
       n.r += (n.targetR - n.r) * 0.1;
@@ -265,11 +284,40 @@ export function createMindGraph(canvas, nodesIn, linksIn, { onTap, onGroupTap, g
       if (drag?.node === n && drag.moved) continue;
       n.vx *= 0.92; n.vy *= 0.92;
       n.x += n.vx; n.y += n.vy;
-      const pad = n.r + 2;
-      if (n.x < pad) { n.x = pad; n.vx = Math.abs(n.vx) * 0.6; }
-      if (n.x > W - pad) { n.x = W - pad; n.vx = -Math.abs(n.vx) * 0.6; }
-      if (n.y < pad) { n.y = pad; n.vy = Math.abs(n.vy) * 0.6; }
-      if (n.y > H - pad - 20) { n.y = H - pad - 20; n.vy = -Math.abs(n.vy) * 0.6; }
+      keepInside(n);
+    }
+    separate();
+  }
+
+  function keepInside(n) {
+    const pad = n.r + 4;
+    if (n.x < pad) { n.x = pad; n.vx = Math.abs(n.vx) * 0.6; }
+    if (n.x > W - pad) { n.x = W - pad; n.vx = -Math.abs(n.vx) * 0.6; }
+    if (n.y < pad) { n.y = pad; n.vy = Math.abs(n.vy) * 0.6; }
+    if (n.y > H - pad - 22) { n.y = H - pad - 22; n.vy = -Math.abs(n.vy) * 0.6; }
+  }
+
+  // منع التداخل: كرتان أقرب من مجموع نصفي قطريهما + مسافة للاسم تُدفعان بعيداً فوراً
+  function separate() {
+    for (let iter = 0; iter < 3; iter++) {
+      for (let i = 0; i < nodes.length; i++) {
+        for (let j = i + 1; j < nodes.length; j++) {
+          const a = nodes[i], b = nodes[j];
+          let dx = b.x - a.x, dy = b.y - a.y;
+          const d = Math.hypot(dx, dy) || 0.01;
+          // الاسم تحت الكرة: إن كانتا فوق بعضهما نحتاج مسافة أكبر
+          const gap = 10 + 16 * Math.abs(dy) / d;
+          const minD = a.r + b.r + gap;
+          if (d >= minD) continue;
+          const push = (minD - d) / 2;
+          dx /= d; dy /= d;
+          const aFixed = drag?.node === a && drag.moved, bFixed = drag?.node === b && drag.moved;
+          const ka = aFixed ? 0 : bFixed ? 2 : 1, kb = bFixed ? 0 : aFixed ? 2 : 1;
+          a.x -= dx * push * ka; a.y -= dy * push * ka;
+          b.x += dx * push * kb; b.y += dy * push * kb;
+        }
+      }
+      nodes.forEach(keepInside);
     }
   }
 
@@ -368,7 +416,8 @@ export function createMindGraph(canvas, nodesIn, linksIn, { onTap, onGroupTap, g
       const wx = (cx - view.x) / view.s, wy = (cy - view.y) / view.s;
       animateTo({ s: s2, x: cx - wx * s2, y: cy - wy * s2 });
     },
-    resetView() { animateTo({ s: 1, x: 0, y: 0 }); },
+    resetView() { animateTo(fitTarget()); },
+    fitView: () => animateTo(fitTarget()),
     setGroupLabels(map) { labels = { ...map }; },
     // مواضع أسماء المجموعات على الشاشة (للاختبار وإمكانية الوصول)
     groupBoxes() {
