@@ -1,7 +1,7 @@
 // عامل الخدمة: يجعل التطبيق يعمل دون اتصال.
 // ملفات التطبيق: الشبكة أولاً (لتصلك آخر نسخة فوراً)، والمخزّن عند انقطاع الاتصال.
 // الخطوط: المخزّن أولاً. طلبات Gemini لا تمر عبر المخزّن أبداً.
-const CACHE = 'second-mind-v41';
+const CACHE = 'second-mind-v42';
 const ASSETS = [
   './',
   './index.html',
@@ -66,11 +66,14 @@ async function networkFirst(req) {
   }
 }
 
+// مكتبات CDN (الخطوط، مكتبات الذكاء والصوت) في مخزن دائم لا يُحذف مع تحديثات التطبيق،
+// وإلا اختفت مكتبة تشغيل النموذج بعد كل تحديث فلا يعمل الذكاء دون إنترنت
+const CDN_CACHE = 'second-mind-cdn';
 async function cacheFirst(req) {
   const hit = await caches.match(req);
   if (hit) return hit;
   const res = await fetch(req);
-  if (res.ok || res.type === 'opaque') (await caches.open(CACHE)).put(req, res.clone());
+  if (res.ok || res.type === 'opaque') (await caches.open(CDN_CACHE)).put(req, res.clone());
   return res;
 }
 

@@ -18,15 +18,15 @@ export const LOCAL_MODELS = [
     label: 'Gemma 3 (1B)', note: 'خفيف ومتوازن، وعربيته جيدة. البداية الموصى بها.', sizeMB: 750, gpuMB: 711, recommended: true,
   },
   {
-    id: 'qwen25-05b', engine: 'webllm', modelId: 'Qwen2.5-0.5B-Instruct-q4f16_1-MLC',
+    id: 'qwen25-05b', engine: 'webllm', modelId: 'Qwen2.5-0.5B-Instruct-q4f16_1-MLC', f32Id: 'Qwen2.5-0.5B-Instruct-q4f32_1-MLC',
     label: 'Qwen 2.5 (0.5B)', note: 'الأصغر والأسرع، ردوده أبسط.', sizeMB: 400, gpuMB: 945,
   },
   {
-    id: 'qwen35-08b', engine: 'webllm', modelId: 'Qwen3.5-0.8B-q4f16_1-MLC',
+    id: 'qwen35-08b', engine: 'webllm', modelId: 'Qwen3.5-0.8B-q4f16_1-MLC', f32Id: 'Qwen3.5-0.8B-q4f32_1-MLC',
     label: 'Qwen 3.5 (0.8B)', note: 'الأحدث، يفهم العربية واللهجات أفضل.', sizeMB: 600, gpuMB: 1630, noThinking: true,
   },
   {
-    id: 'qwen25-15b', engine: 'webllm', modelId: 'Qwen2.5-1.5B-Instruct-q4f16_1-MLC',
+    id: 'qwen25-15b', engine: 'webllm', modelId: 'Qwen2.5-1.5B-Instruct-q4f16_1-MLC', f32Id: 'Qwen2.5-1.5B-Instruct-q4f32_1-MLC',
     label: 'Qwen 2.5 (1.5B)', note: 'الأذكى بينها، للجوالات القوية (ذاكرة 6 جيجا فأكثر).', sizeMB: 1000, gpuMB: 1630,
   },
   {
@@ -43,12 +43,44 @@ export class LocalAIError extends Error {
 }
 
 // ---- دعم WebGPU ----
+// نماذج q4f16 تحتاج ميزة shader-f16 في كرت الشاشة؛ كثير من كروت الجوالات لا تدعمها،
+// فنستخدم حينها نسخة q4f32 من النموذج نفسه (أكبر قليلاً في الذاكرة لكنها تعمل)
 let gpuCheck = null;
-export function webgpuSupported() {
+function gpuInfo() {
   gpuCheck ||= (async () => {
-    try { return !!(navigator.gpu && (await navigator.gpu.requestAdapter())); } catch { return false; }
+    try {
+      const adapter = navigator.gpu && (await navigator.gpu.requestAdapter());
+      return { ok: !!adapter, f16: !!adapter?.features?.has?.('shader-f16') };
+    } catch { return { ok: false, f16: false }; }
   })();
   return gpuCheck;
+}
+export const webgpuSupported = async () => (await gpuInfo()).ok;
+export const shaderF16Supported = async () => (await gpuInfo()).f16;
+
+// المعرّف الفعلي في WebLLM لهذا الجهاز (null إن لم يكن للنموذج نسخة تعمل عليه)
+export async function effectiveModelId(model) {
+  if (model.engine !== 'webllm') return null;
+  if (await shaderF16Supported()) return model.modelId;
+  return model.f32Id || null;
+}
+
+// هل يعمل النموذج على هذا الجهاز؟ يعيد سبب المنع بالعربية، أو null
+export async function blockedReason(model) {
+  if (model.engine !== 'webllm') return null;
+  if (!(await webgpuSupported())) return 'متصفحك لا يدعم WebGPU؛ استخدم نموذج "للمعالج".';
+  if (!(await effectiveModelId(model))) return 'كرت شاشة جوالك لا يدعم هذا النموذج (shader-f16)؛ اختر Qwen.';
+  return null;
+}
+
+// رسائل الأخطاء الشائعة بالعربية
+export function explainError(err) {
+  const m = String(err?.message || err || '');
+  if (/shader-f16/i.test(m)) return 'كرت شاشة جوالك لا يدعم هذه النسخة من النموذج. اختر نموذج Qwen (سيُستخدم إصدار متوافق تلقائياً).';
+  if (/out of memory|OOM|device was lost|DeviceLost|allocation/i.test(m)) return 'ذاكرة الجوال لا تكفي لهذا النموذج. جرّب نموذجاً أصغر، أو أغلق التطبيقات الأخرى.';
+  if (/Failed to fetch|NetworkError|network/i.test(m)) return 'يحتاج الاتصال بالإنترنت مرة واحدة لإكمال تجهيز الملفات.';
+  if (/WebGPU|navigator.gpu/i.test(m)) return 'متصفحك لا يدعم WebGPU؛ استخدم نموذج "للمعالج".';
+  return m || 'خطأ غير معروف';
 }
 
 // ---- حالة التنزيل ----
@@ -66,7 +98,9 @@ export async function isModelReady(model) {
   if (!model) return false;
   if (model.engine === 'wllama' && await cachedBlob(model.url).then((b) => !!b)) return true;
   if (model.engine === 'webllm') {
-    try { return await (await import(WEBLLM_URL)).hasModelInCache(model.modelId); } catch { return !!(await readyFlags())[model.id]; }
+    const id = await effectiveModelId(model);
+    if (!id) return false;
+    try { return await (await import(WEBLLM_URL)).hasModelInCache(id); } catch { return !!(await readyFlags())[`${model.id}:${id}`]; }
   }
   return !!(await readyFlags())[model.id];
 }
@@ -97,12 +131,20 @@ export async function prepareModel(model, onProgress) {
   loading = (async () => {
     await unloadActive();
     if (model.engine === 'webllm') {
-      if (!(await webgpuSupported())) throw new LocalAIError('جوالك أو متصفحك لا يدعم WebGPU. اختر نموذج "للمعالج".', 'NO_GPU');
+      const blocked = await blockedReason(model);
+      if (blocked) throw new LocalAIError(blocked, 'NO_GPU');
+      const id = await effectiveModelId(model);
       const webllm = await import(WEBLLM_URL);
-      const engine = await webllm.CreateMLCEngine(model.modelId, {
-        initProgressCallback: (r) => onProgress?.(Math.min(0.99, r.progress || 0), r.text || ''),
-      });
+      let engine;
+      try {
+        engine = await webllm.CreateMLCEngine(id, {
+          initProgressCallback: (r) => onProgress?.(Math.min(0.99, r.progress || 0), r.text || ''),
+        });
+      } catch (err) {
+        throw new LocalAIError(explainError(err), 'LOAD');
+      }
       active = { model, kind: 'webllm', engine };
+      await setSetting('localModelsReady', { ...(await readyFlags()), [`${model.id}:${id}`]: true });
     } else {
       const { Wllama } = await import(WLLAMA_URL);
       const engine = new Wllama({ default: WLLAMA_WASM });
@@ -128,7 +170,10 @@ export async function removeModel(model) {
   if (active?.model.id === model.id) await unloadActive();
   try {
     if (model.engine === 'wllama') await (await caches.open(MODELS_CACHE)).delete(model.url);
-    if (model.engine === 'webllm') await (await import(WEBLLM_URL)).deleteModelAllInfoInCache(model.modelId);
+    if (model.engine === 'webllm') {
+      const webllm = await import(WEBLLM_URL);
+      for (const id of [model.modelId, model.f32Id].filter(Boolean)) await webllm.deleteModelAllInfoInCache(id).catch(() => {});
+    }
     else {
       const mod = await import(WLLAMA_URL);
       const cm = mod.CacheManager ? new mod.CacheManager() : null;
@@ -143,11 +188,24 @@ export async function removeModel(model) {
 
 // يحمّل النموذج المختار إن لم يكن في الذاكرة (لا ينزّله أبداً من تلقاء نفسه)
 async function ensureActive() {
+  try { return await ensureActiveRaw(); } catch (err) {
+    throw err instanceof LocalAIError ? err : new LocalAIError(explainError(err), 'LOAD');
+  }
+}
+async function ensureActiveRaw() {
   const model = await selectedModel();
   if (!model) throw new LocalAIError('لم تختر نموذجاً على الجهاز بعد.', 'NOT_READY');
   if (active?.model.id === model.id) return active;
   if (!(await isModelReady(model))) throw new LocalAIError('النموذج المختار لم يُنزَّل بعد.', 'NOT_READY');
   return prepareModel(model);
+}
+
+// يحفظ مكتبة تشغيل النموذج المختار على الجهاز وأنت متصل، ليعمل دون إنترنت لاحقاً
+export async function prefetchRuntime() {
+  const model = await selectedModel();
+  if (!model || !navigator.onLine) return;
+  const urls = model.engine === 'webllm' ? [WEBLLM_URL] : [WLLAMA_URL, WLLAMA_WASM];
+  await Promise.all(urls.map((u) => fetch(u).catch(() => {})));
 }
 
 // تجهيز مسبق في الخلفية حتى لا يتأخر أول رد
@@ -207,7 +265,8 @@ const bgId = (model) => `model:${model.id}`;
 async function filesFor(model) {
   if (model.engine === 'wllama') return [{ url: model.url, cache: MODELS_CACHE, size: model.sizeMB * 1e6, exact: false }];
   const webllm = await import(WEBLLM_URL);
-  const rec = webllm.prebuiltAppConfig.model_list.find((m) => m.model_id === model.modelId);
+  const id = await effectiveModelId(model);
+  const rec = webllm.prebuiltAppConfig.model_list.find((m) => m.model_id === id);
   if (!rec) throw new LocalAIError('النموذج غير موجود في قائمة المكتبة.', 'NO_MODEL');
   let base = rec.model.endsWith('/') ? rec.model : `${rec.model}/`;
   if (!/\/resolve\/.+\//.test(base)) base += 'resolve/main/';

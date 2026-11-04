@@ -671,3 +671,6 @@ input[type="range"] { width: 100%; accent-color: var(--accent); margin: 4px 0 12
 .act { font-size: .78rem; background: rgba(95,224,176,.12); border: 1px solid rgba(95,224,176,.35); border-radius: 10px; padding: 4px 8px; }
 .act a { color: var(--ok); font-weight: 700; margin-inline-start: 4px; }
 .act--fail { background: rgba(255,107,138,.12); border-color: rgba(255,107,138,.35); }
+
+.install-help[hidden] { display: none; }
+.install-help p { margin: 6px 0; font-size: .9rem; }

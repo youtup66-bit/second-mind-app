@@ -7,7 +7,7 @@ import { loadCategories } from '../categories.js';
 import { canPip, pipAction, isFloating } from '../pip.js';
 import { canPiper, isPiperReady, downloadPiper, removePiper, piperVoice } from '../piper.js';
 import {
-  LOCAL_MODELS, webgpuSupported, isModelReady, removeModel, localChat,
+  LOCAL_MODELS, webgpuSupported, shaderF16Supported, blockedReason, isModelReady, removeModel, localChat,
   canBackgroundFetch, startBackgroundDownload, backgroundDownload, cancelBackgroundDownload, interruptedDownload,
   missingFiles, backgroundReport,
   downloadInPage, inPageDownload, downloads,
@@ -59,6 +59,17 @@ export async function mount(root) {
             <span class="skin__name">${k.label}</span>
             <span class="skin__note">${k.note}</span>
           </button>`).join('')}
+      </div>
+    </section>
+
+    <section class="card" id="install">
+      <h2>📲 تثبيت التطبيق</h2>
+      <p class="muted" id="install-state"></p>
+      <div class="row"><button class="btn" id="install-btn" hidden>📲 ثبّت التطبيق على الشاشة الرئيسية</button></div>
+      <div class="install-help" id="install-help" hidden>
+        <p><b>أندرويد (Chrome):</b> القائمة ⋮ أعلى المتصفح ← <b>"تثبيت التطبيق"</b> أو <b>"إضافة إلى الشاشة الرئيسية"</b>.</p>
+        <p><b>آيفون (Safari):</b> زر المشاركة ⬆️ أسفل الشاشة ← <b>"إضافة إلى الشاشة الرئيسية"</b>.</p>
+        <p class="muted">بعد التثبيت يفتح كتطبيق مستقل بأيقونته، دون شريط المتصفح، ويعمل دون إنترنت.</p>
       </div>
     </section>
 
@@ -298,6 +309,31 @@ export async function mount(root) {
     show(keyStatus, 'تم حفظ النموذج.');
   });
 
+  // ---- تثبيت التطبيق ----
+  const installed = matchMedia('(display-mode: standalone)').matches || navigator.standalone;
+  const installBtn = root.querySelector('#install-btn');
+  const renderInstall = () => {
+    const can = !!window.__installPrompt;
+    root.querySelector('#install-state').textContent = installed
+      ? 'التطبيق مثبّت على جوالك ✓'
+      : can ? 'ثبّته ليفتح كتطبيق مستقل بأيقونة على الشاشة الرئيسية.' : 'اتبع الخطوات لتثبيته على الشاشة الرئيسية:';
+    installBtn.hidden = installed || !can;
+    root.querySelector('#install-help').hidden = installed || can;
+  };
+  renderInstall();
+  const onInstallable = () => renderInstall();
+  window.addEventListener('sm:installable', onInstallable);
+  cleanup.push(() => window.removeEventListener('sm:installable', onInstallable));
+  installBtn.addEventListener('click', async () => {
+    const ev = window.__installPrompt;
+    if (!ev) return renderInstall();
+    ev.prompt();
+    const { outcome } = await ev.userChoice;
+    window.__installPrompt = null;
+    root.querySelector('#install-state').textContent = outcome === 'accepted' ? 'جارٍ التثبيت… ستجد أيقونته على الشاشة الرئيسية ✓' : 'لم يُثبَّت. يمكنك تثبيته لاحقاً من قائمة المتصفح.';
+    installBtn.hidden = true;
+  });
+
   // ---- الذكاء على الجهاز ----
   const modelsEl = root.querySelector('#models');
   const localStatus = root.querySelector('#local-status');
@@ -306,9 +342,12 @@ export async function mount(root) {
   root.querySelectorAll('input[name="ai-mode"]').forEach((r) => r.addEventListener('change', () => setSetting('aiMode', r.value)));
   let chosen = await getSetting('localModel', '');
   const hasGpu = await webgpuSupported();
-  root.querySelector('#gpu-state').textContent = hasGpu
-    ? 'جوالك يدعم WebGPU ✓ فتعمل النماذج بسرعة على كرت الشاشة.'
-    : 'متصفحك لا يدعم WebGPU، فتتاح نماذج "للمعالج" فقط (أبطأ). جرّب أحدث Chrome إن أمكن.';
+  const hasF16 = hasGpu && await shaderF16Supported();
+  root.querySelector('#gpu-state').textContent = !hasGpu
+    ? 'متصفحك لا يدعم WebGPU، فتتاح نماذج "للمعالج" فقط (أبطأ). جرّب أحدث Chrome إن أمكن.'
+    : hasF16
+      ? 'جوالك يدعم WebGPU ✓ فتعمل النماذج بسرعة على كرت الشاشة.'
+      : 'جوالك يدعم WebGPU ✓ لكن كرت شاشته لا يدعم ميزة shader-f16، فتُستخدم تلقائياً نسخ متوافقة من Qwen (Gemma 3 غير متاح).';
   // حالة كل تنزيل: من الخلفية (Background Fetch) أو داخل الصفحة؛ تبقى حتى لو خرجت من هذه الشاشة
   const bgWatch = new Map(); // id ← تسجيل التنزيل في الخلفية
   const pct = (f) => `${Math.round(f * 100)}%`;
@@ -346,12 +385,13 @@ export async function mount(root) {
     onProgress();
   }
 
+  const blockedFor = Object.fromEntries(await Promise.all(LOCAL_MODELS.map(async (m) => [m.id, await blockedReason(m)])));
   async function renderModels() {
     const rows = await Promise.all(LOCAL_MODELS.map(async (m) => ({
       m, ready: await isModelReady(m), bg: await backgroundDownload(m), page: inPageDownload(m.id),
     })));
     modelsEl.innerHTML = rows.map(({ m, ready, bg, page }) => {
-      const blocked = m.engine === 'webllm' && !hasGpu;
+      const blocked = blockedFor[m.id];
       const busy = !ready && (!!bg || !!page);
       return `
       <li class="model ${m.id === chosen ? 'is-chosen' : ''} ${blocked ? 'is-blocked' : ''}" data-model="${m.id}">
@@ -361,7 +401,7 @@ export async function mount(root) {
             <span class="muted">${m.note} التنزيل ~${m.sizeMB >= 1000 ? `${(m.sizeMB / 1000).toFixed(1)} جيجا` : `${m.sizeMB} ميغا`}${m.gpuMB ? ` · يحتاج نحو ${(m.gpuMB / 1000).toFixed(1)} جيجا من ذاكرة كرت الشاشة` : ' · يعمل على المعالج'}.</span></span>
         </label>
         <div class="progress" ${busy ? '' : 'hidden'}><span style="width:${page ? pct(page.f) : '0%'}"></span></div>
-        <p class="muted model__state">${blocked ? 'غير مدعوم على هذا الجهاز.' : ready ? 'مُنزَّل ✓' : busy ? 'جارٍ التنزيل…' : ''}</p>
+        <p class="muted model__state">${blocked ? blocked : ready ? 'مُنزَّل ✓' : busy ? 'جارٍ التنزيل…' : ''}</p>
         <div class="row">
           ${!ready && !blocked && !busy ? '<button class="btn btn--ghost" data-act="dl">⬇️ نزّل</button>' : ''}
           ${bg && !ready ? '<button class="btn btn--ghost" data-act="cancel">إلغاء التنزيل</button>' : ''}

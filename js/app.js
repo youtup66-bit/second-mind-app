@@ -42,6 +42,14 @@ async function navigate() {
   if (myNav !== navId && current !== screen) screen.unmount?.();
 }
 
+// ---- تثبيت التطبيق: المتصفح يعرض فرصة التثبيت مرة عند الفتح، نحتفظ بها لزر "ثبّت التطبيق" ----
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  window.__installPrompt = e;
+  window.dispatchEvent(new Event('sm:installable'));
+});
+window.addEventListener('appinstalled', () => { window.__installPrompt = null; });
+
 // ---- الرفيقة الطافية داخل التطبيق ----
 let floater = null;
 let floaterOn = true;
@@ -89,11 +97,12 @@ setTimeout(async () => {
   if (await isPiperReady()) warmUpPiper();
 }, 4000);
 
-// إن كان النموذج المحلي هو المستخدم دائماً نجهّزه في الخلفية
+// الذكاء على الجهاز: نحفظ مكتبته مسبقاً وأنت متصل (ليعمل دون إنترنت)، ونجهّزه إن كان هو المستخدم دائماً
 setTimeout(async () => {
-  if (await getSetting('aiMode', 'auto') !== 'local') return;
-  const { warmUpLocal } = await import('./local-ai.js');
-  warmUpLocal();
+  if (!(await getSetting('localModel', ''))) return;
+  const { warmUpLocal, prefetchRuntime } = await import('./local-ai.js');
+  await prefetchRuntime();
+  if (await getSetting('aiMode', 'auto') === 'local' || !navigator.onLine) warmUpLocal();
 }, 6000);
 
 // لقطة يومية على الجهاز (لا شيء يغادره)
