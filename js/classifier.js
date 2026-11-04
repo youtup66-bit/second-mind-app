@@ -1,9 +1,9 @@
 // يصنّف الملاحظات عبر Gemini ويحفظ النتيجة محلياً.
 // الملاحظات غير المصنفة (بلا مفتاح أو بلا إنترنت) تُصنّف لاحقاً تلقائياً.
-import { classify } from './gemini.js';
+import { smartClassify as classify } from './ai.js';
 import { getEntries, getEntry, getMessages, updateEntry } from './storage.js';
 
-const STOP_CODES = new Set(['NO_KEY', 'BAD_KEY', 'RATE', 'NETWORK', 'TIMEOUT']);
+const STOP_CODES = new Set(['NO_KEY', 'BAD_KEY', 'RATE', 'NETWORK', 'TIMEOUT', 'NOT_READY', 'NO_GPU']);
 const inFlight = new Map();
 
 // يعيد آخر رسالتين قبل الملاحظة كسياق

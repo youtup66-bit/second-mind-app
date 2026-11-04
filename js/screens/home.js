@@ -4,7 +4,8 @@ import {
   addEntry, addMessage, getEntries, getEntry, getMessage, getMessages, getSetting, getSummaries,
   setSetting, updateEntry, updateMessage, deleteMessage, deleteEntry,
 } from '../storage.js';
-import { chat, transcribe } from '../gemini.js';
+import { transcribe } from '../gemini.js';
+import { smartChat } from '../ai.js';
 import { CATEGORIES, NONE, categoryById } from '../categories.js';
 import { classifyEntry, classifyPending, setCategory } from '../classifier.js';
 import { recall } from '../recall.js';
@@ -211,10 +212,13 @@ export async function mount(root) {
   }
 
   const entriesById = Object.fromEntries((await getEntries()).map((e) => [e.id, e]));
-  (await getMessages(50)).forEach((m) => append(m, {
-    entry: m.role === 'user' && m.entryId ? entriesById[m.entryId] || null : null,
-    used: (m.used || []).map((id) => entriesById[id]).filter(Boolean),
-  }));
+  (await getMessages(50)).forEach((m) => {
+    const li = append(m, {
+      entry: m.role === 'user' && m.entryId ? entriesById[m.entryId] || null : null,
+      used: (m.used || []).map((id) => entriesById[id]).filter(Boolean),
+    });
+    markEngine(li, m.engine);
+  });
 
   // ما فات تصنيفه سابقاً (بلا مفتاح أو اتصال) نصنّفه الآن بهدوء
   classifyPending(refreshChip);
@@ -377,8 +381,10 @@ export async function mount(root) {
   }
 
   function showError(err) {
-    if (err.code === 'NO_KEY' || err.code === 'BAD_KEY') {
-      say(`${err.message} <a href="#/settings">افتح الإعدادات</a> لإضافته. كلامك محفوظ على أي حال 💜`);
+    if (err.code === 'NO_LOCAL') {
+      say(`${escapeHtml(err.message)} <a href="#/settings?local">افتح الإعدادات</a>. كلامك محفوظ 💜`);
+    } else if (err.code === 'NO_KEY' || err.code === 'BAD_KEY') {
+      say(`${err.message} <a href="#/settings">افتح الإعدادات</a> لإضافته، أو نزّل <a href="#/settings?local">ذكاءً على الجهاز</a>. كلامك محفوظ على أي حال 💜`);
     } else {
       say(`${escapeHtml(err.message)} كلامك محفوظ.`);
     }
@@ -410,11 +416,15 @@ export async function mount(root) {
     try {
       const recent = await getMessages(HISTORY_LIMIT);
       const { used, memories } = await memoriesFor(text, recent);
-      // طلب واحد يعيد الرد وتصنيف رسالتك معاً (توفيراً للحصة)
-      const result = await chat(recent.map(({ role, text: t }) => ({ role, text: t })), { memories });
+      // طلب واحد يعيد الرد وتصنيف رسالتك معاً (توفيراً للحصة)، من Gemini أو من النموذج على الجهاز
+      const result = await smartChat(recent.map(({ role, text: t }) => ({ role, text: t })), {
+        memories,
+        onToken: (t) => streamInto(pending, t),
+      });
       const reply = result.reply;
       applyClassification(entry.id, result);
-      const modelMsg = await addMessage({ role: 'model', text: reply, used: used.map((e) => e.id) });
+      const modelMsg = await addMessage({ role: 'model', text: reply, used: used.map((e) => e.id), engine: result.engine === 'local' ? 'local' : undefined });
+      markEngine(pending, result.engine);
       pending.dataset.id = modelMsg.id;
       pending.querySelector('.msg__text').textContent = reply;
       pending.classList.remove('msg--pending');
@@ -430,6 +440,23 @@ export async function mount(root) {
       busy = false;
       if (companion?.state === 'thinking') companion.setState('idle');
     }
+  }
+
+  // يعرض رد النموذج المحلي وهو يُكتب
+  function streamInto(li, text) {
+    li.classList.remove('msg--pending');
+    li.querySelector('.msg__text').textContent = text;
+    log.scrollTop = log.scrollHeight;
+  }
+
+  // شارة صغيرة على الردود التي جاءت من النموذج على الجهاز
+  function markEngine(li, engine) {
+    li.querySelector('.msg__engine')?.remove();
+    if (engine !== 'local') return;
+    const tag = document.createElement('span');
+    tag.className = 'msg__engine';
+    tag.textContent = '📱 من الجهاز';
+    li.querySelector('.msg__text').after(tag);
   }
 
   // يحفظ التصنيف الذي جاء مع الرد، أو يطلب تصنيفاً منفصلاً إن لم يصل
@@ -462,8 +489,12 @@ export async function mount(root) {
     say('<span class="dots"><i></i><i></i><i></i></span>');
     try {
       const { used, memories } = await memoriesFor(lastUser.text, before);
-      const { reply } = await chat(before.map(({ role, text }) => ({ role, text })), { memories, classify: false });
+      const { reply, engine } = await smartChat(before.map(({ role, text }) => ({ role, text })), {
+        memories, classify: false, onToken: (t) => streamInto(li, t),
+      });
       msg.text = reply;
+      msg.engine = engine === 'local' ? 'local' : undefined;
+      markEngine(li, engine);
       msg.used = used.map((e) => e.id);
       await updateMessage(msg);
       li.querySelector('.msg__text').textContent = reply;

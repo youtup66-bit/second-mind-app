@@ -37,7 +37,7 @@ const PERSONA = `أنتِ "رفيقة"، رفيقة ذكية لطيفة بأسل
 
 const fmtMemDate = new Intl.DateTimeFormat('ar', { day: 'numeric', month: 'long' });
 
-function memoriesBlock(memories) {
+export function memoriesBlock(memories) {
   if (!memories?.length) return '';
   const lines = memories.map((m) =>
     `- [${fmtMemDate.format(m.createdAt)}] (${m.categoryLabel}${m.done ? '، أُنجزت' : ''}) ${m.text.slice(0, 400).replace(/\s+/g, ' ')}`);

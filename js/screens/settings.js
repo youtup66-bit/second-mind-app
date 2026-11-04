@@ -6,6 +6,8 @@ import { SKINS, DEFAULT_SKIN, skinSVG } from '../skins.js';
 import { loadCategories } from '../categories.js';
 import { canPip, pipAction, isFloating } from '../pip.js';
 import { canPiper, isPiperReady, downloadPiper, removePiper, piperVoice } from '../piper.js';
+import { LOCAL_MODELS, webgpuSupported, isModelReady, prepareModel, removeModel, localChat } from '../local-ai.js';
+import { aiMode } from '../ai.js';
 
 // يحفظ إعداداً ويُعلم بقية التطبيق (مثل الرفيقة الطافية)
 async function saveAndAnnounce(key, value) {
@@ -113,6 +115,25 @@ export async function mount(root) {
       <div id="usage-table"></div>
       <p class="muted">الحدود المجانية تختلف لكل نوع وتتغير من Google. نماذج الصوت حصتها أصغر بكثير.
       للتوفير: صوت الجهاز بدل صوت Gemini، ومايك لوحة المفاتيح 🎤 بدل 🎙.</p>
+    </section>
+
+    <section class="card" id="local">
+      <h2>الذكاء على الجهاز 📱</h2>
+      <p class="muted">نماذج ذكاء صغيرة تُنزَّل مرة واحدة ثم تحاورك دون إنترنت ودون أي حصة، ولا يغادر كلامك جوالك إطلاقاً. أبسط من Gemini، لكنها معك دائماً.</p>
+      <h3 class="subhead">من يرد عليك؟</h3>
+      <div class="radio-col" role="radiogroup" aria-label="محرك الذكاء">
+        <label class="switch"><input type="radio" name="ai-mode" value="auto"><span>تلقائي: Gemini، وعند انقطاع الإنترنت أو نفاد الحصة النموذج على الجهاز</span></label>
+        <label class="switch"><input type="radio" name="ai-mode" value="local"><span>على الجهاز دائماً (أقصى خصوصية، دون إنترنت)</span></label>
+        <label class="switch"><input type="radio" name="ai-mode" value="gemini"><span>Gemini فقط</span></label>
+      </div>
+      <p class="muted" id="gpu-state">أفحص دعم جوالك…</p>
+      <h3 class="subhead">النماذج</h3>
+      <ul class="models" id="models"></ul>
+      <div class="row">
+        <button class="btn btn--ghost" id="local-test">💬 جرّب النموذج المختار</button>
+      </div>
+      <p class="status" id="local-status" role="status"></p>
+      <p class="muted">على الجهاز يعمل: المحادثة والتصنيف. وتبقى من Gemini: الملخصات، وأسماء المجموعات، وتحويل 🎙 إلى نص (استخدم مايك لوحة المفاتيح دون إنترنت)، وصوت Gemini (صوت Piper يعمل دون إنترنت).</p>
     </section>
 
     <section class="card">
@@ -268,6 +289,104 @@ export async function mount(root) {
     const v = e.target.value.trim();
     if (v) await setSetting('geminiModel', v); else { await deleteSetting('geminiModel'); e.target.value = DEFAULT_MODEL; }
     show(keyStatus, 'تم حفظ النموذج.');
+  });
+
+  // ---- الذكاء على الجهاز ----
+  const modelsEl = root.querySelector('#models');
+  const localStatus = root.querySelector('#local-status');
+  const curMode = await aiMode();
+  root.querySelector(`input[name="ai-mode"][value="${curMode}"]`).checked = true;
+  root.querySelectorAll('input[name="ai-mode"]').forEach((r) => r.addEventListener('change', () => setSetting('aiMode', r.value)));
+  let chosen = await getSetting('localModel', '');
+  const hasGpu = await webgpuSupported();
+  root.querySelector('#gpu-state').textContent = hasGpu
+    ? 'جوالك يدعم WebGPU ✓ فتعمل النماذج بسرعة على كرت الشاشة.'
+    : 'متصفحك لا يدعم WebGPU، فتتاح نماذج "للمعالج" فقط (أبطأ). جرّب أحدث Chrome إن أمكن.';
+  const busyModels = new Set();
+
+  async function renderModels() {
+    const rows = await Promise.all(LOCAL_MODELS.map(async (m) => ({ m, ready: await isModelReady(m) })));
+    modelsEl.innerHTML = rows.map(({ m, ready }) => {
+      const blocked = m.engine === 'webllm' && !hasGpu;
+      const busy = busyModels.has(m.id);
+      return `
+      <li class="model ${m.id === chosen ? 'is-chosen' : ''} ${blocked ? 'is-blocked' : ''}" data-model="${m.id}">
+        <label class="switch">
+          <input type="radio" name="local-model" value="${m.id}" ${m.id === chosen ? 'checked' : ''} ${blocked ? 'disabled' : ''}>
+          <span><b>${m.label}</b>${m.recommended ? ' <span class="tag">موصى به</span>' : ''}<br>
+            <span class="muted">${m.note} التنزيل ~${m.sizeMB >= 1000 ? `${(m.sizeMB / 1000).toFixed(1)} جيجا` : `${m.sizeMB} ميغا`}${m.gpuMB ? ` · يحتاج نحو ${(m.gpuMB / 1000).toFixed(1)} جيجا من ذاكرة كرت الشاشة` : ' · يعمل على المعالج'}.</span></span>
+        </label>
+        <div class="progress" ${busy ? '' : 'hidden'}><span></span></div>
+        <p class="muted model__state">${blocked ? 'غير مدعوم على هذا الجهاز.' : ready ? 'مُنزَّل ✓' : busy ? 'جارٍ التنزيل…' : ''}</p>
+        <div class="row">
+          ${!ready && !blocked ? `<button class="btn btn--ghost" data-act="dl" ${busy ? 'disabled' : ''}>⬇️ نزّل</button>` : ''}
+          ${ready ? '<button class="btn btn--ghost" data-act="rm">حذف</button>' : ''}
+        </div>
+      </li>`;
+    }).join('');
+  }
+  await renderModels();
+
+  modelsEl.addEventListener('change', async (e) => {
+    if (e.target.name !== 'local-model') return;
+    chosen = e.target.value;
+    await setSetting('localModel', chosen);
+    renderModels();
+  });
+  modelsEl.addEventListener('click', async (e) => {
+    const act = e.target.closest('[data-act]')?.dataset.act;
+    if (!act) return;
+    const li = e.target.closest('[data-model]');
+    const m = LOCAL_MODELS.find((x) => x.id === li.dataset.model);
+    if (act === 'rm') {
+      if (!confirm(`حذف ${m.label} من الجهاز؟`)) return;
+      await removeModel(m);
+      renderModels();
+      return;
+    }
+    // تنزيل: نختاره تلقائياً إن لم يكن هناك اختيار
+    if (!confirm(`سيُنزَّل ${m.label} (~${m.sizeMB} ميغا). يُفضَّل Wi-Fi. متابعة؟`)) return;
+    busyModels.add(m.id);
+    await renderModels();
+    const row = () => modelsEl.querySelector(`[data-model="${m.id}"]`);
+    try {
+      await prepareModel(m, (f, text) => {
+        const r = row(); if (!r) return;
+        r.querySelector('.progress').hidden = false;
+        r.querySelector('.progress span').style.width = `${Math.round(f * 100)}%`;
+        r.querySelector('.model__state').textContent = `جارٍ التنزيل والتجهيز… ${Math.round(f * 100)}%`;
+      });
+      if (!chosen) { chosen = m.id; await setSetting('localModel', chosen); }
+      localStatus.className = 'status status--ok';
+      localStatus.textContent = `${m.label} جاهز على جهازك ✓`;
+    } catch (err) {
+      localStatus.className = 'status status--err';
+      localStatus.textContent = `تعذّر تجهيز ${m.label}: ${err.message || err}`;
+    } finally {
+      busyModels.delete(m.id);
+      renderModels();
+    }
+  });
+
+  root.querySelector('#local-test').addEventListener('click', async (e) => {
+    const btn = e.currentTarget;
+    btn.disabled = true;
+    localStatus.className = 'status';
+    localStatus.textContent = 'أحمّل النموذج وأسأله…';
+    const t0 = performance.now();
+    try {
+      const reply = await localChat([
+        { role: 'system', content: 'أنتِ رفيقة لطيفة. أجيبي بالعربية بجملة واحدة.' },
+        { role: 'user', content: 'عرّفي نفسك باختصار.' },
+      ], { maxTokens: 80, onToken: (t) => { localStatus.textContent = t; } });
+      localStatus.className = 'status status--ok';
+      localStatus.textContent = `${reply} (${((performance.now() - t0) / 1000).toFixed(1)} ث)`;
+    } catch (err) {
+      localStatus.className = 'status status--err';
+      localStatus.textContent = err.message;
+    } finally {
+      btn.disabled = false;
+    }
   });
 
   // ---- الاستهلاك ----
@@ -540,6 +659,7 @@ export async function mount(root) {
   if (location.hash.includes('backup')) root.querySelector('#backup').scrollIntoView({ block: 'start' });
   if (location.hash.includes('talk')) root.querySelector('#talk').scrollIntoView({ block: 'start' });
   if (location.hash.includes('floating')) root.querySelector('#floating').scrollIntoView({ block: 'start' });
+  if (location.hash.includes('local')) root.querySelector('#local').scrollIntoView({ block: 'start' });
 
   root.querySelector('#remove-key').addEventListener('click', async () => {
     await deleteSetting('geminiApiKey');

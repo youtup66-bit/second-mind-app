@@ -94,8 +94,9 @@ export const deleteEntry = (id) =>
 // ---- سجل المحادثة ----
 // role: 'user' | 'model'
 // used: معرّفات الملاحظات التي استعانت بها الرفيقة في ردها
-export async function addMessage({ role, text, entryId = null, used = [] }) {
-  const msg = { id: crypto.randomUUID(), role, text, entryId, used, createdAt: Date.now() };
+// engine: 'local' إن جاء الرد من النموذج على الجهاز
+export async function addMessage({ role, text, entryId = null, used = [], engine }) {
+  const msg = { id: crypto.randomUUID(), role, text, entryId, used, createdAt: Date.now(), ...(engine && { engine }) };
   await run('messages', 'readwrite', (s) => s.add(msg));
   return msg;
 }

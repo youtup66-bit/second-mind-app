@@ -542,3 +542,18 @@ input[type="range"] { width: 100%; accent-color: var(--accent); margin: 4px 0 12
   color: var(--text); background: color-mix(in srgb, var(--surface) 85%, transparent); border: 1px solid var(--border);
   backdrop-filter: blur(6px);
 }
+
+.msg__engine { display: block; font-size: .7rem; color: var(--muted); margin-top: 4px; }
+
+/* ---- الذكاء على الجهاز ---- */
+.models { list-style: none; padding: 0; margin: 0 0 8px; display: grid; gap: 8px; }
+.model { background: var(--bg-2); border: 1px solid var(--border); border-radius: 14px; padding: 10px 12px; }
+.model.is-chosen { border-color: var(--accent); }
+.model.is-blocked { opacity: .55; }
+.model .switch { align-items: flex-start; margin: 0; }
+.model .switch input { margin-top: 4px; flex: none; }
+.model .row { margin-top: 6px; }
+.model .btn { min-height: 36px; padding: 6px 14px; }
+.model__state { margin: 4px 0 0; font-size: .8rem; }
+.model__state:empty { display: none; }
+#local { scroll-margin-top: 80px; }

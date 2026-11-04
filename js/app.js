@@ -89,6 +89,13 @@ setTimeout(async () => {
   if (await isPiperReady()) warmUpPiper();
 }, 4000);
 
+// إن كان النموذج المحلي هو المستخدم دائماً نجهّزه في الخلفية
+setTimeout(async () => {
+  if (await getSetting('aiMode', 'auto') !== 'local') return;
+  const { warmUpLocal } = await import('./local-ai.js');
+  warmUpLocal();
+}, 6000);
+
 // لقطة يومية على الجهاز (لا شيء يغادره)
 autoSnapshot().catch((err) => console.warn('snapshot:', err));
 
