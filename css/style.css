@@ -578,3 +578,77 @@ input[type="range"] { width: 100%; accent-color: var(--accent); margin: 4px 0 12
 .space-ctrl label { margin: 0; white-space: nowrap; }
 .space-ctrl input { flex: 1; margin: 0; }
 .space-ctrl span { min-width: 34px; text-align: center; color: var(--muted); }
+
+/* ================= واجهة المحادثة الشبيهة بواتساب ================= */
+.wa-head[hidden], .wa-note[hidden] { display: none; }
+.msg__time, .wa-day { display: none; }
+
+.chat--wa {
+  --wa-bg: #0b141a; --wa-head: #202c33; --wa-out: #005c4b; --wa-in: #202c33; --wa-green: #00a884;
+  --wa-text: #e9edef; --wa-meta: #8696a0;
+  margin: -16px -16px 0; padding: 0; gap: 0;
+  height: calc(100dvh - var(--tabbar-h) - env(safe-area-inset-bottom) - 58px);
+  background-color: var(--wa-bg);
+  background-image:
+    radial-gradient(rgba(255,255,255,.035) 1.2px, transparent 1.4px),
+    radial-gradient(rgba(255,255,255,.025) 1px, transparent 1.2px);
+  background-size: 22px 22px, 34px 34px;
+  background-position: 0 0, 11px 17px;
+}
+/* الرفيقة تنسدل إلى الأعلى وتختفي */
+.chat__hero { transition: max-height .3s ease, opacity .25s ease; max-height: 60vh; }
+.chat--wa .chat__hero { max-height: 0; opacity: 0; overflow: hidden; pointer-events: none; }
+
+.wa-head {
+  display: flex; align-items: center; gap: 8px; flex: none;
+  background: var(--wa-head); padding: 8px 12px; border-bottom: 1px solid rgba(255,255,255,.06);
+}
+.wa-head__who { flex: 1; display: flex; align-items: center; gap: 10px; background: none; border: 0; color: var(--wa-text); font: inherit; cursor: pointer; text-align: start; padding: 0; }
+.wa-avatar { width: 40px; height: 40px; border-radius: 50%; overflow: hidden; flex: none; background: radial-gradient(circle at 50% 40%, #2c3a7a, #141a3a); }
+.wa-avatar svg { width: 100%; height: 100%; display: block; }
+.wa-avatar * { animation: none !important; }
+.wa-avatar .cmp-shadow, .wa-avatar .cmp-aura, .wa-avatar .cmp-think { display: none; }
+.wa-head__text { display: flex; flex-direction: column; line-height: 1.25; }
+.wa-head__text b { font-size: 1rem; }
+.wa-head__text small { font-size: .78rem; color: var(--wa-meta); }
+.wa-head__text small.is-active { color: var(--wa-green); }
+.wa-head__btn { background: none; border: 0; color: var(--wa-meta); font-size: 1.4rem; width: 40px; height: 40px; cursor: pointer; border-radius: 50%; }
+.wa-note {
+  flex: none; margin: 8px 12px 0; padding: 8px 12px; border-radius: 10px; font-size: .85rem;
+  background: #182229; color: var(--wa-text); border: 1px solid rgba(255,255,255,.08);
+}
+.wa-note a { color: var(--wa-green); font-weight: 700; }
+
+.chat--wa .chat__log { padding: 10px 12px; gap: 4px; }
+.chat--wa .wa-day {
+  display: block; align-self: center; margin: 8px 0; padding: 4px 12px; border-radius: 8px;
+  background: #182229; color: var(--wa-meta); font-size: .78rem; box-shadow: 0 1px 1px rgba(0,0,0,.2);
+}
+.chat--wa .msg {
+  max-width: 80%; padding: 6px 10px 4px; border-radius: 8px; color: var(--wa-text); border: 0;
+  box-shadow: 0 1px 1px rgba(0,0,0,.25); position: relative; line-height: 1.5;
+}
+/* في واتساب العربي: رسائلك على اليسار باللون الأخضر، وردودها على اليمين */
+.chat--wa .msg--user { align-self: flex-end; background: var(--wa-out); border-end-end-radius: 2px; border-end-start-radius: 8px; }
+.chat--wa .msg--model { align-self: flex-start; background: var(--wa-in); border-end-start-radius: 2px; border-end-end-radius: 8px; }
+.chat--wa .msg__time { display: block; font-size: .68rem; color: rgba(233,237,239,.6); text-align: end; margin-top: 2px; direction: ltr; }
+.chat--wa .msg--user .msg__time { color: rgba(233,237,239,.65); }
+.chat--wa .msg__engine { color: var(--wa-meta); }
+.chat--wa .chip--small { background: rgba(0,0,0,.22); }
+.chat--wa .msg--pending .msg__text { color: var(--wa-meta); }
+.chat--wa .used { color: var(--wa-meta); }
+
+/* خانة الكتابة: حبة رمادية وزر أخضر دائري؛ الميكروفون يتحول إلى إرسال حين تكتب */
+.chat--wa .composer {
+  margin: 6px 8px 8px; background: transparent; border: 0; padding: 0; gap: 6px; align-items: flex-end;
+}
+.chat--wa .composer textarea {
+  background: #2a3942; color: var(--wa-text); border-radius: 22px; padding: 11px 16px; min-height: 44px;
+}
+.chat--wa .composer__clear { position: absolute; opacity: 0; pointer-events: none; }
+.chat--wa .composer__send, .chat--wa .composer__mic { background: var(--wa-green); width: 46px; height: 46px; order: 3; }
+.chat--wa .composer:not(.has-text) .composer__send { display: none; }
+.chat--wa .composer.has-text .composer__mic { display: none; }
+.chat--wa .composer__mic[hidden] { display: none; }
+.chat--wa .composer:not(.has-text):has(.composer__mic[hidden]) .composer__send { display: inline-block; }
+.chat--wa .composer__mic.is-on { background: var(--danger); }

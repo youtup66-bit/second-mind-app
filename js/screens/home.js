@@ -11,6 +11,7 @@ import { classifyEntry, classifyPending, setCategory } from '../classifier.js';
 import { recall } from '../recall.js';
 import { canListen, canRecord, canBrowserListen, listen, record, speak, stopSpeaking, unlockAudio } from '../voice.js';
 import { canPip, pipAction, isFloating } from '../pip.js';
+import { SKINS, skinSVG } from '../skins.js';
 
 export const title = 'الرفيقة';
 
@@ -57,8 +58,17 @@ export async function mount(root) {
 
   root.innerHTML = `
     <section class="chat">
+      <header class="wa-head" id="wa-head" hidden>
+        <button type="button" class="wa-head__who" id="wa-who" aria-label="أظهر الرفيقة">
+          <span class="wa-avatar" id="wa-avatar" aria-hidden="true"></span>
+          <span class="wa-head__text"><b id="wa-name"></b><small id="wa-status">متصلة</small></span>
+        </button>
+        <button type="button" class="wa-head__btn" id="wa-expand" aria-label="أظهر الرفيقة" title="أظهر الرفيقة">⌄</button>
+      </header>
+      <p class="wa-note" id="wa-note" hidden role="status"></p>
       <div class="chat__hero">
         <div class="chat__tools">
+          <button type="button" class="tool" id="wa-on" title="واجهة محادثة بلا رفيقة">💬 واجهة المحادثة</button>
           <button type="button" class="tool" id="voice-toggle" ${textOnly ? 'hidden' : ''}></button>
           <button type="button" class="tool tool--stop" id="stop-voice" hidden aria-label="أوقف الصوت">⏹ أوقف الصوت</button>
           ${canPip ? '<button type="button" class="tool" id="pip">🪟 فوق التطبيقات</button>' : ''}
@@ -118,12 +128,51 @@ export async function mount(root) {
     },
   });
 
+  let noteTimer = 0;
   function say(text) {
     bubble.classList.remove('is-shown');
     void bubble.offsetWidth;
     bubble.innerHTML = text;
     bubble.classList.add('is-shown');
+    // في واجهة المحادثة الفقاعة مخفية؛ نعرض التنبيهات (لا الردود) كشريط صغير تحت الرأس
+    if (waMode && !/class="dots"/.test(text) && text !== lastReplyBubble) {
+      waNote.innerHTML = text;
+      waNote.hidden = false;
+      clearTimeout(noteTimer);
+      noteTimer = setTimeout(() => { waNote.hidden = true; }, 7000);
+    }
   }
+
+  // ---- واجهة المحادثة (شبيهة بواتساب): الرفيقة تنسدل وتختفي، وتبقى المحادثة ----
+  const chatEl = root.querySelector('.chat');
+  const waNote = root.querySelector('#wa-note');
+  let waMode = (await getSetting('chatStyle', 'companion')) === 'whatsapp';
+  let lastReplyBubble = '';
+  root.querySelector('#wa-name').textContent = SKINS[skin]?.label || 'رفيقتي';
+  root.querySelector('#wa-avatar').innerHTML = skinSVG(skin).replace('viewBox="0 0 200 250"', 'viewBox="38 18 124 124"');
+  function setWaMode(on) {
+    waMode = on;
+    chatEl.classList.toggle('chat--wa', on);
+    root.querySelector('#wa-head').hidden = !on;
+    if (!on) waNote.hidden = true;
+    setSetting('chatStyle', on ? 'whatsapp' : 'companion');
+    log.scrollTop = log.scrollHeight;
+  }
+  if (waMode) setWaMode(true);
+  root.querySelector('#wa-on').addEventListener('click', () => setWaMode(true));
+  root.querySelector('#wa-who').addEventListener('click', () => setWaMode(false));
+  root.querySelector('#wa-expand').addEventListener('click', () => setWaMode(false));
+  // الحالة في الرأس تتبع حالة الرفيقة
+  const STATUS = { thinking: 'تكتب…', listening: 'تستمع…', talking: 'تتكلم…' };
+  const waStatus = root.querySelector('#wa-status');
+  const origSetState = companion.setState;
+  companion.setState = (st) => {
+    origSetState(st);
+    // "تتكلم…" فقط حين يُسمع صوت فعلاً (زر الإيقاف ظاهر)، لا في حركة الفم الصامتة
+    const label = st === 'talking' && stopVoiceBtn.hidden ? null : STATUS[st];
+    waStatus.textContent = label || 'متصلة';
+    waStatus.classList.toggle('is-active', !!label);
+  };
 
   // ---- التحكم في الصوت ----
   const renderVoiceToggle = () => {
@@ -159,7 +208,25 @@ export async function mount(root) {
   });
 
   // ---- عرض الرسائل ----
+  const fmtTime = new Intl.DateTimeFormat('ar', { hour: 'numeric', minute: '2-digit' });
+  const fmtDay = new Intl.DateTimeFormat('ar', { weekday: 'long', day: 'numeric', month: 'long' });
+  let lastDay = '';
+  function dayLabel(t) {
+    const d = new Date(t); d.setHours(0, 0, 0, 0);
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const diff = Math.round((today - d) / 86_400_000);
+    return diff === 0 ? 'اليوم' : diff === 1 ? 'أمس' : fmtDay.format(t);
+  }
   function append(msg, { entry = null, used = [], pending = false } = {}) {
+    const t = msg.createdAt || Date.now();
+    const dk = new Date(t).toDateString();
+    if (dk !== lastDay) {
+      lastDay = dk;
+      const sep = document.createElement('li');
+      sep.className = 'wa-day';
+      sep.textContent = dayLabel(t);
+      log.append(sep);
+    }
     const li = document.createElement('li');
     li.className = `msg msg--${msg.role}${pending ? ' msg--pending' : ''}`;
     if (msg.id) li.dataset.id = msg.id;
@@ -177,6 +244,10 @@ export async function mount(root) {
       li.append(chip);
       renderChip(chip, entry);
     }
+    const time = document.createElement('span');
+    time.className = 'msg__time';
+    time.textContent = fmtTime.format(t) + (msg.role === 'user' ? ' ✓✓' : '');
+    li.append(time);
     log.append(li);
     log.closest('.chat').classList.add('chat--active');
     log.scrollTop = log.scrollHeight;
@@ -343,6 +414,7 @@ export async function mount(root) {
     input.style.height = 'auto';
     input.style.height = `${Math.min(input.scrollHeight, 140)}px`;
     clearBtn.hidden = !input.value;
+    form.classList.toggle('has-text', !!input.value.trim());
     saveDraft(input.value);
   };
   input.addEventListener('input', autosize);
@@ -429,7 +501,8 @@ export async function mount(root) {
       pending.querySelector('.msg__text').textContent = reply;
       pending.classList.remove('msg--pending');
       renderUsed(pending, used);
-      say(escapeHtml(bubbleText(reply)));
+      lastReplyBubble = escapeHtml(bubbleText(reply));
+      say(lastReplyBubble);
       log.scrollTop = log.scrollHeight;
       talk(reply);
     } catch (err) {
@@ -499,7 +572,8 @@ export async function mount(root) {
       await updateMessage(msg);
       li.querySelector('.msg__text').textContent = reply;
       renderUsed(li, used);
-      say(escapeHtml(bubbleText(reply)));
+      lastReplyBubble = escapeHtml(bubbleText(reply));
+      say(lastReplyBubble);
       talk(reply);
     } catch (err) {
       showError(err);
