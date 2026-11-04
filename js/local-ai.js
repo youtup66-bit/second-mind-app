@@ -205,7 +205,7 @@ const bgId = (model) => `model:${model.id}`;
 
 // كل ملفات النموذج ومخزن كل منها (بنفس أسماء مخازن WebLLM ومفاتيحها)
 async function filesFor(model) {
-  if (model.engine === 'wllama') return [{ url: model.url, cache: MODELS_CACHE, size: model.sizeMB * 1e6 }];
+  if (model.engine === 'wllama') return [{ url: model.url, cache: MODELS_CACHE, size: model.sizeMB * 1e6, exact: false }];
   const webllm = await import(WEBLLM_URL);
   const rec = webllm.prebuiltAppConfig.model_list.find((m) => m.model_id === model.modelId);
   if (!rec) throw new LocalAIError('النموذج غير موجود في قائمة المكتبة.', 'NO_MODEL');
@@ -222,10 +222,24 @@ async function filesFor(model) {
     { url: tensorUrl, cache: 'webllm/model', size: 6e4 },
     ...(rec.model_manifest ? [{ url: new URL(rec.model_manifest, base).href, cache: 'webllm/config', size: 4e3 }] : []),
     ...(config.tokenizer_files || []).map((f) => ({ url: new URL(f, base).href, cache: 'webllm/model', size: 4e6 })),
-    ...tensors.records.map((r) => ({ url: new URL(r.dataPath, base).href, cache: 'webllm/model', size: r.nbytes || 3e7 })),
+    ...tensors.records.map((r) => ({ url: new URL(r.dataPath, base).href, cache: 'webllm/model', size: r.nbytes || 3e7, exact: !!r.nbytes })),
     { url: rec.model_lib, cache: 'webllm/wasm', size: 6e6 },
   ];
   return files;
+}
+
+// الحجم الحقيقي لملف (طلب HEAD)؛ null إن تعذّر
+async function exactSize(url) {
+  try {
+    const r = await fetch(url, { method: 'HEAD' });
+    const n = Number(r.headers.get('content-length'));
+    return r.ok && n > 0 ? n : null;
+  } catch { return null; }
+}
+
+// هل الملف محفوظ أصلاً (من تنزيل سابق انقطع)؟ نتخطاه فيكمل التنزيل بدل أن يبدأ من الصفر
+async function alreadyCached(f) {
+  try { return !!(await (await caches.open(f.cache)).match(f.url)); } catch { return false; }
 }
 
 // يبدأ التنزيل في الخلفية. يعيد كائن التسجيل (له أحداث progress)
@@ -233,15 +247,34 @@ export async function startBackgroundDownload(model) {
   const reg = await navigator.serviceWorker.ready;
   const existing = await reg.backgroundFetch.get(bgId(model));
   if (existing) return existing;
-  const files = await filesFor(model);
-  // خريطة "رابط ← مخزن" يقرؤها عامل الخدمة عند الاكتمال
+  const all = await filesFor(model);
+  const missing = [];
+  for (const f of all) if (!(await alreadyCached(f))) missing.push(f);
+  if (!missing.length) throw Object.assign(new LocalAIError('الملفات كلها محفوظة؛ سيُجهَّز النموذج عند أول استخدام.', 'ALREADY'), {});
+  // Chrome يلغي التنزيل إن تجاوز الحجمَ المعلن، فنعلن الحجم الحقيقي مع هامش، أو لا نعلنه إن تعذّر معرفته
+  let total = 0, known = true;
+  for (const f of missing) {
+    const n = f.exact ? f.size : await exactSize(f.url);
+    if (n) total += n; else { known = false; break; }
+  }
   await (await caches.open(BGMAP_CACHE)).put(`./__bgmap/${bgId(model)}`,
-    new Response(JSON.stringify(Object.fromEntries(files.map((f) => [f.url, f.cache]))), { headers: { 'Content-Type': 'application/json' } }));
-  return reg.backgroundFetch.fetch(bgId(model), files.map((f) => f.url), {
+    new Response(JSON.stringify(Object.fromEntries(all.map((f) => [f.url, f.cache]))), { headers: { 'Content-Type': 'application/json' } }));
+  await setSetting('pendingModelDownload', model.id);
+  return reg.backgroundFetch.fetch(bgId(model), missing.map((f) => f.url), {
     title: `تنزيل ${model.label} لعقلي الثاني`,
     icons: [{ src: 'icons/icon-192.png', sizes: '192x192', type: 'image/png' }],
-    downloadTotal: Math.round(files.reduce((n, f) => n + f.size, 0)),
+    ...(known && { downloadTotal: Math.ceil(total * 1.03) }),
   });
+}
+
+// تنزيل بدأ ولم يكتمل (انقطع أو أُلغي)؟ لعرض زر "استئناف"
+export async function interruptedDownload() {
+  const id = await getSetting('pendingModelDownload', '');
+  const model = modelById(id);
+  if (!model) return null;
+  if (await isModelReady(model)) { await setSetting('pendingModelDownload', ''); return null; }
+  if (await backgroundDownload(model)) return null; // ما زال جارياً
+  return model;
 }
 
 // تنزيل جارٍ في الخلفية لهذا النموذج؟
@@ -266,6 +299,7 @@ export function downloadInPage(model) {
   const state = { f: 0, promise: null };
   inPage.set(model.id, state);
   let lock = null;
+  setSetting('pendingModelDownload', model.id);
   state.promise = (async () => {
     // نبقي الشاشة مضاءة حتى لا يتوقف التنزيل حين ينطفئ الجوال
     try { lock = await navigator.wakeLock?.request('screen'); } catch { /* غير مدعوم */ }

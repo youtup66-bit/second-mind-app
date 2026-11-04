@@ -55,11 +55,14 @@
         document.getElementById('boot-fail').hidden = false;
       }, 6000);
       document.getElementById('boot-reload').onclick = function () {
+        // نمسح نسخ واجهة التطبيق فقط (second-mind-v…)، ونُبقي النماذج والأصوات المنزّلة،
+        // ولا نلغي عامل الخدمة حتى لا يُلغى أي تنزيل جارٍ في الخلفية
         var done = function () { location.reload(); };
-        Promise.all([
-          window.caches ? caches.keys().then(function (k) { return Promise.all(k.map(function (n) { return caches.delete(n); })); }) : 0,
-          navigator.serviceWorker ? navigator.serviceWorker.getRegistrations().then(function (r) { return Promise.all(r.map(function (x) { return x.unregister(); })); }) : 0,
-        ]).then(done, done);
+        var clearShell = window.caches ? caches.keys().then(function (k) {
+          return Promise.all(k.filter(function (n) { return /^second-mind-v\d+$/.test(n); }).map(function (n) { return caches.delete(n); }));
+        }) : Promise.resolve();
+        var update = navigator.serviceWorker ? navigator.serviceWorker.getRegistration().then(function (r) { return r && r.update(); }) : 0;
+        Promise.all([clearShell, update]).then(done, done);
       };
     })();
   </script>

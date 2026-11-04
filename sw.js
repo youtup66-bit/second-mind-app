@@ -1,7 +1,7 @@
 // عامل الخدمة: يجعل التطبيق يعمل دون اتصال.
 // ملفات التطبيق: الشبكة أولاً (لتصلك آخر نسخة فوراً)، والمخزّن عند انقطاع الاتصال.
 // الخطوط: المخزّن أولاً. طلبات Gemini لا تمر عبر المخزّن أبداً.
-const CACHE = 'second-mind-v38';
+const CACHE = 'second-mind-v39';
 const ASSETS = [
   './',
   './index.html',
@@ -101,6 +101,16 @@ self.addEventListener('backgroundfetchsuccess', (event) => {
 
 self.addEventListener('backgroundfetchfail', (event) => {
   event.waitUntil((async () => {
+    // نحفظ الملفات التي اكتملت رغم الفشل، فيكمل الاستئناف من بعدها
+    try {
+      const reg = event.registration;
+      const mapRes = await (await caches.open('second-mind-bgfetch')).match(`./__bgmap/${reg.id}`);
+      const map = mapRes ? await mapRes.json() : {};
+      for (const rec of await reg.matchAll()) {
+        const res = await rec.responseReady.catch(() => null);
+        if (res && res.ok) await (await caches.open(map[rec.request.url] || 'webllm/model')).put(rec.request.url, res);
+      }
+    } catch { /* لا شيء */ }
     try { await event.updateUI({ title: 'تعذّر تنزيل الذكاء، افتح التطبيق لتحاول مجدداً' }); } catch { /* لا شيء */ }
     for (const c of await self.clients.matchAll({ includeUncontrolled: true })) c.postMessage({ type: 'bgfetch-fail', id: event.registration.id });
   })());

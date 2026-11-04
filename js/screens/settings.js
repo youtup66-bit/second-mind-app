@@ -8,7 +8,7 @@ import { canPip, pipAction, isFloating } from '../pip.js';
 import { canPiper, isPiperReady, downloadPiper, removePiper, piperVoice } from '../piper.js';
 import {
   LOCAL_MODELS, webgpuSupported, isModelReady, removeModel, localChat,
-  canBackgroundFetch, startBackgroundDownload, backgroundDownload, cancelBackgroundDownload,
+  canBackgroundFetch, startBackgroundDownload, backgroundDownload, cancelBackgroundDownload, interruptedDownload,
   downloadInPage, inPageDownload, downloads,
 } from '../local-ai.js';
 import { aiMode } from '../ai.js';
@@ -328,7 +328,14 @@ export async function mount(root) {
       if (bg.result === 'failure') {
         bgWatch.delete(m.id);
         localStatus.className = 'status status--err';
-        localStatus.textContent = `توقف تنزيل ${m.label} (${bg.failureReason || 'خطأ'}). حاول مرة أخرى.`;
+        const REASONS = {
+          aborted: 'أُلغي التنزيل',
+          'bad-status': 'الخادم رفض أحد الملفات',
+          'fetch-error': 'انقطع الاتصال',
+          'quota-exceeded': 'لا توجد مساحة كافية في الجوال',
+          'download-total-exceeded': 'حجم الملفات أكبر من المتوقع',
+        };
+        localStatus.textContent = `توقف تنزيل ${m.label}: ${REASONS[bg.failureReason] || bg.failureReason || 'خطأ'}. اضغط "استئناف" ليكمل من حيث توقف.`;
         renderModels();
         return;
       }
@@ -364,6 +371,14 @@ export async function mount(root) {
     rows.forEach(({ m, bg, ready }) => { if (bg && !ready) { bgWatch.delete(m.id); watchBackground(m, bg); } });
   }
   await renderModels();
+
+  // تنزيل انقطع سابقاً (بتحديث أو إغلاق أو انقطاع)؟ نعرض استئنافه
+  const stalled = await interruptedDownload();
+  if (stalled && !inPageDownload(stalled.id)) {
+    localStatus.className = 'status';
+    localStatus.innerHTML = `انقطع تنزيل ${stalled.label} قبل اكتماله. <button class="link-btn" id="resume-dl">استئناف</button>`;
+    localStatus.querySelector('#resume-dl').onclick = () => modelsEl.querySelector(`[data-model="${stalled.id}"] [data-act="dl"]`)?.click();
+  }
 
   // تقدّم التنزيل داخل الصفحة يصل إلى هذه الشاشة حتى لو بدأ قبل فتحها
   const onPageProgress = (e) => showProgress(e.detail.id, e.detail.f, 'جارٍ التنزيل والتجهيز…');
@@ -415,7 +430,8 @@ export async function mount(root) {
       renderModels();
       return;
     }
-    if (!confirm(`سيُنزَّل ${m.label} (~${m.sizeMB} ميغا). يُفضَّل Wi-Fi. متابعة؟`)) return;
+    const resuming = (await interruptedDownload())?.id === m.id;
+    if (!resuming && !confirm(`سيُنزَّل ${m.label} (~${m.sizeMB} ميغا). يُفضَّل Wi-Fi. متابعة؟`)) return;
     if (!chosen) { chosen = m.id; await setSetting('localModel', chosen); }
     localStatus.className = 'status';
     // الطريقة الأفضل: تنزيل يتولاه المتصفح في الخلفية ويستمر بعد الخروج من التطبيق
@@ -428,6 +444,7 @@ export async function mount(root) {
         watchBackground(m, bg);
         return;
       } catch (err) {
+        if (err.code === 'ALREADY') { localStatus.textContent = err.message; renderModels(); return; }
         localStatus.textContent = `تعذّر التنزيل في الخلفية (${err.message || err})، أنزّله داخل التطبيق بدلاً من ذلك.`;
       }
     } else {
