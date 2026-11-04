@@ -321,9 +321,18 @@ export async function mount(root) {
   function renderChip(chip, entry) {
     const c = categoryById(entry?.category);
     chip.classList.toggle('is-pending', !c);
+    chip.classList.remove('is-waiting');
     chip.style.setProperty('--c', c ? c.color : 'var(--muted)');
     chip.textContent = c ? c.label : 'يُصنَّف…';
     chip.title = entry?.meta?.title || '';
+  }
+
+  // لم يُصنَّف الآن (لا ذكاء متاح)؛ يُصنَّف تلقائياً حين يتوفر
+  function waitChip(id) {
+    const chip = log.querySelector(`.chip[data-entry="${id}"]`);
+    if (!chip || !chip.classList.contains('is-pending')) return;
+    chip.classList.replace('is-pending', 'is-waiting');
+    chip.textContent = 'يُصنَّف لاحقاً';
   }
 
   function refreshChip(entry) {
@@ -343,7 +352,9 @@ export async function mount(root) {
   });
 
   // ما فات تصنيفه سابقاً (بلا مفتاح أو اتصال) نصنّفه الآن بهدوء
-  classifyPending(refreshChip);
+  classifyPending(refreshChip).then(() => {
+    log.querySelectorAll('.chip.is-pending').forEach((c) => waitChip(c.dataset.entry));
+  });
 
   // ---- تصحيح التصنيف يدوياً ----
   const sheet = root.querySelector('#sheet');
@@ -569,7 +580,11 @@ export async function mount(root) {
       log.scrollTop = log.scrollHeight;
       talk(reply);
     } catch (err) {
-      pending.remove();
+      // نُبقي سبب الفشل ظاهراً في المحادثة نفسها (لا يُحفظ)، بدل رد يختفي بصمت
+      pending.classList.remove('msg--pending');
+      pending.classList.add('msg--error');
+      pending.querySelector('.msg__text').textContent = `⚠️ ${err.message || err}`;
+      waitChip(entry.id);
       companion.setState('idle');
       showError(err);
     } finally {

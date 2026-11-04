@@ -246,6 +246,8 @@ input[dir="ltr"] { text-align: left; }
   background: var(--c); margin-inline-end: 6px; vertical-align: middle;
 }
 .chip.is-pending { opacity: .7; animation: cmp-dot 1.4s ease-in-out infinite; }
+.chip.is-waiting { opacity: .6; }
+.msg--error .msg__text { color: #ffb4c2; font-size: .92em; }
 
 .sheet {
   position: fixed; inset: 0; z-index: 35; /* فوق الرفيقة الطافية (30) */ background: rgba(5, 3, 20, .6);

@@ -79,6 +79,7 @@ export function explainError(err) {
   if (/shader-f16/i.test(m)) return 'كرت شاشة جوالك لا يدعم هذه النسخة من النموذج. اختر نموذج Qwen (سيُستخدم إصدار متوافق تلقائياً).';
   if (/out of memory|OOM|device was lost|DeviceLost|allocation/i.test(m)) return 'ذاكرة الجوال لا تكفي لهذا النموذج. جرّب نموذجاً أصغر، أو أغلق التطبيقات الأخرى.';
   if (/Failed to fetch|NetworkError|network/i.test(m)) return 'يحتاج الاتصال بالإنترنت مرة واحدة لإكمال تجهيز الملفات.';
+  if (err?.code === 'GPU_LOST') return m;
   if (/Instance reference|device (was |is )?lost/i.test(m)) return 'انقطع اتصال المتصفح بكرت الشاشة (يحدث عند الخروج من التطبيق). حاول مرة أخرى، وسيُعاد تجهيز النموذج تلقائياً.';
   if (/WebGPU|navigator.gpu/i.test(m)) return 'متصفحك لا يدعم WebGPU؛ استخدم نموذج "للمعالج".';
   return m || 'خطأ غير معروف';
@@ -112,8 +113,24 @@ export async function selectedModel() {
 
 export async function localReady() {
   const m = await selectedModel();
-  return !!m && await isModelReady(m);
+  if (!m) return false;
+  if (gpuDead && m.engine === 'webllm') return !!(await cpuFallback()); // كرت الشاشة معطّل في هذه الجلسة
+  return isModelReady(m);
 }
+
+// نموذج المعالج إن كان منزّلاً: بديل عن كرت الشاشة حين يتعطل
+async function cpuFallback() {
+  const cpu = LOCAL_MODELS.find((m) => m.engine === 'wllama');
+  return cpu && await isModelReady(cpu) ? cpu : null;
+}
+
+// إن انهار كرت الشاشة مرتين متتاليتين نعدّه معطلاً حتى يُغلق التطبيق ويُفتح من جديد،
+// بدل إعادة المحاولة مع كل رسالة (كل محاولة تُسقطه مجدداً وتعلّق الرد)
+let gpuDead = false;
+export const gpuUnavailable = () => gpuDead;
+export const gpuDeadError = () => new LocalAIError(GPU_DEAD_MSG, 'GPU_LOST');
+export function retryGpu() { gpuDead = false; gpuCheck = null; } // محاولة صريحة من المستخدم (زر التجربة)
+const GPU_DEAD_MSG = 'كرت الشاشة في جوالك توقف عن خدمة النموذج (غالباً ذاكرته لا تكفي). أغلق التطبيق تماماً وافتحه، أو اختر نموذجاً أصغر، أو نزّل نموذج "للمعالج" ليعمل بدلاً منه.';
 
 // ---- المحرك النشط (نموذج واحد في الذاكرة) ----
 let active = null; // { model, kind, engine }
@@ -196,8 +213,12 @@ async function ensureActive() {
   }
 }
 async function ensureActiveRaw() {
-  const model = await selectedModel();
+  let model = await selectedModel();
   if (!model) throw new LocalAIError('لم تختر نموذجاً على الجهاز بعد.', 'NOT_READY');
+  if (gpuDead && model.engine === 'webllm') {
+    model = await cpuFallback();
+    if (!model) throw new LocalAIError(GPU_DEAD_MSG, 'GPU_LOST');
+  }
   if (active?.model.id === model.id) return active;
   if (!(await isModelReady(model))) throw new LocalAIError('النموذج المختار لم يُنزَّل بعد.', 'NOT_READY');
   return prepareModel(model);
@@ -213,6 +234,7 @@ export async function prefetchRuntime() {
 
 // تجهيز مسبق في الخلفية حتى لا يتأخر أول رد
 export async function warmUpLocal() {
+  if (gpuDead) return false;
   try { await ensureActive(); return true; } catch { return false; }
 }
 
@@ -239,13 +261,22 @@ async function resetGpu() {
   try { await (a?.kind === 'webllm' ? a.engine.unload() : a?.engine.exit()); } catch { /* الاتصال ضائع أصلاً */ }
 }
 
+const lost = (e) => isGpuLost(e) || isGpuLost(e?.cause);
 async function localChatNow(messages, opts = {}) {
   try {
     return await localChatOnce(messages, opts);
   } catch (err) {
-    if (!isGpuLost(err) && !isGpuLost(err?.cause)) throw err;
+    if (!lost(err)) throw err;
     await resetGpu();
-    return localChatOnce(messages, opts); // النموذج يُعاد تحميله من الملفات المحفوظة (دون تنزيل)
+    try {
+      return await localChatOnce(messages, opts); // النموذج يُعاد تحميله من الملفات المحفوظة (دون تنزيل)
+    } catch (err2) {
+      if (!lost(err2)) throw err2;
+      gpuDead = true;
+      await resetGpu();
+      if (await cpuFallback()) return localChatOnce(messages, opts); // نكمل على المعالج
+      throw new LocalAIError(GPU_DEAD_MSG, 'GPU_LOST');
+    }
   }
 }
 

@@ -7,7 +7,7 @@ import { loadCategories } from '../categories.js';
 import { canPip, pipAction, isFloating } from '../pip.js';
 import { canPiper, isPiperReady, downloadPiper, removePiper, piperVoice } from '../piper.js';
 import {
-  LOCAL_MODELS, webgpuSupported, shaderF16Supported, blockedReason, isModelReady, removeModel, localChat,
+  LOCAL_MODELS, webgpuSupported, shaderF16Supported, blockedReason, isModelReady, removeModel, localChat, retryGpu, explainError,
   canBackgroundFetch, startBackgroundDownload, backgroundDownload, cancelBackgroundDownload, interruptedDownload,
   missingFiles, backgroundReport,
   downloadInPage, inPageDownload, downloads,
@@ -520,6 +520,7 @@ export async function mount(root) {
     localStatus.className = 'status';
     localStatus.textContent = 'أحمّل النموذج وأسأله…';
     const t0 = performance.now();
+    retryGpu(); // تجربة صريحة: نمنح كرت الشاشة فرصة جديدة
     try {
       const reply = await localChat([
         { role: 'system', content: 'أنتِ رفيقة لطيفة. أجيبي بالعربية بجملة واحدة.' },
@@ -529,7 +530,7 @@ export async function mount(root) {
       localStatus.textContent = `${reply} (${((performance.now() - t0) / 1000).toFixed(1)} ث)`;
     } catch (err) {
       localStatus.className = 'status status--err';
-      localStatus.textContent = err.message;
+      localStatus.textContent = explainError(err);
     } finally {
       btn.disabled = false;
     }

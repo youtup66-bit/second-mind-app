@@ -3,7 +3,7 @@
 import { smartClassify as classify } from './ai.js';
 import { getEntries, getEntry, getMessages, updateEntry } from './storage.js';
 
-const STOP_CODES = new Set(['NO_KEY', 'BAD_KEY', 'RATE', 'NETWORK', 'TIMEOUT', 'NOT_READY', 'NO_GPU']);
+const STOP_CODES = new Set(['NO_KEY', 'BAD_KEY', 'RATE', 'NETWORK', 'TIMEOUT', 'NOT_READY', 'NO_GPU', 'GPU_LOST', 'LOCAL_FAIL', 'LOAD']);
 const inFlight = new Map();
 
 // يعيد آخر رسالتين قبل الملاحظة كسياق

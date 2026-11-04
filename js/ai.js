@@ -4,11 +4,16 @@
 //   auto  : Gemini عادةً، وعلى الجهاز عند انقطاع الإنترنت أو نفاد الحصة أو غياب المفتاح
 import { getSetting } from './storage.js';
 import { chat as geminiChat, classify as geminiClassify, memoriesBlock } from './gemini.js';
-import { localChat, localReady } from './local-ai.js';
+import { localChat, localReady, explainError, gpuUnavailable, gpuDeadError } from './local-ai.js';
 import { CATEGORIES, NONE } from './categories.js';
 
 export const AI_MODE_DEFAULT = 'auto';
 const FALLBACK_CODES = new Set(['NETWORK', 'RATE', 'TIMEOUT', 'NO_KEY', 'BAD_KEY']);
+
+// هل يمكن الرجوع إلى Gemini إن فشل النموذج على الجهاز؟ (الوضع التلقائي فقط)
+const geminiAvailable = async (mode) => mode === 'auto' && navigator.onLine && !!(await getSetting('geminiApiKey', ''));
+// خطأ محلي بصياغة عربية مفهومة
+const localError = (err) => Object.assign(new Error(explainError(err)), { code: err.code || 'LOCAL_FAIL' });
 
 // شخصية مختصرة تناسب النماذج الصغيرة (التعليمات الطويلة تربكها)
 const LOCAL_PERSONA = `أنتِ "رفيقة"، رفيقة لطيفة ذكية في تطبيق "عقلي الثاني". تحدثي بالعربية البسيطة الدافئة، وخاطبي المستخدم بصيغة محايدة.
@@ -68,7 +73,14 @@ export async function smartChat(history, { memories = [], classify = true, onTok
   };
 
   if (await wantLocalFirst(mode)) {
-    if (await localReady()) return runLocal();
+    if (await localReady()) {
+      try { return await runLocal(); } catch (err) {
+        if (!(await geminiAvailable(mode))) throw localError(err);
+        // النموذج على الجهاز تعطل، والإنترنت والمفتاح متاحان: نكمل عبر Gemini
+      }
+    }
+    // كرت الشاشة تعطل في هذه الجلسة ولا بديل: نقول السبب الحقيقي
+    if (gpuUnavailable() && !(await geminiAvailable(mode))) throw gpuDeadError();
     if (mode === 'local') {
       throw Object.assign(new Error('اختر نموذجاً على الجهاز ونزّله من الإعدادات ← الذكاء على الجهاز.'), { code: 'NO_LOCAL' });
     }
@@ -76,7 +88,9 @@ export async function smartChat(history, { memories = [], classify = true, onTok
   try {
     return { ...(await geminiChat(history, { memories, classify })), engine: 'gemini' };
   } catch (err) {
-    if (mode === 'auto' && FALLBACK_CODES.has(err.code) && await localReady()) return runLocal();
+    if (mode === 'auto' && FALLBACK_CODES.has(err.code) && await localReady()) {
+      try { return await runLocal(); } catch (e2) { throw localError(e2); }
+    }
     throw err;
   }
 }
@@ -85,7 +99,9 @@ export async function smartChat(history, { memories = [], classify = true, onTok
 export async function smartClassify(text, context) {
   const mode = await aiMode();
   if ((await wantLocalFirst(mode)) && await localReady()) {
-    return { category: await localClassify(text), title: '' };
+    try { return { category: await localClassify(text), title: '' }; } catch (err) {
+      if (!(await geminiAvailable(mode))) throw err;
+    }
   }
   try {
     return await geminiClassify(text, context);
