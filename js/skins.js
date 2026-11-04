@@ -607,5 +607,14 @@ export const SKINS = {
 };
 
 export const DEFAULT_SKIN = 'star';
-export const skinSVG = (id) => (SKINS[id] || SKINS[DEFAULT_SKIN]).svg;
+// كل نسخة من الرسم تأخذ أسماء فريدة لتدرّجاتها ومقاطعها: إن ظهر الرسم أكثر من مرة في الصفحة
+// (الرفيقة، صورتها في رأس المحادثة، الطافية، معاينات الإعدادات) لا تتعارض الأسماء،
+// ولا تختفي الألوان حين تكون إحدى النسخ مخفية.
+let instance = 0;
+export const skinSVG = (id) => {
+  const n = ++instance;
+  return (SKINS[id] || SKINS[DEFAULT_SKIN]).svg
+    .replace(/\bid="([^"]+)"/g, `id="$1-i${n}"`)
+    .replace(/url\(#([^)]+)\)/g, `url(#$1-i${n})`);
+};
 export const skinVoice = (id) => (SKINS[id] || SKINS[DEFAULT_SKIN]).voice;
