@@ -1,7 +1,7 @@
 // عامل الخدمة: يجعل التطبيق يعمل دون اتصال.
 // ملفات التطبيق: الشبكة أولاً (لتصلك آخر نسخة فوراً)، والمخزّن عند انقطاع الاتصال.
 // الخطوط: المخزّن أولاً. طلبات Gemini لا تمر عبر المخزّن أبداً.
-const CACHE = 'second-mind-v40';
+const CACHE = 'second-mind-v41';
 const ASSETS = [
   './',
   './index.html',
@@ -88,16 +88,31 @@ self.addEventListener('fetch', (e) => {
 self.addEventListener('backgroundfetchsuccess', (event) => {
   event.waitUntil((async () => {
     const reg = event.registration;
-    const mapRes = await (await caches.open('second-mind-bgfetch')).match(`./__bgmap/${reg.id}`);
+    const meta = await caches.open('second-mind-bgfetch');
+    const mapRes = await meta.match(`./__bgmap/${reg.id}`);
     const map = mapRes ? await mapRes.json() : {};
+    const report = { at: Date.now(), stored: 0, failed: [] };
     for (const rec of await reg.matchAll()) {
-      const res = await rec.responseReady;
-      if (!res || !res.ok) continue;
-      await (await caches.open(map[rec.request.url] || 'webllm/model')).put(rec.request.url, res);
+      const url = rec.request.url;
+      try {
+        const res = await rec.responseReady;
+        // ملف غير قابل للقراءة (opaque) أو مرفوض لا يفيد المكتبة؛ نسجّله ليكمله التطبيق
+        if (!res || !res.ok || res.type === 'opaque') {
+          report.failed.push({ url, status: res ? res.status : 0, type: res ? res.type : 'none' });
+          continue;
+        }
+        await (await caches.open(map[url] || 'webllm/model')).put(url, res);
+        report.stored++;
+      } catch (err) {
+        report.failed.push({ url, status: -1, type: String(err && err.message || err).slice(0, 80) });
+      }
     }
-    await (await caches.open('second-mind-bgfetch')).delete(`./__bgmap/${reg.id}`);
-    try { await event.updateUI({ title: 'اكتمل تنزيل الذكاء ✓ جاهز للعمل دون إنترنت' }); } catch { /* لا شيء */ }
-    for (const c of await self.clients.matchAll({ includeUncontrolled: true })) c.postMessage({ type: 'bgfetch-done', id: reg.id });
+    await meta.put(`./__bgresult/${reg.id}`, new Response(JSON.stringify(report), { headers: { 'Content-Type': 'application/json' } }));
+    const ok = !report.failed.length;
+    try {
+      await event.updateUI({ title: ok ? 'اكتمل تنزيل الذكاء ✓ جاهز للعمل دون إنترنت' : 'اكتمل التنزيل جزئياً، افتح التطبيق لإكماله' });
+    } catch { /* لا شيء */ }
+    for (const c of await self.clients.matchAll({ includeUncontrolled: true })) c.postMessage({ type: 'bgfetch-done', id: reg.id, report });
   })());
 });
 

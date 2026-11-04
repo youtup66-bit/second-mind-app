@@ -9,6 +9,7 @@ import { canPiper, isPiperReady, downloadPiper, removePiper, piperVoice } from '
 import {
   LOCAL_MODELS, webgpuSupported, isModelReady, removeModel, localChat,
   canBackgroundFetch, startBackgroundDownload, backgroundDownload, cancelBackgroundDownload, interruptedDownload,
+  missingFiles, backgroundReport,
   downloadInPage, inPageDownload, downloads,
 } from '../local-ai.js';
 import { aiMode } from '../ai.js';
@@ -372,13 +373,25 @@ export async function mount(root) {
   }
   await renderModels();
 
-  // تنزيل انقطع سابقاً (بتحديث أو إغلاق أو انقطاع)؟ نعرض استئنافه
-  const stalled = await interruptedDownload();
-  if (stalled && !inPageDownload(stalled.id)) {
-    localStatus.className = 'status';
-    localStatus.innerHTML = `انقطع تنزيل ${stalled.label} قبل اكتماله. <button class="link-btn" id="resume-dl">استئناف</button>`;
-    localStatus.querySelector('#resume-dl').onclick = () => modelsEl.querySelector(`[data-model="${stalled.id}"] [data-act="dl"]`)?.click();
+  // تنزيل لم يكتمل تثبيته (انقطع، أو اكتمل في الخلفية لكن بعض ملفاته لم تُحفظ)؟ نشخّصه ونعرض إكماله
+  async function diagnose(model) {
+    if (!model || inPageDownload(model.id) || await isModelReady(model)) return;
+    const [check, report] = await Promise.all([missingFiles(model), backgroundReport(model)]);
+    const why = report?.failed?.length
+      ? ` (رفض الحفظ ${report.failed.length} ملف${report.failed[0].type === 'opaque' ? '، الخادم لم يسمح بقراءتها في الخلفية' : report.failed[0].status ? `، رمز ${report.failed[0].status}` : ''})`
+      : '';
+    const count = check ? `${check.missing.length} من ${check.total} ملفات ناقصة` : 'بعض الملفات ناقصة';
+    localStatus.className = 'status status--err';
+    localStatus.innerHTML = `${model.label} لم يكتمل تثبيته: ${count}${why}. <button class="link-btn" id="fix-dl">أكمل الملفات الناقصة</button>`;
+    localStatus.querySelector('#fix-dl').onclick = () => {
+      localStatus.className = 'status';
+      localStatus.textContent = 'أكمل الملفات الناقصة داخل التطبيق، أبقِه مفتوحاً قليلاً (ما حُفظ سابقاً لن يُنزَّل مرة أخرى)…';
+      downloadInPage(model).catch(() => {});
+      renderModels();
+    };
   }
+  const stalled = await interruptedDownload();
+  if (stalled) diagnose(stalled);
 
   // تقدّم التنزيل داخل الصفحة يصل إلى هذه الشاشة حتى لو بدأ قبل فتحها
   const onPageProgress = (e) => showProgress(e.detail.id, e.detail.f, 'جارٍ التنزيل والتجهيز…');
@@ -394,9 +407,16 @@ export async function mount(root) {
     const m = LOCAL_MODELS.find((x) => `model:${x.id}` === e.data.id);
     if (!m) return;
     bgWatch.delete(m.id);
-    localStatus.className = e.data.type === 'bgfetch-done' ? 'status status--ok' : 'status status--err';
-    localStatus.textContent = e.data.type === 'bgfetch-done' ? `اكتمل تنزيل ${m.label} ✓ سيُجهَّز عند أول استخدام.` : `تعذّر تنزيل ${m.label}. حاول مرة أخرى.`;
-    renderModels();
+    // نتحقق فعلاً أن المكتبة تجد النموذج، لا نكتفي بقول "اكتمل"
+    (async () => {
+      await renderModels();
+      if (await isModelReady(m)) {
+        localStatus.className = 'status status--ok';
+        localStatus.textContent = `اكتمل تنزيل ${m.label} ✓ سيُجهَّز عند أول استخدام.`;
+      } else {
+        diagnose(m);
+      }
+    })();
   };
   downloads.addEventListener('progress', onPageProgress);
   downloads.addEventListener('done', onPageDone);

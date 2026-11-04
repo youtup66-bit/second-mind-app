@@ -267,6 +267,24 @@ export async function startBackgroundDownload(model) {
   });
 }
 
+// كم ملفاً من ملفات النموذج غير محفوظ فعلاً؟ (null إن تعذّر الفحص، كأن لا إنترنت لجلب القائمة)
+export async function missingFiles(model) {
+  try {
+    const files = await filesFor(model);
+    const missing = [];
+    for (const f of files) if (!(await alreadyCached(f))) missing.push(f.url.split('/').pop());
+    return { total: files.length, missing };
+  } catch { return null; }
+}
+
+// تقرير عامل الخدمة عن آخر تنزيل في الخلفية لهذا النموذج
+export async function backgroundReport(model) {
+  try {
+    const r = await (await caches.open(BGMAP_CACHE)).match(`./__bgresult/${bgId(model)}`);
+    return r ? r.json() : null;
+  } catch { return null; }
+}
+
 // تنزيل بدأ ولم يكتمل (انقطع أو أُلغي)؟ لعرض زر "استئناف"
 export async function interruptedDownload() {
   const id = await getSetting('pendingModelDownload', '');
