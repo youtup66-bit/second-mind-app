@@ -405,16 +405,17 @@ export function createMindGraph(canvas, nodesIn, linksIn, { onTap, onGroupTap, g
       ctx.beginPath(); ctx.arc(n.x, n.y, r, 0, Math.PI * 2); ctx.fill();
       ctx.shadowBlur = 0;
       // حلقة بلون القسم الأصلي (في وضع الحرارة) حتى يبقى القسم معروفاً من لونه
-      // نواة ممتلئة في وسط الكرة بلون حرارتها (عدد الملاحظات)، والكرة نفسها بلون قسمها
+      // نواة ضوئية ناعمة في وسط الكرة بلون حرارتها (عدد الملاحظات)، تذوب تدريجياً في لون القسم دون أي حافة
       if (n.core) {
-        const cr = r * 0.44;
-        ctx.shadowColor = n.core; ctx.shadowBlur = 10;
-        ctx.fillStyle = n.core;
-        ctx.beginPath(); ctx.arc(n.x, n.y, cr, 0, Math.PI * 2); ctx.fill();
-        ctx.shadowBlur = 0;
-        ctx.strokeStyle = 'rgba(255,255,255,0.9)';
-        ctx.lineWidth = 1.5;
-        ctx.stroke();
+        const rgb = hexRgb(n.core);
+        const glow = ctx.createRadialGradient(n.x, n.y, 0, n.x, n.y, r * 0.92);
+        glow.addColorStop(0, `rgba(${rgb},1)`);
+        glow.addColorStop(0.28, `rgba(${rgb},0.9)`);
+        glow.addColorStop(0.55, `rgba(${rgb},0.45)`);
+        glow.addColorStop(0.8, `rgba(${rgb},0.12)`);
+        glow.addColorStop(1, `rgba(${rgb},0)`);
+        ctx.fillStyle = glow;
+        ctx.beginPath(); ctx.arc(n.x, n.y, r * 0.92, 0, Math.PI * 2); ctx.fill();
       }
       if (n.ring) {
         ctx.strokeStyle = n.ring;
@@ -481,6 +482,11 @@ export function createMindGraph(canvas, nodesIn, linksIn, { onTap, onGroupTap, g
   };
   canvas.mindGraph = api;
   return api;
+}
+
+function hexRgb(hex) {
+  const n = parseInt(hex.slice(1), 16);
+  return `${n >> 16},${(n >> 8) & 255},${n & 255}`;
 }
 
 function shade(hex, amt) {
