@@ -77,6 +77,7 @@ export async function mount(root) {
         <p class="bubble" id="bubble" role="status">${greeting()}</p>
         <div class="chat__stage" id="stage"></div>
       </div>
+      <button type="button" class="chat__handle" id="handle" aria-label="اسحب لتطوي الرفيقة أو تنسدلها"><span></span></button>
       <ol class="chat__log" id="log" aria-label="المحادثة"></ol>
       <form class="composer" id="composer" autocomplete="off">
         <button type="button" class="composer__mic" id="mic" aria-label="تحدّث" ${showMic ? '' : 'hidden'}>🎙</button>
@@ -160,8 +161,56 @@ export async function mount(root) {
   }
   if (waMode) setWaMode(true);
   root.querySelector('#wa-on').addEventListener('click', () => setWaMode(true));
-  root.querySelector('#wa-who').addEventListener('click', () => setWaMode(false));
-  root.querySelector('#wa-expand').addEventListener('click', () => setWaMode(false));
+  // ---- الانسدال بالسحب ----
+  // في وضع الرفيقة: اسحب المقبض للأعلى فتنطوي مع إصبعك. في واجهة المحادثة: اسحب الرأس أو المقبض للأسفل فتنسدل.
+  const hero = root.querySelector('.chat__hero');
+  const handle = root.querySelector('#handle');
+  let pull = null;
+  const fullHeight = () => {
+    const prev = hero.style.maxHeight;
+    hero.style.maxHeight = 'none';
+    const h = hero.scrollHeight;
+    hero.style.maxHeight = prev;
+    return h || 320;
+  };
+  function startPull(e) {
+    pull = { y0: e.clientY, full: fullHeight(), from: waMode ? 'wa' : 'companion', moved: false, id: e.pointerId };
+    e.currentTarget.setPointerCapture(e.pointerId);
+    hero.style.transition = 'none';
+    // في واجهة المحادثة نُظهر الرفيقة مطويّة لتنسدل من تحت الرأس
+    if (waMode) { hero.style.maxHeight = '0px'; hero.style.opacity = '0'; chatEl.classList.add('is-pulling'); }
+  }
+  function movePull(e) {
+    if (!pull || e.pointerId !== pull.id) return;
+    const dy = e.clientY - pull.y0;
+    if (Math.abs(dy) > 6) pull.moved = true;
+    if (!pull.moved) return;
+    // ارتفاع الرفيقة يتبع الإصبع
+    const h = pull.from === 'companion' ? Math.max(0, pull.full + Math.min(0, dy)) : Math.min(pull.full, Math.max(0, dy));
+    hero.style.maxHeight = `${h}px`;
+    hero.style.opacity = String(Math.min(1, h / (pull.full * 0.6)));
+    pull.ratio = h / pull.full;
+  }
+  function endPull(e) {
+    if (!pull || e.pointerId !== pull.id) return;
+    const { from, moved, ratio = from === 'wa' ? 0 : 1 } = pull;
+    pull = null;
+    hero.style.transition = '';
+    chatEl.classList.remove('is-pulling');
+    // لمسة دون سحب: تبديل مباشر. سحب: نكمل إن تجاوز الثلث، وإلا نعود
+    const collapse = !moved ? from === 'companion' : (from === 'companion' ? ratio < 0.66 : ratio < 0.34);
+    requestAnimationFrame(() => {
+      hero.style.maxHeight = '';
+      hero.style.opacity = '';
+      setWaMode(collapse);
+    });
+  }
+  for (const el of [handle, root.querySelector('#wa-who'), root.querySelector('#wa-expand')]) {
+    el.addEventListener('pointerdown', startPull);
+    el.addEventListener('pointermove', movePull);
+    el.addEventListener('pointerup', endPull);
+    el.addEventListener('pointercancel', endPull);
+  }
   // الحالة في الرأس تتبع حالة الرفيقة
   const STATUS = { thinking: 'تكتب…', listening: 'تستمع…', talking: 'تتكلم…' };
   const waStatus = root.querySelector('#wa-status');

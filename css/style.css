@@ -652,3 +652,16 @@ input[type="range"] { width: 100%; accent-color: var(--accent); margin: 4px 0 12
 .chat--wa .composer__mic[hidden] { display: none; }
 .chat--wa .composer:not(.has-text):has(.composer__mic[hidden]) .composer__send { display: inline-block; }
 .chat--wa .composer__mic.is-on { background: var(--danger); }
+
+/* ---- مقبض الانسدال ---- */
+.chat__handle {
+  flex: none; align-self: center; width: 100%; height: 22px; padding: 0; border: 0; background: none; cursor: grab;
+  display: flex; align-items: center; justify-content: center; touch-action: none;
+}
+.chat__handle span { display: block; width: 44px; height: 5px; border-radius: 999px; background: rgba(255,255,255,.28); }
+.chat__handle:active span { background: rgba(255,255,255,.5); }
+.chat--wa .chat__handle { background: var(--wa-head); height: 16px; margin-top: -1px; }
+.chat--wa .chat__handle span { width: 36px; height: 4px; }
+.wa-head__who, .wa-head__btn { touch-action: none; }
+/* أثناء السحب في واجهة المحادثة: الرفيقة تظهر تحت الرأس وهي تنسدل */
+.chat--wa.is-pulling .chat__hero { pointer-events: none; overflow: hidden; }
