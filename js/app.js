@@ -87,8 +87,14 @@ function toast(msg) {
   }
   el.textContent = `حدث خطأ: ${msg} (المس للإغلاق)`;
 }
-window.addEventListener('error', (e) => { if (e.message) toast(e.message); });
-window.addEventListener('unhandledrejection', (e) => toast(e.reason?.message || String(e.reason)));
+window.addEventListener('error', (e) => { if (e.message && !gpuLost(e.message)) toast(e.message); });
+// فقدان اتصال كرت الشاشة (WebGPU) يتعافى منه الذكاء على الجهاز بنفسه، فلا نزعج المستخدم به
+const gpuLost = (m) => /external Instance reference|Instance reference no longer|device (was |is )?lost/i.test(m || '');
+window.addEventListener('unhandledrejection', (e) => {
+  const msg = e.reason?.message || String(e.reason);
+  if (gpuLost(msg)) { e.preventDefault(); console.warn('WebGPU:', msg); return; }
+  toast(msg);
+});
 
 // إن كان صوت Piper مختاراً نحمّله في الذاكرة بهدوء، فلا يتأخر أول رد
 setTimeout(async () => {

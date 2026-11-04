@@ -79,6 +79,7 @@ export function explainError(err) {
   if (/shader-f16/i.test(m)) return 'كرت شاشة جوالك لا يدعم هذه النسخة من النموذج. اختر نموذج Qwen (سيُستخدم إصدار متوافق تلقائياً).';
   if (/out of memory|OOM|device was lost|DeviceLost|allocation/i.test(m)) return 'ذاكرة الجوال لا تكفي لهذا النموذج. جرّب نموذجاً أصغر، أو أغلق التطبيقات الأخرى.';
   if (/Failed to fetch|NetworkError|network/i.test(m)) return 'يحتاج الاتصال بالإنترنت مرة واحدة لإكمال تجهيز الملفات.';
+  if (/Instance reference|device (was |is )?lost/i.test(m)) return 'انقطع اتصال المتصفح بكرت الشاشة (يحدث عند الخروج من التطبيق). حاول مرة أخرى، وسيُعاد تجهيز النموذج تلقائياً.';
   if (/WebGPU|navigator.gpu/i.test(m)) return 'متصفحك لا يدعم WebGPU؛ استخدم نموذج "للمعالج".';
   return m || 'خطأ غير معروف';
 }
@@ -141,6 +142,7 @@ export async function prepareModel(model, onProgress) {
           initProgressCallback: (r) => onProgress?.(Math.min(0.99, r.progress || 0), r.text || ''),
         });
       } catch (err) {
+        if (isGpuLost(err)) throw err;
         throw new LocalAIError(explainError(err), 'LOAD');
       }
       active = { model, kind: 'webllm', engine };
@@ -189,6 +191,7 @@ export async function removeModel(model) {
 // يحمّل النموذج المختار إن لم يكن في الذاكرة (لا ينزّله أبداً من تلقاء نفسه)
 async function ensureActive() {
   try { return await ensureActiveRaw(); } catch (err) {
+    if (isGpuLost(err)) throw err;
     throw err instanceof LocalAIError ? err : new LocalAIError(explainError(err), 'LOAD');
   }
 }
@@ -224,7 +227,29 @@ export function localChat(messages, opts = {}) {
 }
 
 // messages: [{ role: 'system'|'user'|'assistant', content }]. onToken(نص حتى الآن)
-async function localChatNow(messages, { onToken, maxTokens = 400, temperature = 0.7 } = {}) {
+// أندرويد قد يسحب كرت الشاشة من المتصفح (عند الخروج من التطبيق مثلاً)، فيبقى النموذج
+// مرتبطاً باتصال لم يعد موجوداً. نتعرف على هذه الأخطاء، ونعيد فتح النموذج ونحاول مرة أخرى.
+export const isGpuLost = (err) => /external Instance reference|Instance reference no longer|device (was |is )?lost|GPUDevice.*(lost|destroyed)|DeviceLost|Device is lost/i
+  .test(String(err?.message || err || ''));
+
+async function resetGpu() {
+  const a = active;
+  active = null;
+  gpuCheck = null; // نعيد فحص كرت الشاشة من جديد
+  try { await (a?.kind === 'webllm' ? a.engine.unload() : a?.engine.exit()); } catch { /* الاتصال ضائع أصلاً */ }
+}
+
+async function localChatNow(messages, opts = {}) {
+  try {
+    return await localChatOnce(messages, opts);
+  } catch (err) {
+    if (!isGpuLost(err) && !isGpuLost(err?.cause)) throw err;
+    await resetGpu();
+    return localChatOnce(messages, opts); // النموذج يُعاد تحميله من الملفات المحفوظة (دون تنزيل)
+  }
+}
+
+async function localChatOnce(messages, { onToken, maxTokens = 400, temperature = 0.7 } = {}) {
   const a = await ensureActive();
   let text = '';
   const push = (piece) => {
@@ -248,6 +273,13 @@ async function localChatNow(messages, { onToken, maxTokens = 400, temperature = 
 }
 
 export const activeModelLabel = () => active?.model.label || '';
+
+let hiddenAt = 0;
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) { hiddenAt = Date.now(); return; }
+  // بعد غياب أكثر من دقيقة قد يكون النظام سحب كرت الشاشة؛ نعيد التجهيز عند أول استخدام
+  if (hiddenAt && Date.now() - hiddenAt > 60_000 && active?.kind === 'webllm' && !loading) resetGpu();
+});
 
 
 // ======================================================================
