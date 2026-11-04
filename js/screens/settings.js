@@ -6,7 +6,11 @@ import { SKINS, DEFAULT_SKIN, skinSVG } from '../skins.js';
 import { loadCategories } from '../categories.js';
 import { canPip, pipAction, isFloating } from '../pip.js';
 import { canPiper, isPiperReady, downloadPiper, removePiper, piperVoice } from '../piper.js';
-import { LOCAL_MODELS, webgpuSupported, isModelReady, prepareModel, removeModel, localChat } from '../local-ai.js';
+import {
+  LOCAL_MODELS, webgpuSupported, isModelReady, removeModel, localChat,
+  canBackgroundFetch, startBackgroundDownload, backgroundDownload, cancelBackgroundDownload,
+  downloadInPage, inPageDownload, downloads,
+} from '../local-ai.js';
 import { aiMode } from '../ai.js';
 
 // يحفظ إعداداً ويُعلم بقية التطبيق (مثل الرفيقة الطافية)
@@ -23,6 +27,8 @@ const fmt = new Intl.DateTimeFormat('ar', { dateStyle: 'medium', timeStyle: 'sho
 const REASONS = { auto: 'تلقائية', 'before-import': 'قبل الاستيراد', 'before-restore': 'قبل الاستعادة' };
 
 export const title = 'الإعدادات';
+
+const cleanup = [];
 
 export async function mount(root) {
   const key = await getSetting('geminiApiKey', '');
@@ -302,13 +308,43 @@ export async function mount(root) {
   root.querySelector('#gpu-state').textContent = hasGpu
     ? 'جوالك يدعم WebGPU ✓ فتعمل النماذج بسرعة على كرت الشاشة.'
     : 'متصفحك لا يدعم WebGPU، فتتاح نماذج "للمعالج" فقط (أبطأ). جرّب أحدث Chrome إن أمكن.';
-  const busyModels = new Set();
+  // حالة كل تنزيل: من الخلفية (Background Fetch) أو داخل الصفحة؛ تبقى حتى لو خرجت من هذه الشاشة
+  const bgWatch = new Map(); // id ← تسجيل التنزيل في الخلفية
+  const pct = (f) => `${Math.round(f * 100)}%`;
+
+  function showProgress(id, f, label) {
+    const r = modelsEl.querySelector(`[data-model="${id}"]`);
+    if (!r) return;
+    r.querySelector('.progress').hidden = false;
+    r.querySelector('.progress span').style.width = pct(f);
+    r.querySelector('.model__state').textContent = `${label} ${pct(f)}`;
+  }
+
+  function watchBackground(m, bg) {
+    if (bgWatch.has(m.id)) return;
+    bgWatch.set(m.id, bg);
+    const onProgress = () => {
+      const f = bg.downloadTotal ? bg.downloaded / bg.downloadTotal : 0;
+      if (bg.result === 'failure') {
+        bgWatch.delete(m.id);
+        localStatus.className = 'status status--err';
+        localStatus.textContent = `توقف تنزيل ${m.label} (${bg.failureReason || 'خطأ'}). حاول مرة أخرى.`;
+        renderModels();
+        return;
+      }
+      showProgress(m.id, Math.min(0.99, f), 'يُنزَّل في الخلفية… يمكنك الخروج من التطبيق.');
+    };
+    bg.addEventListener('progress', onProgress);
+    onProgress();
+  }
 
   async function renderModels() {
-    const rows = await Promise.all(LOCAL_MODELS.map(async (m) => ({ m, ready: await isModelReady(m) })));
-    modelsEl.innerHTML = rows.map(({ m, ready }) => {
+    const rows = await Promise.all(LOCAL_MODELS.map(async (m) => ({
+      m, ready: await isModelReady(m), bg: await backgroundDownload(m), page: inPageDownload(m.id),
+    })));
+    modelsEl.innerHTML = rows.map(({ m, ready, bg, page }) => {
       const blocked = m.engine === 'webllm' && !hasGpu;
-      const busy = busyModels.has(m.id);
+      const busy = !ready && (!!bg || !!page);
       return `
       <li class="model ${m.id === chosen ? 'is-chosen' : ''} ${blocked ? 'is-blocked' : ''}" data-model="${m.id}">
         <label class="switch">
@@ -316,16 +352,45 @@ export async function mount(root) {
           <span><b>${m.label}</b>${m.recommended ? ' <span class="tag">موصى به</span>' : ''}<br>
             <span class="muted">${m.note} التنزيل ~${m.sizeMB >= 1000 ? `${(m.sizeMB / 1000).toFixed(1)} جيجا` : `${m.sizeMB} ميغا`}${m.gpuMB ? ` · يحتاج نحو ${(m.gpuMB / 1000).toFixed(1)} جيجا من ذاكرة كرت الشاشة` : ' · يعمل على المعالج'}.</span></span>
         </label>
-        <div class="progress" ${busy ? '' : 'hidden'}><span></span></div>
+        <div class="progress" ${busy ? '' : 'hidden'}><span style="width:${page ? pct(page.f) : '0%'}"></span></div>
         <p class="muted model__state">${blocked ? 'غير مدعوم على هذا الجهاز.' : ready ? 'مُنزَّل ✓' : busy ? 'جارٍ التنزيل…' : ''}</p>
         <div class="row">
-          ${!ready && !blocked ? `<button class="btn btn--ghost" data-act="dl" ${busy ? 'disabled' : ''}>⬇️ نزّل</button>` : ''}
+          ${!ready && !blocked && !busy ? '<button class="btn btn--ghost" data-act="dl">⬇️ نزّل</button>' : ''}
+          ${bg && !ready ? '<button class="btn btn--ghost" data-act="cancel">إلغاء التنزيل</button>' : ''}
           ${ready ? '<button class="btn btn--ghost" data-act="rm">حذف</button>' : ''}
         </div>
       </li>`;
     }).join('');
+    rows.forEach(({ m, bg, ready }) => { if (bg && !ready) { bgWatch.delete(m.id); watchBackground(m, bg); } });
   }
   await renderModels();
+
+  // تقدّم التنزيل داخل الصفحة يصل إلى هذه الشاشة حتى لو بدأ قبل فتحها
+  const onPageProgress = (e) => showProgress(e.detail.id, e.detail.f, 'جارٍ التنزيل والتجهيز…');
+  const onPageDone = async (e) => {
+    const m = LOCAL_MODELS.find((x) => x.id === e.detail.id);
+    localStatus.className = e.detail.error ? 'status status--err' : 'status status--ok';
+    localStatus.textContent = e.detail.error ? `تعذّر تجهيز ${m.label}: ${e.detail.error.message || e.detail.error}` : `${m.label} جاهز على جهازك ✓`;
+    renderModels();
+  };
+  // عامل الخدمة يخبرنا حين يكتمل التنزيل في الخلفية
+  const onSwMessage = (e) => {
+    if (!/^bgfetch-/.test(e.data?.type || '')) return;
+    const m = LOCAL_MODELS.find((x) => `model:${x.id}` === e.data.id);
+    if (!m) return;
+    bgWatch.delete(m.id);
+    localStatus.className = e.data.type === 'bgfetch-done' ? 'status status--ok' : 'status status--err';
+    localStatus.textContent = e.data.type === 'bgfetch-done' ? `اكتمل تنزيل ${m.label} ✓ سيُجهَّز عند أول استخدام.` : `تعذّر تنزيل ${m.label}. حاول مرة أخرى.`;
+    renderModels();
+  };
+  downloads.addEventListener('progress', onPageProgress);
+  downloads.addEventListener('done', onPageDone);
+  navigator.serviceWorker?.addEventListener('message', onSwMessage);
+  cleanup.push(() => {
+    downloads.removeEventListener('progress', onPageProgress);
+    downloads.removeEventListener('done', onPageDone);
+    navigator.serviceWorker?.removeEventListener('message', onSwMessage);
+  });
 
   modelsEl.addEventListener('change', async (e) => {
     if (e.target.name !== 'local-model') return;
@@ -344,28 +409,32 @@ export async function mount(root) {
       renderModels();
       return;
     }
-    // تنزيل: نختاره تلقائياً إن لم يكن هناك اختيار
-    if (!confirm(`سيُنزَّل ${m.label} (~${m.sizeMB} ميغا). يُفضَّل Wi-Fi. متابعة؟`)) return;
-    busyModels.add(m.id);
-    await renderModels();
-    const row = () => modelsEl.querySelector(`[data-model="${m.id}"]`);
-    try {
-      await prepareModel(m, (f, text) => {
-        const r = row(); if (!r) return;
-        r.querySelector('.progress').hidden = false;
-        r.querySelector('.progress span').style.width = `${Math.round(f * 100)}%`;
-        r.querySelector('.model__state').textContent = `جارٍ التنزيل والتجهيز… ${Math.round(f * 100)}%`;
-      });
-      if (!chosen) { chosen = m.id; await setSetting('localModel', chosen); }
-      localStatus.className = 'status status--ok';
-      localStatus.textContent = `${m.label} جاهز على جهازك ✓`;
-    } catch (err) {
-      localStatus.className = 'status status--err';
-      localStatus.textContent = `تعذّر تجهيز ${m.label}: ${err.message || err}`;
-    } finally {
-      busyModels.delete(m.id);
+    if (act === 'cancel') {
+      await cancelBackgroundDownload(m);
+      bgWatch.delete(m.id);
       renderModels();
+      return;
     }
+    if (!confirm(`سيُنزَّل ${m.label} (~${m.sizeMB} ميغا). يُفضَّل Wi-Fi. متابعة؟`)) return;
+    if (!chosen) { chosen = m.id; await setSetting('localModel', chosen); }
+    localStatus.className = 'status';
+    // الطريقة الأفضل: تنزيل يتولاه المتصفح في الخلفية ويستمر بعد الخروج من التطبيق
+    if (canBackgroundFetch) {
+      try {
+        localStatus.textContent = 'أجهّز قائمة الملفات…';
+        const bg = await startBackgroundDownload(m);
+        localStatus.textContent = 'بدأ التنزيل في الخلفية ✓ ستجد إشعاره في شريط الجوال، ويستمر حتى لو أغلقت التطبيق.';
+        await renderModels();
+        watchBackground(m, bg);
+        return;
+      } catch (err) {
+        localStatus.textContent = `تعذّر التنزيل في الخلفية (${err.message || err})، أنزّله داخل التطبيق بدلاً من ذلك.`;
+      }
+    } else {
+      localStatus.textContent = 'متصفحك لا يدعم التنزيل في الخلفية: أبقِ التطبيق مفتوحاً (يمكنك التنقل بين شاشاته، وسأبقي الشاشة مضاءة).';
+    }
+    downloadInPage(m).catch(() => {});
+    renderModels();
   });
 
   root.querySelector('#local-test').addEventListener('click', async (e) => {
@@ -677,4 +746,5 @@ export async function mount(root) {
 
 export function unmount() {
   stopSpeaking();
+  cleanup.splice(0).forEach((fn) => fn());
 }

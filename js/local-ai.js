@@ -55,8 +55,16 @@ export function webgpuSupported() {
 // WebLLM يعرف بنفسه إن كان النموذج محفوظاً؛ لـ wllama نتذكر ذلك في الإعدادات
 async function readyFlags() { return getSetting('localModelsReady', {}); }
 
+const MODELS_CACHE = 'second-mind-models';
+const BGMAP_CACHE = 'second-mind-bgfetch';
+
+async function cachedBlob(url) {
+  try { const r = await (await caches.open(MODELS_CACHE)).match(url); return r ? r.blob() : null; } catch { return null; }
+}
+
 export async function isModelReady(model) {
   if (!model) return false;
+  if (model.engine === 'wllama' && await cachedBlob(model.url).then((b) => !!b)) return true;
   if (model.engine === 'webllm') {
     try { return await (await import(WEBLLM_URL)).hasModelInCache(model.modelId); } catch { return !!(await readyFlags())[model.id]; }
   }
@@ -98,10 +106,15 @@ export async function prepareModel(model, onProgress) {
     } else {
       const { Wllama } = await import(WLLAMA_URL);
       const engine = new Wllama({ default: WLLAMA_WASM });
-      await engine.loadModelFromUrl(model.url, {
-        n_ctx: 2048,
-        progressCallback: ({ loaded, total }) => onProgress?.(total ? Math.min(0.99, loaded / total) : 0, ''),
-      });
+      // نزّلناه في الخلفية سابقاً؟ نحمّله من المخزن مباشرة
+      const blob = await cachedBlob(model.url);
+      if (blob) await engine.loadModel([blob], { n_ctx: 2048 });
+      else {
+        await engine.loadModelFromUrl(model.url, {
+          n_ctx: 2048,
+          progressCallback: ({ loaded, total }) => onProgress?.(total ? Math.min(0.99, loaded / total) : 0, ''),
+        });
+      }
       active = { model, kind: 'wllama', engine };
     }
     await setSetting('localModelsReady', { ...(await readyFlags()), [model.id]: true });
@@ -114,6 +127,7 @@ export async function prepareModel(model, onProgress) {
 export async function removeModel(model) {
   if (active?.model.id === model.id) await unloadActive();
   try {
+    if (model.engine === 'wllama') await (await caches.open(MODELS_CACHE)).delete(model.url);
     if (model.engine === 'webllm') await (await import(WEBLLM_URL)).deleteModelAllInfoInCache(model.modelId);
     else {
       const mod = await import(WLLAMA_URL);
@@ -176,3 +190,98 @@ async function localChatNow(messages, { onToken, maxTokens = 400, temperature = 
 }
 
 export const activeModelLabel = () => active?.model.label || '';
+
+
+// ======================================================================
+// التنزيل المستمر
+// ======================================================================
+// ١) في الخلفية (Background Fetch، متاح في Chrome على أندرويد): المتصفح نفسه يتولى التنزيل
+//    مع إشعار في شريط الجوال، فيستمر حتى لو خرجت من التطبيق أو أغلقته. عامل الخدمة يحفظ الملفات
+//    في المخازن نفسها التي تقرأ منها المكتبة، فيصبح النموذج جاهزاً دون تنزيل جديد.
+// ٢) بدونها: تنزيل داخل الصفحة، يستمر أثناء التنقل بين شاشات التطبيق، مع إبقاء الشاشة مضاءة.
+
+export const canBackgroundFetch = 'serviceWorker' in navigator && 'BackgroundFetchManager' in self;
+const bgId = (model) => `model:${model.id}`;
+
+// كل ملفات النموذج ومخزن كل منها (بنفس أسماء مخازن WebLLM ومفاتيحها)
+async function filesFor(model) {
+  if (model.engine === 'wllama') return [{ url: model.url, cache: MODELS_CACHE, size: model.sizeMB * 1e6 }];
+  const webllm = await import(WEBLLM_URL);
+  const rec = webllm.prebuiltAppConfig.model_list.find((m) => m.model_id === model.modelId);
+  if (!rec) throw new LocalAIError('النموذج غير موجود في قائمة المكتبة.', 'NO_MODEL');
+  let base = rec.model.endsWith('/') ? rec.model : `${rec.model}/`;
+  if (!/\/resolve\/.+\//.test(base)) base += 'resolve/main/';
+  const configUrl = new URL('mlc-chat-config.json', base).href;
+  const tensorUrl = new URL('tensor-cache.json', base).href;
+  const [config, tensors] = await Promise.all([
+    fetch(configUrl).then((r) => { if (!r.ok) throw new Error(`config ${r.status}`); return r.json(); }),
+    fetch(tensorUrl).then((r) => { if (!r.ok) throw new Error(`tensors ${r.status}`); return r.json(); }),
+  ]);
+  const files = [
+    { url: configUrl, cache: 'webllm/config', size: 4e3 },
+    { url: tensorUrl, cache: 'webllm/model', size: 6e4 },
+    ...(rec.model_manifest ? [{ url: new URL(rec.model_manifest, base).href, cache: 'webllm/config', size: 4e3 }] : []),
+    ...(config.tokenizer_files || []).map((f) => ({ url: new URL(f, base).href, cache: 'webllm/model', size: 4e6 })),
+    ...tensors.records.map((r) => ({ url: new URL(r.dataPath, base).href, cache: 'webllm/model', size: r.nbytes || 3e7 })),
+    { url: rec.model_lib, cache: 'webllm/wasm', size: 6e6 },
+  ];
+  return files;
+}
+
+// يبدأ التنزيل في الخلفية. يعيد كائن التسجيل (له أحداث progress)
+export async function startBackgroundDownload(model) {
+  const reg = await navigator.serviceWorker.ready;
+  const existing = await reg.backgroundFetch.get(bgId(model));
+  if (existing) return existing;
+  const files = await filesFor(model);
+  // خريطة "رابط ← مخزن" يقرؤها عامل الخدمة عند الاكتمال
+  await (await caches.open(BGMAP_CACHE)).put(`./__bgmap/${bgId(model)}`,
+    new Response(JSON.stringify(Object.fromEntries(files.map((f) => [f.url, f.cache]))), { headers: { 'Content-Type': 'application/json' } }));
+  return reg.backgroundFetch.fetch(bgId(model), files.map((f) => f.url), {
+    title: `تنزيل ${model.label} لعقلي الثاني`,
+    icons: [{ src: 'icons/icon-192.png', sizes: '192x192', type: 'image/png' }],
+    downloadTotal: Math.round(files.reduce((n, f) => n + f.size, 0)),
+  });
+}
+
+// تنزيل جارٍ في الخلفية لهذا النموذج؟
+export async function backgroundDownload(model) {
+  if (!canBackgroundFetch) return null;
+  try { return await (await navigator.serviceWorker.ready).backgroundFetch.get(bgId(model)); } catch { return null; }
+}
+
+export async function cancelBackgroundDownload(model) {
+  const bg = await backgroundDownload(model);
+  if (bg) await bg.abort();
+}
+
+// ---- التنزيل داخل الصفحة (البديل)، بحالة مشتركة تبقى أثناء التنقل بين الشاشات ----
+export const downloads = new EventTarget(); // أحداث: progress { id, f, text } و done { id, error? }
+const inPage = new Map(); // id ← { f, promise }
+
+export const inPageDownload = (id) => inPage.get(id) || null;
+
+export function downloadInPage(model) {
+  if (inPage.has(model.id)) return inPage.get(model.id).promise;
+  const state = { f: 0, promise: null };
+  inPage.set(model.id, state);
+  let lock = null;
+  state.promise = (async () => {
+    // نبقي الشاشة مضاءة حتى لا يتوقف التنزيل حين ينطفئ الجوال
+    try { lock = await navigator.wakeLock?.request('screen'); } catch { /* غير مدعوم */ }
+    try {
+      await prepareModel(model, (f, text) => {
+        state.f = f;
+        downloads.dispatchEvent(new CustomEvent('progress', { detail: { id: model.id, f, text } }));
+      });
+      downloads.dispatchEvent(new CustomEvent('done', { detail: { id: model.id } }));
+    } catch (error) {
+      downloads.dispatchEvent(new CustomEvent('done', { detail: { id: model.id, error } }));
+      throw error;
+    } finally {
+      inPage.delete(model.id);
+      lock?.release?.().catch(() => {});
+    }
+  })();
+  return state.promise;
+}

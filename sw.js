@@ -1,7 +1,7 @@
 // عامل الخدمة: يجعل التطبيق يعمل دون اتصال.
 // ملفات التطبيق: الشبكة أولاً (لتصلك آخر نسخة فوراً)، والمخزّن عند انقطاع الاتصال.
 // الخطوط: المخزّن أولاً. طلبات Gemini لا تمر عبر المخزّن أبداً.
-const CACHE = 'second-mind-v34';
+const CACHE = 'second-mind-v35';
 const ASSETS = [
   './',
   './index.html',
@@ -44,7 +44,8 @@ self.addEventListener('install', (e) => {
 
 self.addEventListener('activate', (e) => {
   e.waitUntil(
-    caches.keys().then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k))))
+    // نحذف نسخ واجهة التطبيق القديمة فقط؛ مخازن النماذج والأصوات (webllm/*، second-mind-piper، ...) تبقى
+    caches.keys().then((keys) => Promise.all(keys.filter((k) => /^second-mind-v\d+$/.test(k) && k !== CACHE).map((k) => caches.delete(k))))
   );
   self.clients.claim();
 });
@@ -78,4 +79,33 @@ self.addEventListener('fetch', (e) => {
   if (/(^|\.)fonts\.(googleapis|gstatic)\.com$/.test(url.hostname)) return e.respondWith(cacheFirst(e.request));
   // مكوّنات صوت Piper من jsDelivr: روابطها بإصدارات ثابتة لا تتغير، فنحفظها ليعمل الصوت دون إنترنت
   if (url.hostname === 'cdn.jsdelivr.net' && /@\d/.test(url.pathname)) return e.respondWith(cacheFirst(e.request));
+});
+
+// ---- التنزيل في الخلفية (نماذج الذكاء): يستمر حتى لو أُغلق التطبيق ----
+// عند الاكتمال نحفظ كل ملف في المخزن الذي تقرأ منه مكتبته (حسب خريطة يتركها التطبيق)
+self.addEventListener('backgroundfetchsuccess', (event) => {
+  event.waitUntil((async () => {
+    const reg = event.registration;
+    const mapRes = await (await caches.open('second-mind-bgfetch')).match(`./__bgmap/${reg.id}`);
+    const map = mapRes ? await mapRes.json() : {};
+    for (const rec of await reg.matchAll()) {
+      const res = await rec.responseReady;
+      if (!res || !res.ok) continue;
+      await (await caches.open(map[rec.request.url] || 'webllm/model')).put(rec.request.url, res);
+    }
+    await (await caches.open('second-mind-bgfetch')).delete(`./__bgmap/${reg.id}`);
+    try { await event.updateUI({ title: 'اكتمل تنزيل الذكاء ✓ جاهز للعمل دون إنترنت' }); } catch { /* لا شيء */ }
+    for (const c of await self.clients.matchAll({ includeUncontrolled: true })) c.postMessage({ type: 'bgfetch-done', id: reg.id });
+  })());
+});
+
+self.addEventListener('backgroundfetchfail', (event) => {
+  event.waitUntil((async () => {
+    try { await event.updateUI({ title: 'تعذّر تنزيل الذكاء، افتح التطبيق لتحاول مجدداً' }); } catch { /* لا شيء */ }
+    for (const c of await self.clients.matchAll({ includeUncontrolled: true })) c.postMessage({ type: 'bgfetch-fail', id: event.registration.id });
+  })());
+});
+
+self.addEventListener('backgroundfetchclick', (event) => {
+  event.waitUntil(self.clients.openWindow('./#/settings?local'));
 });
