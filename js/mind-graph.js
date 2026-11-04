@@ -1,4 +1,5 @@
 // رسم الكرات المترابطة بفيزياء بسيطة: تطفو بحرية، تُسحب باللمس، وتتصل بخطوط بيضاء.
+// المشهد يُكبَّر ويُصغَّر بإصبعين (أو بعجلة الفأرة)، ويُحرَّك بإصبع على الفراغ.
 // nodes: [{ id, label, color, weight, fixedR? }]
 // links: [{ a, b, w }]  حيث w بين 0 و1 (قوة الرابط: سماكة الخط ووضوحه وقِصره)
 export function createMindGraph(canvas, nodesIn, linksIn, { onTap } = {}) {
@@ -42,52 +43,151 @@ export function createMindGraph(canvas, nodesIn, linksIn, { onTap } = {}) {
   resize();
   nodes.forEach((n) => { n.x += W / 2; n.y += H / 2; });
 
-  // ---- السحب واللمس ----
-  let drag = null;
+  // ---- العرض: تكبير وتصغير وتحريك المشهد ----
+  // view: إحداثيات الشاشة = إحداثيات المشهد × s + (x, y)
+  const MIN_S = 0.4, MAX_S = 3;
+  const view = { s: 1, x: 0, y: 0 };
+  let viewAnim = null; // لحركة سلسة عند أزرار التكبير والرجوع
+  const clampS = (v) => Math.min(MAX_S, Math.max(MIN_S, v));
+  const toWorld = (p) => ({ x: (p.x - view.x) / view.s, y: (p.y - view.y) / view.s });
+  // تكبير حول نقطة على الشاشة (تبقى النقطة تحت الإصبع أو المؤشر في مكانها)
+  function zoomAt(px, py, s2) {
+    s2 = clampS(s2);
+    const wx = (px - view.x) / view.s, wy = (py - view.y) / view.s;
+    view.s = s2;
+    view.x = px - wx * s2;
+    view.y = py - wy * s2;
+  }
+  function animateTo(target) {
+    const from = { ...view }, t0 = performance.now();
+    viewAnim = (now) => {
+      const k = Math.min(1, (now - t0) / 250), e = 1 - (1 - k) ** 3;
+      view.s = from.s + (target.s - from.s) * e;
+      view.x = from.x + (target.x - from.x) * e;
+      view.y = from.y + (target.y - from.y) * e;
+      if (k >= 1) viewAnim = null;
+    };
+  }
+
+  // ---- اللمس: إصبع على كرة يسحبها، على الفراغ يحرّك المشهد، وإصبعان للتكبير والتصغير ----
+  const pointers = new Map(); // معرّف الإصبع ← موضعه على الشاشة
+  let drag = null;   // سحب كرة
+  let pan = null;    // تحريك المشهد
+  let pinch = null;  // إصبعان
   const pointerPos = (e) => {
     const rect = canvas.getBoundingClientRect();
     return { x: e.clientX - rect.left, y: e.clientY - rect.top };
   };
-  const hitTest = (p) => [...nodes].reverse().find((n) => Math.hypot(n.x - p.x, n.y - p.y) <= n.r + 10);
+  const hitTest = (w) => [...nodes].reverse().find((n) => Math.hypot(n.x - w.x, n.y - w.y) <= n.r + 10 / view.s);
+  const pair = () => {
+    const [a, b] = [...pointers.values()];
+    return { mid: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }, dist: Math.hypot(a.x - b.x, a.y - b.y) || 1 };
+  };
+  const startPan = (p, slop) => { pan = { sx: p.x, sy: p.y, vx: view.x, vy: view.y, moved: false, slop }; };
 
   function onDown(e) {
     const p = pointerPos(e);
-    const hit = hitTest(p);
-    if (!hit) return;
-    // الإصبع يهتز أكثر من الفأرة، فنتسامح معه أكثر قبل اعتبار اللمسة سحباً
-    const slop = e.pointerType === 'mouse' ? 6 : 16;
-    drag = { node: hit, startX: p.x, startY: p.y, lastX: p.x, lastY: p.y, t: performance.now(), t0: performance.now(), moved: false, slop };
+    pointers.set(e.pointerId, p);
     canvas.setPointerCapture(e.pointerId);
     e.preventDefault();
-  }
-  function onMove(e) {
-    if (!drag) {
-      canvas.style.cursor = hitTest(pointerPos(e)) ? 'pointer' : 'default';
+    viewAnim = null;
+    // الإصبع يهتز أكثر من الفأرة، فنتسامح معه أكثر قبل اعتبار اللمسة سحباً
+    const slop = e.pointerType === 'mouse' ? 6 : 16;
+    if (pointers.size === 2) {
+      // إصبع ثانٍ: نلغي السحب ونبدأ التكبير/التصغير
+      drag = null; pan = null;
+      const { mid, dist } = pair();
+      pinch = { mid0: mid, d0: dist, s0: view.s, wx: (mid.x - view.x) / view.s, wy: (mid.y - view.y) / view.s };
       return;
     }
+    if (pointers.size > 2) return;
+    const w = toWorld(p);
+    const hit = hitTest(w);
+    if (hit) {
+      drag = { node: hit, startX: p.x, startY: p.y, lastX: w.x, lastY: w.y, t: performance.now(), moved: false, slop };
+    } else {
+      startPan(p, slop);
+    }
+  }
+
+  function onMove(e) {
     const p = pointerPos(e);
+    if (!pointers.has(e.pointerId)) {
+      canvas.style.cursor = hitTest(toWorld(p)) ? 'pointer' : 'grab';
+      return;
+    }
+    pointers.set(e.pointerId, p);
+    if (pinch && pointers.size >= 2) {
+      const { mid, dist } = pair();
+      view.s = clampS(pinch.s0 * dist / pinch.d0);
+      view.x = mid.x - pinch.wx * view.s;
+      view.y = mid.y - pinch.wy * view.s;
+      return;
+    }
+    if (pan) {
+      if (!pan.moved && Math.hypot(p.x - pan.sx, p.y - pan.sy) > pan.slop) pan.moved = true;
+      if (pan.moved) {
+        view.x = pan.vx + (p.x - pan.sx);
+        view.y = pan.vy + (p.y - pan.sy);
+        canvas.style.cursor = 'grabbing';
+      }
+      return;
+    }
+    if (!drag) return;
     if (Math.hypot(p.x - drag.startX, p.y - drag.startY) > drag.slop) drag.moved = true;
     if (!drag.moved) return;
+    const w = toWorld(p);
     const now = performance.now();
     const dt = Math.max(16, now - drag.t);
-    drag.node.vx = ((p.x - drag.lastX) / dt) * 16;
-    drag.node.vy = ((p.y - drag.lastY) / dt) * 16;
-    drag.node.x = p.x; drag.node.y = p.y;
-    drag.lastX = p.x; drag.lastY = p.y; drag.t = now;
+    drag.node.vx = ((w.x - drag.lastX) / dt) * 16;
+    drag.node.vy = ((w.y - drag.lastY) / dt) * 16;
+    drag.node.x = w.x; drag.node.y = w.y;
+    drag.lastX = w.x; drag.lastY = w.y; drag.t = now;
   }
-  function onUp() {
+
+  function onUp(e) {
+    pointers.delete(e.pointerId);
+    if (pinch) {
+      // انتهى التكبير؛ إن بقي إصبع واحد نكمل به تحريك المشهد بسلاسة
+      pinch = null;
+      if (pointers.size === 1) { startPan([...pointers.values()][0], 0); pan.moved = true; }
+      return;
+    }
     if (drag && !drag.moved) {
       drag.node.pop = 1; // نبضة صغيرة عند اللمس
       onTap?.(drag.node);
     }
     drag = null;
+    pan = null;
+    canvas.style.cursor = 'grab';
+  }
+  const onCancel = (e) => { pointers.delete(e.pointerId); drag = null; pan = null; pinch = null; };
+
+  // عجلة الفأرة (وإيماءة لوحة اللمس) على الكمبيوتر
+  function onWheel(e) {
+    e.preventDefault();
+    viewAnim = null;
+    const p = pointerPos(e);
+    zoomAt(p.x, p.y, view.s * Math.exp(-e.deltaY * 0.0015));
+  }
+  // نقرتان على الفراغ: تكبير، أو رجوع للوضع الأصلي إن كان مكبّراً
+  function onDbl(e) {
+    const p = pointerPos(e);
+    if (hitTest(toWorld(p))) return;
+    if (view.s > 1.05) animateTo({ s: 1, x: 0, y: 0 });
+    else {
+      const s2 = 2, wx = (p.x - view.x) / view.s, wy = (p.y - view.y) / view.s;
+      animateTo({ s: s2, x: p.x - wx * s2, y: p.y - wy * s2 });
+    }
   }
   canvas.addEventListener('pointerdown', onDown);
   canvas.addEventListener('pointermove', onMove);
   canvas.addEventListener('pointerup', onUp);
-  const onCancel = () => { drag = null; };
   canvas.addEventListener('pointercancel', onCancel);
+  canvas.addEventListener('wheel', onWheel, { passive: false });
+  canvas.addEventListener('dblclick', onDbl);
   window.addEventListener('resize', resize);
+  canvas.style.cursor = 'grab';
 
   // ---- الفيزياء ----
   function step(t) {
@@ -133,7 +233,9 @@ export function createMindGraph(canvas, nodesIn, linksIn, { onTap } = {}) {
   }
 
   function draw() {
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, W, H);
+    ctx.setTransform(dpr * view.s, 0, 0, dpr * view.s, dpr * view.x, dpr * view.y);
     for (const { a, b, w } of edges) {
       ctx.strokeStyle = `rgba(255,255,255,${(0.35 + 0.55 * w).toFixed(2)})`;
       ctx.lineWidth = 1 + 2.5 * w;
@@ -161,12 +263,20 @@ export function createMindGraph(canvas, nodesIn, linksIn, { onTap } = {}) {
   }
 
   let raf = 0;
-  const loop = (t) => { step(t); draw(); raf = requestAnimationFrame(loop); };
+  const loop = (t) => { viewAnim?.(t); step(t); draw(); raf = requestAnimationFrame(loop); };
   raf = requestAnimationFrame(loop);
 
   return {
     update: setData,
     nodes,
+    // أزرار التحكم: تكبير/تصغير حول منتصف اللوحة، والرجوع للوضع الأصلي
+    zoomBy(f) {
+      const cx = W / 2, cy = H / 2, s2 = clampS(view.s * f);
+      const wx = (cx - view.x) / view.s, wy = (cy - view.y) / view.s;
+      animateTo({ s: s2, x: cx - wx * s2, y: cy - wy * s2 });
+    },
+    resetView() { animateTo({ s: 1, x: 0, y: 0 }); },
+    get scale() { return view.s; },
     destroy() {
       cancelAnimationFrame(raf);
       window.removeEventListener('resize', resize);
@@ -174,6 +284,8 @@ export function createMindGraph(canvas, nodesIn, linksIn, { onTap } = {}) {
       canvas.removeEventListener('pointermove', onMove);
       canvas.removeEventListener('pointerup', onUp);
       canvas.removeEventListener('pointercancel', onCancel);
+      canvas.removeEventListener('wheel', onWheel);
+      canvas.removeEventListener('dblclick', onDbl);
     },
   };
 }

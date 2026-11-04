@@ -67,7 +67,14 @@ export async function mount(root) {
       <p class="mind-hint muted" id="hint"></p>
       <button class="tool" id="add-cat">＋ قسم جديد</button>
     </div>
-    <canvas class="mind-canvas" aria-label="خريطة أقسام عقلك"></canvas>
+    <div class="mind-stage">
+      <canvas class="mind-canvas" aria-label="خريطة أقسام عقلك. قرّب إصبعين أو باعدهما للتصغير والتكبير"></canvas>
+      <div class="zoom-ctrl" role="group" aria-label="التكبير">
+        <button type="button" data-zoom="in" aria-label="تكبير">＋</button>
+        <button type="button" data-zoom="out" aria-label="تصغير">－</button>
+        <button type="button" data-zoom="reset" aria-label="الوضع الأصلي">⟲</button>
+      </div>
+    </div>
 
     <div class="sheet" id="sheet" hidden>
       <div class="sheet__panel sheet__panel--tall" role="dialog" aria-labelledby="sheet-title">
@@ -124,7 +131,7 @@ export async function mount(root) {
 
   const setHint = () => {
     hint.textContent = model.total
-      ? 'المس كرة لترى ملاحظاتها · اسحبها لتحركها'
+      ? 'المس كرة لترى ملاحظاتها · بإصبعين كبّر وصغّر'
       : 'تحدّث مع الرفيقة، وستكبر الكرات مع كل ما تقوله.';
   };
   setHint();
@@ -145,6 +152,13 @@ export async function mount(root) {
     });
   }
   buildGraph();
+
+  root.querySelector('.zoom-ctrl').addEventListener('click', (e) => {
+    const z = e.target.closest('[data-zoom]')?.dataset.zoom;
+    if (z === 'in') graph.zoomBy(1.35);
+    else if (z === 'out') graph.zoomBy(1 / 1.35);
+    else if (z === 'reset') graph.resetView();
+  });
 
   async function refresh() {
     entries = await getEntries();
