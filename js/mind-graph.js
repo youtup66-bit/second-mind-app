@@ -2,7 +2,7 @@
 // المشهد يُكبَّر ويُصغَّر بإصبعين (أو بعجلة الفأرة)، ويُحرَّك بإصبع على الفراغ.
 // nodes: [{ id, label, color, weight, fixedR? }]
 // links: [{ a, b, w }]  حيث w بين 0 و1 (قوة الرابط: سماكة الخط ووضوحه وقِصره)
-export function createMindGraph(canvas, nodesIn, linksIn, { onTap, groups: groupsIn = {} } = {}) {
+export function createMindGraph(canvas, nodesIn, linksIn, { onTap, onGroupTap, groups: groupsIn = {}, groupLabels = {} } = {}) {
   const ctx = canvas.getContext('2d');
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
   let W = 0, H = 0;
@@ -24,6 +24,7 @@ export function createMindGraph(canvas, nodesIn, linksIn, { onTap, groups: group
 
   // groups: { معرّف الكرة: رقم مجموعتها } للكرات المترابطة؛ الكرات بلا مجموعة تبقى منفردة
   let groups = [];
+  let labels = { ...groupLabels }; // رقم المجموعة ← اسمها
   function setData(weights, links, groupMap) {
     if (weights) nodes.forEach((n) => { if (n.id in weights) n.weight = weights[n.id]; });
     const maxW = Math.max(1, ...nodes.map((n) => n.weight || 0));
@@ -89,6 +90,7 @@ export function createMindGraph(canvas, nodesIn, linksIn, { onTap, groups: group
     return { x: e.clientX - rect.left, y: e.clientY - rect.top };
   };
   const hitTest = (w) => [...nodes].reverse().find((n) => Math.hypot(n.x - w.x, n.y - w.y) <= n.r + 10 / view.s);
+  const groupAt = (w) => groups.find((g) => g.box && w.x >= g.box.x - 4 && w.x <= g.box.x + g.box.w + 4 && w.y >= g.box.y - 4 && w.y <= g.box.y + g.box.h + 4) || null;
   const pair = () => {
     const [a, b] = [...pointers.values()];
     return { mid: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }, dist: Math.hypot(a.x - b.x, a.y - b.y) || 1 };
@@ -112,11 +114,14 @@ export function createMindGraph(canvas, nodesIn, linksIn, { onTap, groups: group
     }
     if (pointers.size > 2) return;
     const w = toWorld(p);
-    const hit = hitTest(w);
+    // اسم المجموعة له الأولوية: يقع فوق أعلى كرة مباشرة، ومنطقة لمس الكرة تمتد قليلاً حولها
+    const label = groupAt(w);
+    const hit = label ? null : hitTest(w);
     if (hit) {
       drag = { node: hit, startX: p.x, startY: p.y, lastX: w.x, lastY: w.y, t: performance.now(), moved: false, slop };
     } else {
       startPan(p, slop);
+      pan.label = label; // إن لم يتحرك الإصبع نعتبرها لمسة على الاسم
     }
   }
 
@@ -166,6 +171,10 @@ export function createMindGraph(canvas, nodesIn, linksIn, { onTap, groups: group
     if (drag && !drag.moved) {
       drag.node.pop = 1; // نبضة صغيرة عند اللمس
       onTap?.(drag.node);
+    }
+    if (pan && !pan.moved && pan.label) {
+      const g = pan.label;
+      onGroupTap?.({ id: g.id, name: labels[g.id] || '', members: g.members.map((n) => n.id) });
     }
     drag = null;
     pan = null;
@@ -283,6 +292,33 @@ export function createMindGraph(canvas, nodesIn, linksIn, { onTap, groups: group
       grad.addColorStop(1, `rgba(${col},0)`);
       ctx.fillStyle = grad;
       ctx.beginPath(); ctx.arc(g.cx, g.cy, rad, 0, Math.PI * 2); ctx.fill();
+      g.rad = rad;
+      g.col = col;
+    }
+  }
+
+  // اسم المجموعة: شارة صغيرة أعلى هالتها (تُرسم فوق الخطوط والكرات لتبقى مقروءة)
+  function drawGroupLabels() {
+    ctx.font = '700 12px Tajawal, system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    for (const g of groups) {
+      const name = labels[g.id];
+      if (!name || g.cx == null) { g.box = null; continue; }
+      const w = ctx.measureText(name).width + 18, h = 22;
+      // فوق أعلى كرة في المجموعة، ولا تخرج عن حدود اللوحة
+      const top = Math.min(...g.members.map((n) => n.y - n.r));
+      const x = Math.min(W - w / 2 - 4, Math.max(w / 2 + 4, g.cx));
+      const y = Math.max(h / 2 + 4, top - 18);
+      g.box = { x: x - w / 2, y: y - h / 2, w, h };
+      ctx.fillStyle = `rgba(${g.col},0.28)`;
+      ctx.strokeStyle = `rgba(${g.col},0.75)`;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.roundRect ? ctx.roundRect(g.box.x, g.box.y, w, h, 11) : ctx.rect(g.box.x, g.box.y, w, h);
+      ctx.fill(); ctx.stroke();
+      ctx.fillStyle = '#fff';
+      ctx.fillText(name, x, y + 1);
     }
   }
 
@@ -316,13 +352,14 @@ export function createMindGraph(canvas, nodesIn, linksIn, { onTap, groups: group
       ctx.fillText(n.label, n.x, n.y + r + 4);
       ctx.globalAlpha = 1;
     }
+    drawGroupLabels();
   }
 
   let raf = 0;
   const loop = (t) => { viewAnim?.(t); step(t); draw(); raf = requestAnimationFrame(loop); };
   raf = requestAnimationFrame(loop);
 
-  return {
+  const api = {
     update: setData,
     nodes,
     // أزرار التحكم: تكبير/تصغير حول منتصف اللوحة، والرجوع للوضع الأصلي
@@ -332,6 +369,14 @@ export function createMindGraph(canvas, nodesIn, linksIn, { onTap, groups: group
       animateTo({ s: s2, x: cx - wx * s2, y: cy - wy * s2 });
     },
     resetView() { animateTo({ s: 1, x: 0, y: 0 }); },
+    setGroupLabels(map) { labels = { ...map }; },
+    // مواضع أسماء المجموعات على الشاشة (للاختبار وإمكانية الوصول)
+    groupBoxes() {
+      return groups.filter((g) => g.box).map((g) => ({
+        id: g.id, name: labels[g.id],
+        x: g.box.x * view.s + view.x + g.box.w * view.s / 2, y: g.box.y * view.s + view.y + g.box.h * view.s / 2,
+      }));
+    },
     get scale() { return view.s; },
     destroy() {
       cancelAnimationFrame(raf);
@@ -344,6 +389,8 @@ export function createMindGraph(canvas, nodesIn, linksIn, { onTap, groups: group
       canvas.removeEventListener('dblclick', onDbl);
     },
   };
+  canvas.mindGraph = api;
+  return api;
 }
 
 function shade(hex, amt) {

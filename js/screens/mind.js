@@ -7,7 +7,8 @@ import {
   CATEGORIES, categoryById, isCustom, PALETTE, SUGGESTED, MAX_CUSTOM,
   addCategory, updateCategory, removeCategory,
 } from '../categories.js';
-import { getEntries } from '../storage.js';
+import { getEntries, getSetting, setSetting } from '../storage.js';
+import { nameGroup } from '../gemini.js';
 import { createMindGraph } from '../mind-graph.js';
 import { noteHTML, bindNoteActions, esc } from '../notes-view.js';
 import { createSummary, summaryHTML } from '../summaries.js';
@@ -22,6 +23,23 @@ const SESSION_GAP = 45 * 60 * 1000; // ملاحظتان بينهما أقل من
 const GHOST_CLICK_MS = 500;
 
 let graph = null;
+
+// ---- أسماء المجموعات ----
+// تُحفظ حسب أعضاء المجموعة (مثلاً "task+worry")، فيبقى الاسم ما دامت المجموعة نفسها.
+// by: 'ai' (اقترحه Gemini) أو 'user' (كتبه المستخدم، ولا يُستبدل).
+const groupSig = (members) => [...members].sort().join('+');
+
+function groupList(groupMap) {
+  const byNum = {};
+  for (const [id, num] of Object.entries(groupMap)) (byNum[num] ||= []).push(id);
+  return Object.entries(byNum).map(([num, members]) => ({ num: Number(num), members, sig: groupSig(members) }));
+}
+
+// اسم فوري من أسماء أكبر قسمين في المجموعة
+function autoName(members, weights) {
+  const top = [...members].sort((a, b) => (weights[b] || 0) - (weights[a] || 0)).map((id) => categoryById(id)?.label).filter(Boolean);
+  return top.length > 2 ? `${top[0]} و${top[1]}…` : top.join(' و');
+}
 
 // يحسب الأوزان والروابط من الملاحظات
 function buildModel(entries) {
@@ -165,7 +183,7 @@ export async function mount(root) {
 
   const setHint = () => {
     hint.textContent = model.total
-      ? 'المس كرة لترى ملاحظاتها · بإصبعين كبّر وصغّر'
+      ? 'المس كرة لترى ملاحظاتها، أو اسم مجموعة لتغييره · بإصبعين كبّر وصغّر'
       : 'تحدّث مع الرفيقة، وستكبر الكرات مع كل ما تقوله.';
   };
   setHint();
@@ -183,10 +201,58 @@ export async function mount(root) {
     ];
     graph = createMindGraph(canvas, nodes, model.links, {
       groups: model.groups,
+      groupLabels: labelsFor(model),
       onTap: (n) => { if (n.id !== 'me') openSheet(n.id); },
+      onGroupTap: renameGroup,
     });
   }
+
+  let savedNames = await getSetting('groupNames', {});
+  function labelsFor(m) {
+    const out = {};
+    for (const g of groupList(m.groups)) out[g.num] = savedNames[g.sig]?.name || autoName(g.members, m.weights);
+    return out;
+  }
+  const refreshLabels = () => graph?.setGroupLabels(labelsFor(model));
+
+  // يطلب من Gemini اسماً للمجموعات التي ليس لها اسم محفوظ (مرة واحدة لكل مجموعة)
+  let naming = false;
+  async function nameNewGroups() {
+    if (naming || !(await getSetting('geminiApiKey', ''))) return;
+    naming = true;
+    try {
+      for (const g of groupList(model.groups)) {
+        if (savedNames[g.sig]) continue;
+        const members = g.members.map((id) => ({
+          label: categoryById(id)?.label || id,
+          titles: entries.filter((e) => e.category === id).slice(0, 3).map((e) => e.meta?.title || e.text.slice(0, 30)),
+        }));
+        let name = '';
+        try { name = await nameGroup(members); } catch { break; } // بلا اتصال أو نفدت الحصة: نكتفي بالاسم الفوري
+        if (!name) continue;
+        savedNames = { ...(await getSetting('groupNames', {})), [g.sig]: { name, by: 'ai' } };
+        await setSetting('groupNames', savedNames);
+        refreshLabels();
+      }
+    } finally {
+      naming = false;
+    }
+  }
+
+  async function renameGroup({ members, name }) {
+    const sig = groupSig(members);
+    const next = prompt('اسم هذه المجموعة (اتركه فارغاً لتعود إلى الاسم التلقائي):', name);
+    if (next === null) return;
+    savedNames = { ...(await getSetting('groupNames', {})) };
+    if (next.trim()) savedNames[sig] = { name: next.trim().slice(0, 28), by: 'user' };
+    else delete savedNames[sig];
+    await setSetting('groupNames', savedNames);
+    refreshLabels();
+    hint.textContent = next.trim() ? 'غيّرتُ اسم المجموعة ✓' : 'عاد اسم المجموعة إلى التلقائي.';
+  }
+
   buildGraph();
+  nameNewGroups();
 
   root.querySelector('.zoom-ctrl').addEventListener('click', (e) => {
     const z = e.target.closest('[data-zoom]')?.dataset.zoom;
@@ -199,6 +265,8 @@ export async function mount(root) {
     entries = await getEntries();
     model = buildModel(entries);
     graph.update(model.weights, model.links, model.groups);
+    refreshLabels();
+    nameNewGroups();
     setHint();
     if (openCat) renderNotes();
   }
@@ -208,6 +276,7 @@ export async function mount(root) {
     entries = await getEntries();
     model = buildModel(entries);
     buildGraph();
+    nameNewGroups();
     setHint();
   }
 

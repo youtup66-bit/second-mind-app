@@ -420,6 +420,29 @@ async function ttsRequest(text, { voice, style }) {
   return { samples: new Int16Array(bytes.buffer, 0, bytes.length >> 1), rate };
 }
 
+// ---- اسم لمجموعة أقسام مترابطة ----
+// members: [{ label, titles: [..] }]. يعيد اسماً قصيراً يصف ما يجمعها.
+export async function nameGroup(members) {
+  const raw = await generate({
+    systemInstruction: { parts: [{ text: `أنت تسمّي مجموعات من أقسام مذكرات شخصية بالعربية.
+هذه أقسام يتحدث عنها صاحبها معاً كثيراً. أعطِ المجموعة اسماً قصيراً (كلمة إلى ثلاث كلمات) يصف الموضوع المشترك الذي يجمعها في حياته،
+مستعيناً بعناوين ملاحظاته. لا تكرر أسماء الأقسام حرفياً إن أمكن، ولا تضع علامات ترقيم أو رموزاً.` }] },
+    contents: [{ role: 'user', parts: [{ text: members.map((m) => `- ${m.label}${m.titles.length ? `: ${m.titles.join('، ')}` : ''}`).join('\n') }] }],
+    generationConfig: {
+      temperature: 0.4,
+      maxOutputTokens: 512,
+      responseMimeType: 'application/json',
+      responseSchema: { type: 'OBJECT', properties: { name: { type: 'STRING' } }, required: ['name'] },
+    },
+  }, 'classify');
+  try {
+    const name = String(JSON.parse(raw.replace(/^```(?:json)?\s*|\s*```$/g, '')).name || '').replace(/["«».،]/g, '').trim();
+    return name.slice(0, 28);
+  } catch {
+    return '';
+  }
+}
+
 // ---- البحث في الملاحظات القديمة عمّا يناسب قسماً جديداً ----
 // notes: [{ key, text }] (key رمز قصير توفيراً للحصة). يعيد مفاتيح الملاحظات المناسبة.
 export async function matchNotes(category, notes) {
