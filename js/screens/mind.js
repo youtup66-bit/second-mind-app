@@ -146,6 +146,12 @@ export async function mount(root) {
         <button type="button" data-zoom="out" aria-label="تصغير">－</button>
         <button type="button" data-zoom="reset" aria-label="ملاءمة الشاشة">⟲</button>
         <button type="button" data-zoom="mode" aria-label="التبديل بين الحرارة والحجم" title="الحرارة / الحجم">🌡</button>
+        <button type="button" data-zoom="space" aria-label="المسافة بين الكرات" title="المسافة بين الكرات">↔</button>
+      </div>
+      <div class="space-ctrl" id="space-ctrl" hidden>
+        <label for="spacing">المسافة بين الكرات</label>
+        <input type="range" id="spacing" min="0.7" max="2.2" step="0.1">
+        <span id="spacing-val"></span>
       </div>
       <div class="heat-legend" id="heat-legend" hidden>
         <span id="heat-min"></span>
@@ -233,6 +239,7 @@ export async function mount(root) {
       ...visible.map((c) => ({ id: c.id, label: c.label, color: c.color, weight: model.weights[c.id] || 0, ...styleFor(c) })),
     ];
     graph = createMindGraph(canvas, nodes, model.links, {
+      spacing,
       groups: model.groups,
       groupLabels: labelsFor(model),
       onTap: (n) => { if (n.id !== 'me') openSheet(n.id); },
@@ -244,17 +251,29 @@ export async function mount(root) {
 
   // ---- وضع العرض: الحرارة (اللون حسب العدد، والحجم ثابت) أو الحجم (الأصلي) ----
   let colorMode = await getSetting('mindColorMode', 'heat');
+
+  // ---- المسافة بين الكرات ----
+  let spacing = Number(await getSetting('mindSpacing', 1)) || 1;
+  const spaceCtrl = root.querySelector('#space-ctrl');
+  const spaceIn = root.querySelector('#spacing');
+  const spaceVal = () => { root.querySelector('#spacing-val').textContent = `×${spacing.toFixed(1)}`; };
+  spaceIn.value = spacing;
+  spaceVal();
+  spaceIn.addEventListener('input', () => { spacing = Number(spaceIn.value); spaceVal(); graph.setSpacing(spacing); });
+  spaceIn.addEventListener('change', () => setSetting('mindSpacing', spacing));
   const counts = () => Object.values(model.weights).filter(Boolean);
   function styleFor(c) {
-    if (colorMode !== 'heat') return { color: c.color, ring: null, fixedR: undefined };
+    if (colorMode !== 'heat') return { color: c.color, ring: null, core: null, fixedR: undefined };
     const n = model.weights[c.id] || 0;
     const vals = counts();
     const t = heatOf(n, Math.min(...vals, Infinity), Math.max(...vals, 0));
     const width = canvas.clientWidth || 360;
+    // الكرة بلون قسمها، وفي وسطها نواة بلون الحرارة
     return {
-      color: t === null ? '#5b5873' : heatColor(t),
-      ring: c.color,
-      fixedR: n ? Math.max(16, Math.min(24, width * 0.055)) : 11,
+      color: c.color,
+      ring: null,
+      core: t === null ? null : heatColor(t),
+      fixedR: n ? Math.max(17, Math.min(25, width * 0.058)) : 11,
     };
   }
   function renderLegend() {
@@ -327,12 +346,13 @@ export async function mount(root) {
     if (z === 'in') graph.zoomBy(1.35);
     else if (z === 'out') graph.zoomBy(1 / 1.35);
     else if (z === 'reset') graph.resetView(); // ⟲ = ملاءمة كل الكرات للشاشة
+    else if (z === 'space') spaceCtrl.hidden = !spaceCtrl.hidden;
     else if (z === 'mode') {
       colorMode = colorMode === 'heat' ? 'size' : 'heat';
       setSetting('mindColorMode', colorMode);
       applyStyles();
       hint.textContent = colorMode === 'heat'
-        ? 'وضع الحرارة: اللون من الأبرد (ملاحظات أقل) إلى الأسخن (أكثر)، والحلقة بلون القسم.'
+        ? 'وضع الحرارة: الكرة بلون قسمها، والنواة في وسطها من الأبرد (ملاحظات أقل) إلى الأسخن (أكثر).'
         : 'وضع الحجم: الكرة تكبر بعدد ملاحظاتها، بلون قسمها.';
     }
   });

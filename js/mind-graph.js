@@ -2,7 +2,7 @@
 // المشهد يُكبَّر ويُصغَّر بإصبعين (أو بعجلة الفأرة)، ويُحرَّك بإصبع على الفراغ.
 // nodes: [{ id, label, color, weight, fixedR? }]
 // links: [{ a, b, w }]  حيث w بين 0 و1 (قوة الرابط: سماكة الخط ووضوحه وقِصره)
-export function createMindGraph(canvas, nodesIn, linksIn, { onTap, onGroupTap, groups: groupsIn = {}, groupLabels = {} } = {}) {
+export function createMindGraph(canvas, nodesIn, linksIn, { onTap, onGroupTap, groups: groupsIn = {}, groupLabels = {}, spacing: initialSpacing = 1 } = {}) {
   const ctx = canvas.getContext('2d');
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
   let W = 0, H = 0;
@@ -31,6 +31,7 @@ export function createMindGraph(canvas, nodesIn, linksIn, { onTap, onGroupTap, g
   // groups: { معرّف الكرة: رقم مجموعتها } للكرات المترابطة؛ الكرات بلا مجموعة تبقى منفردة
   let groups = [];
   let labels = { ...groupLabels }; // رقم المجموعة ← اسمها
+  let spacing = Math.min(2.2, Math.max(0.7, initialSpacing)); // مضاعِف المسافة بين الكرات
   function setData(weights, links, groupMap) {
     if (weights) nodes.forEach((n) => { if (n.id in weights) n.weight = weights[n.id]; });
     const maxW = Math.max(1, ...nodes.map((n) => n.weight || 0));
@@ -91,10 +92,15 @@ export function createMindGraph(canvas, nodesIn, linksIn, { onTap, onGroupTap, g
     if (!nodes.length) return { s: 1, x: 0, y: 0 };
     const minX = Math.min(...nodes.map((n) => n.x - n.r)) - 12, maxX = Math.max(...nodes.map((n) => n.x + n.r)) + 12;
     const minY = Math.min(...nodes.map((n) => n.y - n.r)) - 30, maxY = Math.max(...nodes.map((n) => n.y + n.r)) + 26;
-    const sc = clampS(Math.min(1, W / (maxX - minX), H / (maxY - minY)));
-    return { s: sc, x: W / 2 - ((minX + maxX) / 2) * sc, y: H / 2 - ((minY + maxY) / 2) * sc };
+    const availW = W - guard.w;
+    const offX = guard.side === 'left' ? guard.w : 0;
+    const sc = clampS(Math.min(1, availW / (maxX - minX), H / (maxY - minY)));
+    return { s: sc, x: offX + availW / 2 - ((minX + maxX) / 2) * sc, y: H / 2 - ((minY + maxY) / 2) * sc };
   }
   let touched = false; // إن تحكّم المستخدم بالعرض لا نغيّره عليه تلقائياً
+  let fitTimer = 0;
+  // عمود أزرار التحكم فوق اللوحة: لا نضع الكرات تحته
+  const guard = { side: getComputedStyle(canvas).direction === 'rtl' ? 'right' : 'left', w: 46 };
   setTimeout(() => { if (!touched) animateTo(fitTarget()); }, 1600);
 
   // ---- اللمس: إصبع على كرة يسحبها، على الفراغ يحرّك المشهد، وإصبعان للتكبير والتصغير ----
@@ -233,7 +239,7 @@ export function createMindGraph(canvas, nodesIn, linksIn, { onTap, onGroupTap, g
   // - تماسك: كل كرة تنجذب إلى مركز مجموعتها، و"أنا" تبقى في الوسط، والمنفردة تبتعد إلى الأطراف
   function step(t) {
     const cx = W / 2, cy = H / 2;
-    const base = Math.min(W, H) * 0.32;
+    const base = Math.min(W, H) * 0.32 * spacing;
 
     for (let i = 0; i < nodes.length; i++) {
       for (let j = i + 1; j < nodes.length; j++) {
@@ -242,7 +248,7 @@ export function createMindGraph(canvas, nodesIn, linksIn, { onTap, onGroupTap, g
         const d = Math.hypot(dx, dy) || 0.01;
         const minD = a.r + b.r + 16;
         const apart = a.group !== null && b.group !== null && a.group !== b.group;
-        let f = (apart ? 2200 : 900) / (d * d);
+        let f = ((apart ? 2200 : 900) * spacing * spacing) / (d * d);
         if (d < minD) f += (minD - d) * 0.08;
         dx /= d; dy /= d;
         a.vx -= dx * f; a.vy -= dy * f;
@@ -255,7 +261,7 @@ export function createMindGraph(canvas, nodesIn, linksIn, { onTap, onGroupTap, g
       const d = Math.hypot(dx, dy) || 0.01;
       let rest, k;
       if (e.hub) { rest = base * 1.05 + (a.r + b.r) * 0.5; k = 0.0006; }
-      else { rest = base * (0.5 - 0.25 * e.w) + (a.r + b.r) + 26; k = 0.002 + 0.004 * e.w; }
+      else { rest = base * (0.5 - 0.25 * e.w) + (a.r + b.r) + 26 * spacing; k = 0.002 + 0.004 * e.w; }
       const f = (d - rest) * k;
       a.vx += (dx / d) * f; a.vy += (dy / d) * f;
       b.vx -= (dx / d) * f; b.vy -= (dy / d) * f;
@@ -291,8 +297,10 @@ export function createMindGraph(canvas, nodesIn, linksIn, { onTap, onGroupTap, g
 
   function keepInside(n) {
     const pad = n.r + 4;
-    if (n.x < pad) { n.x = pad; n.vx = Math.abs(n.vx) * 0.6; }
-    if (n.x > W - pad) { n.x = W - pad; n.vx = -Math.abs(n.vx) * 0.6; }
+    const left = pad + (guard.side === 'left' ? guard.w : 0);
+    const right = W - pad - (guard.side === 'right' ? guard.w : 0);
+    if (n.x < left) { n.x = left; n.vx = Math.abs(n.vx) * 0.6; }
+    if (n.x > right) { n.x = right; n.vx = -Math.abs(n.vx) * 0.6; }
     if (n.y < pad) { n.y = pad; n.vy = Math.abs(n.vy) * 0.6; }
     if (n.y > H - pad - 22) { n.y = H - pad - 22; n.vy = -Math.abs(n.vy) * 0.6; }
   }
@@ -306,7 +314,7 @@ export function createMindGraph(canvas, nodesIn, linksIn, { onTap, onGroupTap, g
           let dx = b.x - a.x, dy = b.y - a.y;
           const d = Math.hypot(dx, dy) || 0.01;
           // الاسم تحت الكرة: إن كانتا فوق بعضهما نحتاج مسافة أكبر
-          const gap = 10 + 16 * Math.abs(dy) / d;
+          const gap = (10 + 16 * Math.abs(dy) / d) * spacing;
           const minD = a.r + b.r + gap;
           if (d >= minD) continue;
           const push = (minD - d) / 2;
@@ -397,6 +405,17 @@ export function createMindGraph(canvas, nodesIn, linksIn, { onTap, onGroupTap, g
       ctx.beginPath(); ctx.arc(n.x, n.y, r, 0, Math.PI * 2); ctx.fill();
       ctx.shadowBlur = 0;
       // حلقة بلون القسم الأصلي (في وضع الحرارة) حتى يبقى القسم معروفاً من لونه
+      // نواة ممتلئة في وسط الكرة بلون حرارتها (عدد الملاحظات)، والكرة نفسها بلون قسمها
+      if (n.core) {
+        const cr = r * 0.44;
+        ctx.shadowColor = n.core; ctx.shadowBlur = 10;
+        ctx.fillStyle = n.core;
+        ctx.beginPath(); ctx.arc(n.x, n.y, cr, 0, Math.PI * 2); ctx.fill();
+        ctx.shadowBlur = 0;
+        ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+      }
       if (n.ring) {
         ctx.strokeStyle = n.ring;
         ctx.lineWidth = 3;
@@ -425,12 +444,19 @@ export function createMindGraph(canvas, nodesIn, linksIn, { onTap, onGroupTap, g
     resetView() { animateTo(fitTarget()); },
     fitView: () => animateTo(fitTarget()),
     setGroupLabels(map) { labels = { ...map }; },
+    // تغيير المسافة بين الكرات (0.7 إلى 2.2) وإعادة ملاءمة المشهد بعد أن تستقر
+    setSpacing(v) {
+      spacing = Math.min(2.2, Math.max(0.7, v));
+      nodes.forEach((n) => { n.vx += (Math.random() - 0.5) * 0.5; n.vy += (Math.random() - 0.5) * 0.5; });
+      clearTimeout(fitTimer);
+      fitTimer = setTimeout(() => animateTo(fitTarget()), 1200);
+    },
     // تغيير مظهر الكرات دون إعادة بنائها: { معرّف: { color, ring, fixedR } }
     setStyles(map) {
       nodes.forEach((n) => {
         const st = map[n.id];
         if (!st) return;
-        n.color = st.color; n.ring = st.ring; n.fixedR = st.fixedR;
+        n.color = st.color; n.ring = st.ring; n.core = st.core; n.fixedR = st.fixedR;
       });
       setData();
     },

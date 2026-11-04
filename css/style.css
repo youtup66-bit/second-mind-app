@@ -535,10 +535,10 @@ input[type="range"] { width: 100%; accent-color: var(--accent); margin: 4px 0 12
 /* ---- تكبير لوحة الكرات ---- */
 .mind-stage { position: relative; }
 .zoom-ctrl {
-  position: absolute; inset-inline-start: 8px; bottom: 8px; display: flex; flex-direction: column; gap: 6px;
+  position: absolute; inset-inline-start: 6px; bottom: 8px; display: flex; flex-direction: column; gap: 5px;
 }
 .zoom-ctrl button {
-  width: 38px; height: 38px; border-radius: 12px; font: inherit; font-size: 1.1rem; font-weight: 700; cursor: pointer;
+  width: 36px; height: 36px; border-radius: 11px; font: inherit; font-size: 1rem; font-weight: 700; cursor: pointer;
   color: var(--text); background: color-mix(in srgb, var(--surface) 85%, transparent); border: 1px solid var(--border);
   backdrop-filter: blur(6px);
 }
@@ -567,3 +567,14 @@ input[type="range"] { width: 100%; accent-color: var(--accent); margin: 4px 0 12
 }
 .heat-legend[hidden] { display: none; }
 .heat-legend i { display: block; width: 90px; height: 8px; border-radius: 999px; }
+
+/* ---- المسافة بين الكرات ---- */
+.space-ctrl {
+  position: absolute; inset-inline-start: 52px; inset-inline-end: 8px; bottom: 8px; display: flex; align-items: center; gap: 8px;
+  background: color-mix(in srgb, var(--surface) 90%, transparent); border: 1px solid var(--border);
+  border-radius: 14px; padding: 8px 12px; backdrop-filter: blur(6px); font-size: .82rem;
+}
+.space-ctrl[hidden] { display: none; }
+.space-ctrl label { margin: 0; white-space: nowrap; }
+.space-ctrl input { flex: 1; margin: 0; }
+.space-ctrl span { min-width: 34px; text-align: center; color: var(--muted); }
