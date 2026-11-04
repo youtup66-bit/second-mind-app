@@ -82,6 +82,13 @@ function toast(msg) {
 window.addEventListener('error', (e) => { if (e.message) toast(e.message); });
 window.addEventListener('unhandledrejection', (e) => toast(e.reason?.message || String(e.reason)));
 
+// إن كان صوت Piper مختاراً نحمّله في الذاكرة بهدوء، فلا يتأخر أول رد
+setTimeout(async () => {
+  if (await getSetting('voiceEngine', 'device') !== 'piper') return;
+  const { warmUpPiper, isPiperReady } = await import('./piper.js');
+  if (await isPiperReady()) warmUpPiper();
+}, 4000);
+
 // لقطة يومية على الجهاز (لا شيء يغادره)
 autoSnapshot().catch((err) => console.warn('snapshot:', err));
 

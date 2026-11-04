@@ -3,6 +3,7 @@
 import { getSetting } from './storage.js';
 import { skinVoice } from './skins.js';
 import { tts, ttsCooldownUntil } from './gemini.js';
+import { synthesize } from './piper.js';
 
 const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 
@@ -269,6 +270,17 @@ export async function speak(text, { skin, onStart, onEnd, onFallback, onWaiting,
   const opts = await voiceSettings();
   if (my !== token) return;
 
+  if (opts.engine === 'piper') {
+    try {
+      onWaiting?.();
+      await speakPiper(text, profile, opts, { onStart, onEnd }, my);
+      return;
+    } catch (err) {
+      if (my !== token) return;
+      onFallback?.(err);
+    }
+  }
+
   if (opts.engine === 'gemini' && (force || !(await ttsCooldownUntil()))) {
     try {
       onWaiting?.();
@@ -284,6 +296,48 @@ export async function speak(text, { skin, onStart, onEnd, onFallback, onWaiting,
     }
   }
   speakDevice(text, profile, opts, { onStart, onEnd, onSilent }, my);
+}
+
+// ---- صوت Piper (على الجهاز) ----
+// نولّد الجملة التالية بينما تُنطق الحالية، فلا يطول الانتظار بين الجمل.
+// rate: سرعة التشغيل لكل شخصية (ترفع الحدّة أيضاً، فيقترب صوت "كريم" من صوت الشخصية)
+function playChunk({ samples, rate }, playbackRate, my) {
+  return new Promise((resolve) => {
+    if (my !== token) return resolve();
+    const buf = ctx.createBuffer(1, samples.length, rate);
+    buf.getChannelData(0).set(samples);
+    source = ctx.createBufferSource();
+    source.buffer = buf;
+    source.playbackRate.value = playbackRate;
+    source.connect(ctx.destination);
+    source.onended = () => { source = null; resolve(); };
+    source.start();
+  });
+}
+
+async function speakPiper(text, profile, opts, { onStart, onEnd }, my) {
+  if (!(await ensureAudio())) throw new Error('الصوت لم يُفعَّل بعد، المس الشاشة مرة');
+  const rate = Math.max(0.6, Math.min(2, (profile.piperRate || 1.2) * opts.rateScale + opts.pitchShift * 0.5));
+  const gen = synthesize(sentences(text));
+  let next = gen.next();
+  let started = false;
+  try {
+    for (;;) {
+      const { value, done } = await next;
+      if (done || my !== token) break;
+      next = gen.next(); // نبدأ تجهيز الجملة التالية فوراً
+      if (!started) { started = true; onStart?.(); }
+      await playChunk(value, rate, my);
+      if (my !== token) break;
+    }
+  } catch (err) {
+    if (!started) throw err; // فشل قبل أن يبدأ: نعود لصوت الجهاز. بعد البدء: نكتفي بما قيل
+  } finally {
+    gen.return?.();
+    if (my === token) suspendAudio();
+    if (started) onEnd?.();
+  }
+  if (!started) throw new Error('لم يخرج صوت من Piper.');
 }
 
 export function stopSpeaking() {

@@ -5,6 +5,7 @@ import { canSpeak, canRecord, canBrowserListen, speak, stopSpeaking, unlockAudio
 import { SKINS, DEFAULT_SKIN, skinSVG } from '../skins.js';
 import { loadCategories } from '../categories.js';
 import { canPip, pipAction, isFloating } from '../pip.js';
+import { canPiper, isPiperReady, downloadPiper, removePiper, piperVoice } from '../piper.js';
 
 // يحفظ إعداداً ويُعلم بقية التطبيق (مثل الرفيقة الطافية)
 async function saveAndAnnounce(key, value) {
@@ -75,16 +76,27 @@ export async function mount(root) {
     <section class="card" id="voice">
       <h2>صوت الرفيقة</h2>
       <p class="muted">لكل شخصية صوت يناسبها تلقائياً. البنات أعلى وأسرع قليلاً، ولهب صوت ولد شاب.</p>
-      <div class="radio-row" role="radiogroup" aria-label="محرك الصوت">
+      <div class="radio-col" role="radiogroup" aria-label="محرك الصوت">
         <label class="switch"><input type="radio" name="engine" value="device" ${engine === 'device' ? 'checked' : ''}><span>صوت الجهاز</span></label>
+        <label class="switch"><input type="radio" name="engine" value="piper" ${engine === 'piper' ? 'checked' : ''} ${canPiper ? '' : 'disabled'}><span>صوت Piper العربي (داخل التطبيق، دون إنترنت)</span></label>
         <label class="switch"><input type="radio" name="engine" value="gemini" ${engine === 'gemini' ? 'checked' : ''}><span>صوت Gemini الطبيعي</span></label>
       </div>
       <p class="muted" id="engine-note"></p>
       <p class="status" id="tts-cooldown" hidden></p>
 
+      <div id="piper-opts" hidden>
+        <p class="muted" id="piper-state"></p>
+        <div class="progress" id="piper-progress" hidden><span></span></div>
+        <div class="row">
+          <button class="btn" id="piper-download">⬇️ نزّل الصوت (~${piperVoice.approxMB} م.ب)</button>
+          <button class="btn btn--ghost" id="piper-remove" hidden>حذف الصوت من الجهاز</button>
+        </div>
+      </div>
       <div id="device-opts">
+        <div id="device-voice-wrap">
         <label for="device-voice">صوت الجهاز</label>
         <select id="device-voice"><option value="">تلقائي (حسب الشخصية)</option></select>
+        </div>
         <label for="pitch">حدّة الصوت <span class="muted" id="pitch-val"></span></label>
         <input type="range" id="pitch" min="-0.6" max="0.4" step="0.05" value="${pitchShift}">
         <label for="rate">السرعة <span class="muted" id="rate-val"></span></label>
@@ -289,6 +301,7 @@ export async function mount(root) {
   const deviceOpts = root.querySelector('#device-opts');
   const NOTES = {
     device: 'فوري ومجاني ويعمل دون إنترنت، وجودته تعتمد على الأصوات المثبتة في جوالك.',
+    piper: 'صوت عربي ("كريم"، فصحى بلكنة أردنية) يعمل داخل التطبيق: يُنزَّل مرة واحدة ثم يعمل دون إنترنت ودون أي حصة، ولا يُرسل أي نص. صوت رجل، يرفع التطبيق حدّته لكل شخصية. أول جملة بعد فتح التطبيق تتأخر ثوانيَ ريثما يُحمَّل.',
     gemini: 'صوت طبيعي أجمل بكثير يناسب الشخصية. يُرسل نص الرد فقط إلى Gemini، ويستهلك من حصة مفتاحك، ويتأخر ثوانيَ قليلة. إن تعذّر يُستخدم صوت الجهاز تلقائياً.',
   };
   const cooldownEl = root.querySelector('#tts-cooldown');
@@ -306,9 +319,47 @@ export async function mount(root) {
   const syncEngine = () => {
     const v = root.querySelector('input[name="engine"]:checked').value;
     engineNote.textContent = NOTES[v];
-    deviceOpts.hidden = v !== 'device';
+    deviceOpts.hidden = v === 'gemini';
+    root.querySelector('#device-voice-wrap').hidden = v !== 'device';
+    root.querySelector('#piper-opts').hidden = v !== 'piper';
     renderCooldown();
+    if (v === 'piper') renderPiper();
   };
+
+  // ---- صوت Piper ----
+  const piperState = root.querySelector('#piper-state');
+  const piperDl = root.querySelector('#piper-download');
+  const piperRm = root.querySelector('#piper-remove');
+  const piperBar = root.querySelector('#piper-progress');
+  async function renderPiper() {
+    const ready = await isPiperReady();
+    piperState.textContent = ready
+      ? 'الصوت مُنزَّل على جهازك ✓ ويعمل دون إنترنت.'
+      : `لم يُنزَّل بعد. الحجم نحو ${piperVoice.approxMB} ميغابايت؛ يُفضَّل التنزيل عبر Wi-Fi. حتى تنزيله يُستخدم صوت الجهاز.`;
+    piperDl.hidden = ready;
+    piperRm.hidden = !ready;
+  }
+  piperDl.addEventListener('click', async () => {
+    piperDl.disabled = true;
+    piperBar.hidden = false;
+    try {
+      await downloadPiper((f) => {
+        piperBar.firstElementChild.style.width = `${Math.round(f * 100)}%`;
+        piperState.textContent = `جارٍ التنزيل… ${Math.round(f * 100)}%`;
+      });
+      await renderPiper();
+    } catch (err) {
+      piperState.textContent = `${err.message} تحقق من الإنترنت ثم حاول مرة أخرى.`;
+    } finally {
+      piperDl.disabled = false;
+      piperBar.hidden = true;
+    }
+  });
+  piperRm.addEventListener('click', async () => {
+    if (!confirm('حذف صوت Piper من الجهاز؟ يمكنك تنزيله مرة أخرى لاحقاً.')) return;
+    await removePiper();
+    renderPiper();
+  });
   syncEngine();
   root.querySelectorAll('input[name="engine"]').forEach((r) => r.addEventListener('change', async () => {
     await setSetting('voiceEngine', r.value);
