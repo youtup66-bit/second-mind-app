@@ -24,6 +24,25 @@ const GHOST_CLICK_MS = 500;
 
 let graph = null;
 
+// ---- مقياس الحرارة: من الأبرد (ملاحظات أقل) إلى الأسخن (أكثر) ----
+// تدرّج واسع: أزرق ← سماوي ← أخضر ← أصفر ← برتقالي ← أحمر
+const HEAT = ['#3b4cc0', '#3d8bff', '#2fc6d6', '#4fd18a', '#b8e04a', '#f7d154', '#f99a3e', '#ee5a32', '#d7263d'];
+
+function heatColor(t) {
+  const x = Math.min(1, Math.max(0, t)) * (HEAT.length - 1);
+  const i = Math.floor(x), f = x - i;
+  const a = HEAT[i], b = HEAT[Math.min(HEAT.length - 1, i + 1)];
+  const mix = (k) => Math.round(parseInt(a.slice(k, k + 2), 16) * (1 - f) + parseInt(b.slice(k, k + 2), 16) * f);
+  return `#${[1, 3, 5].map((k) => mix(k).toString(16).padStart(2, '0')).join('')}`;
+}
+
+// مقياس لوغاريتمي: حتى لا يجعل قسمٌ ضخم كل الأقسام الأخرى زرقاء
+function heatOf(n, min, max) {
+  if (!n) return null;
+  if (max <= min) return 1;
+  return (Math.log(n) - Math.log(min)) / (Math.log(max) - Math.log(min));
+}
+
 // ---- أسماء المجموعات ----
 // تُحفظ حسب أعضاء المجموعة (مثلاً "task+worry")، فيبقى الاسم ما دامت المجموعة نفسها.
 // by: 'ai' (اقترحه Gemini) أو 'user' (كتبه المستخدم، ولا يُستبدل).
@@ -126,6 +145,12 @@ export async function mount(root) {
         <button type="button" data-zoom="in" aria-label="تكبير">＋</button>
         <button type="button" data-zoom="out" aria-label="تصغير">－</button>
         <button type="button" data-zoom="reset" aria-label="ملاءمة الشاشة">⟲</button>
+        <button type="button" data-zoom="mode" aria-label="التبديل بين الحرارة والحجم" title="الحرارة / الحجم">🌡</button>
+      </div>
+      <div class="heat-legend" id="heat-legend" hidden>
+        <span id="heat-min"></span>
+        <i style="background:linear-gradient(90deg, ${HEAT.join(', ')})"></i>
+        <span id="heat-max"></span>
       </div>
     </div>
 
@@ -205,7 +230,7 @@ export async function mount(root) {
     tgl.textContent = showEmpty ? 'إخفاء الفارغة' : `+${hiddenCount} فارغة`;
     const nodes = [
       { id: 'me', label: 'أنا', color: '#ffffff', weight: 0, fixedR: 22 },
-      ...visible.map((c) => ({ id: c.id, label: c.label, color: c.color, weight: model.weights[c.id] || 0 })),
+      ...visible.map((c) => ({ id: c.id, label: c.label, color: c.color, weight: model.weights[c.id] || 0, ...styleFor(c) })),
     ];
     graph = createMindGraph(canvas, nodes, model.links, {
       groups: model.groups,
@@ -216,6 +241,34 @@ export async function mount(root) {
   }
 
   let showEmpty = await getSetting('showEmptyCats', false);
+
+  // ---- وضع العرض: الحرارة (اللون حسب العدد، والحجم ثابت) أو الحجم (الأصلي) ----
+  let colorMode = await getSetting('mindColorMode', 'heat');
+  const counts = () => Object.values(model.weights).filter(Boolean);
+  function styleFor(c) {
+    if (colorMode !== 'heat') return { color: c.color, ring: null, fixedR: undefined };
+    const n = model.weights[c.id] || 0;
+    const vals = counts();
+    const t = heatOf(n, Math.min(...vals, Infinity), Math.max(...vals, 0));
+    const width = canvas.clientWidth || 360;
+    return {
+      color: t === null ? '#5b5873' : heatColor(t),
+      ring: c.color,
+      fixedR: n ? Math.max(16, Math.min(24, width * 0.055)) : 11,
+    };
+  }
+  function renderLegend() {
+    const legend = root.querySelector('#heat-legend');
+    const vals = counts();
+    legend.hidden = colorMode !== 'heat' || !vals.length;
+    if (legend.hidden) return;
+    root.querySelector('#heat-min').textContent = `${Math.min(...vals)} أقل`;
+    root.querySelector('#heat-max').textContent = `أكثر ${Math.max(...vals)}`;
+  }
+  function applyStyles() {
+    graph.setStyles(Object.fromEntries(CATEGORIES.map((c) => [c.id, styleFor(c)])));
+    renderLegend();
+  }
   root.querySelector('#toggle-empty').addEventListener('click', async () => {
     showEmpty = !showEmpty;
     await setSetting('showEmptyCats', showEmpty);
@@ -274,12 +327,22 @@ export async function mount(root) {
     if (z === 'in') graph.zoomBy(1.35);
     else if (z === 'out') graph.zoomBy(1 / 1.35);
     else if (z === 'reset') graph.resetView(); // ⟲ = ملاءمة كل الكرات للشاشة
+    else if (z === 'mode') {
+      colorMode = colorMode === 'heat' ? 'size' : 'heat';
+      setSetting('mindColorMode', colorMode);
+      applyStyles();
+      hint.textContent = colorMode === 'heat'
+        ? 'وضع الحرارة: اللون من الأبرد (ملاحظات أقل) إلى الأسخن (أكثر)، والحلقة بلون القسم.'
+        : 'وضع الحجم: الكرة تكبر بعدد ملاحظاتها، بلون قسمها.';
+    }
   });
+  renderLegend();
 
   async function refresh() {
     entries = await getEntries();
     model = buildModel(entries);
     graph.update(model.weights, model.links, model.groups);
+    applyStyles();
     refreshLabels();
     nameNewGroups();
     setHint();

@@ -385,7 +385,7 @@ export function createMindGraph(canvas, nodesIn, linksIn, { onTap, onGroupTap, g
     ctx.textBaseline = 'top';
     ctx.font = '500 13px Tajawal, system-ui, sans-serif';
     for (const n of nodes) {
-      const empty = !n.fixedR && !n.weight;
+      const empty = n.id !== 'me' && !n.weight;
       const r = n.r * (1 + 0.15 * Math.sin((n.pop || 0) * Math.PI));
       ctx.globalAlpha = empty ? 0.45 : 1;
       const g = ctx.createRadialGradient(n.x - r * 0.35, n.y - r * 0.35, r * 0.1, n.x, n.y, r);
@@ -396,6 +396,12 @@ export function createMindGraph(canvas, nodesIn, linksIn, { onTap, onGroupTap, g
       ctx.fillStyle = g;
       ctx.beginPath(); ctx.arc(n.x, n.y, r, 0, Math.PI * 2); ctx.fill();
       ctx.shadowBlur = 0;
+      // حلقة بلون القسم الأصلي (في وضع الحرارة) حتى يبقى القسم معروفاً من لونه
+      if (n.ring) {
+        ctx.strokeStyle = n.ring;
+        ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.arc(n.x, n.y, r + 2.5, 0, Math.PI * 2); ctx.stroke();
+      }
       ctx.fillStyle = '#ece9ff';
       ctx.fillText(n.label, n.x, n.y + r + 4);
       ctx.globalAlpha = 1;
@@ -419,6 +425,15 @@ export function createMindGraph(canvas, nodesIn, linksIn, { onTap, onGroupTap, g
     resetView() { animateTo(fitTarget()); },
     fitView: () => animateTo(fitTarget()),
     setGroupLabels(map) { labels = { ...map }; },
+    // تغيير مظهر الكرات دون إعادة بنائها: { معرّف: { color, ring, fixedR } }
+    setStyles(map) {
+      nodes.forEach((n) => {
+        const st = map[n.id];
+        if (!st) return;
+        n.color = st.color; n.ring = st.ring; n.fixedR = st.fixedR;
+      });
+      setData();
+    },
     // مواضع أسماء المجموعات على الشاشة (للاختبار وإمكانية الوصول)
     groupBoxes() {
       return groups.filter((g) => g.box).map((g) => ({

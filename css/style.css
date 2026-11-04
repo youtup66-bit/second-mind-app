@@ -557,3 +557,13 @@ input[type="range"] { width: 100%; accent-color: var(--accent); margin: 4px 0 12
 .model__state { margin: 4px 0 0; font-size: .8rem; }
 .model__state:empty { display: none; }
 #local { scroll-margin-top: 80px; }
+
+/* ---- دليل الحرارة ---- */
+.heat-legend {
+  direction: ltr;
+  position: absolute; inset-inline-end: 8px; top: 8px; display: flex; align-items: center; gap: 6px;
+  font-size: .72rem; color: var(--muted); background: color-mix(in srgb, var(--surface) 80%, transparent);
+  border: 1px solid var(--border); border-radius: 999px; padding: 4px 10px; backdrop-filter: blur(6px);
+}
+.heat-legend[hidden] { display: none; }
+.heat-legend i { display: block; width: 90px; height: 8px; border-radius: 999px; }
