@@ -32,7 +32,7 @@ export const LOCAL_MODELS = [
   {
     id: 'qwen25-05b-cpu', engine: 'wllama',
     url: 'https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF/resolve/main/qwen2.5-0.5b-instruct-q4_k_m.gguf',
-    label: 'Qwen 2.5 (0.5B) للمعالج', note: 'للجوالات التي لا تدعم WebGPU. أبطأ بوضوح.', sizeMB: 400, gpuMB: 0,
+    label: 'Qwen 2.5 (0.5B) للمعالج', note: 'للجوالات التي لا تدعم WebGPU. أبطأ بوضوح.', sizeMB: 500, gpuMB: 0, minBytes: 300e6,
   },
 ];
 
@@ -92,13 +92,28 @@ async function readyFlags() { return getSetting('localModelsReady', {}); }
 const MODELS_CACHE = 'second-mind-models';
 const BGMAP_CACHE = 'second-mind-bgfetch';
 
-async function cachedBlob(url) {
-  try { const r = await (await caches.open(MODELS_CACHE)).match(url); return r ? r.blob() : null; } catch { return null; }
+// ملف النموذج المحفوظ، بشرط أن يكون كاملاً: تنزيل انقطع قد يترك ملفاً فارغاً أو ناقصاً،
+// فنحذفه ونعدّه غير منزّل (بدل خطأ "must be non-empty Blob")
+async function cachedBlob(url, minBytes = 1) {
+  try {
+    const cache = await caches.open(MODELS_CACHE);
+    const r = await cache.match(url);
+    if (!r) return null;
+    const expected = +r.headers.get('content-length') || 0;
+    const blob = await r.blob();
+    if (blob.size >= Math.max(minBytes, expected * 0.99)) return blob;
+    await cache.delete(url);
+    const flags = await readyFlags(); // لم يعد منزّلاً
+    for (const m of LOCAL_MODELS) if (m.url === url) delete flags[m.id];
+    await setSetting('localModelsReady', flags);
+    return null;
+  } catch { return null; }
 }
+export const damagedFile = new LocalAIError('ملف النموذج المحفوظ ناقص (انقطع تنزيله). نزّله مرة أخرى من الإعدادات ← الذكاء على الجهاز.', 'NOT_READY');
 
 export async function isModelReady(model) {
   if (!model) return false;
-  if (model.engine === 'wllama' && await cachedBlob(model.url).then((b) => !!b)) return true;
+  if (model.engine === 'wllama' && await cachedBlob(model.url, model.minBytes).then((b) => !!b)) return true;
   if (model.engine === 'webllm') {
     const id = await effectiveModelId(model);
     if (!id) return false;
@@ -168,13 +183,27 @@ export async function prepareModel(model, onProgress) {
       const { Wllama } = await import(WLLAMA_URL);
       const engine = new Wllama({ default: WLLAMA_WASM });
       // نزّلناه في الخلفية سابقاً؟ نحمّله من المخزن مباشرة
-      const blob = await cachedBlob(model.url);
-      if (blob) await engine.loadModel([blob], { n_ctx: 2048 });
-      else {
-        await engine.loadModelFromUrl(model.url, {
-          n_ctx: 2048,
-          progressCallback: ({ loaded, total }) => onProgress?.(total ? Math.min(0.99, loaded / total) : 0, ''),
-        });
+      const blob = await cachedBlob(model.url, model.minBytes);
+      const fromUrl = () => engine.loadModelFromUrl(model.url, {
+        n_ctx: 2048,
+        progressCallback: ({ loaded, total }) => onProgress?.(total ? Math.min(0.99, loaded / total) : 0, ''),
+      });
+      try {
+        if (blob) {
+          try { await engine.loadModel([blob], { n_ctx: 2048 }); } catch (err) {
+            // الملف المحفوظ تالف: نحذفه، ونعيد التنزيل إن كان الإنترنت متاحاً
+            await caches.open(MODELS_CACHE).then((c) => c.delete(model.url)).catch(() => {});
+            if (!navigator.onLine) throw damagedFile;
+            await fromUrl();
+          }
+        } else await fromUrl();
+      } catch (err) {
+        const flags = await readyFlags();
+        delete flags[model.id];
+        await setSetting('localModelsReady', flags);
+        throw err instanceof LocalAIError ? err
+          : /non-empty Blob|splits|magic|gguf|invalid model/i.test(String(err?.message || err)) ? damagedFile
+          : new LocalAIError(explainError(err), 'LOAD');
       }
       active = { model, kind: 'wllama', engine };
     }
@@ -326,7 +355,7 @@ const bgId = (model) => `model:${model.id}`;
 
 // كل ملفات النموذج ومخزن كل منها (بنفس أسماء مخازن WebLLM ومفاتيحها)
 async function filesFor(model) {
-  if (model.engine === 'wllama') return [{ url: model.url, cache: MODELS_CACHE, size: model.sizeMB * 1e6, exact: false }];
+  if (model.engine === 'wllama') return [{ url: model.url, cache: MODELS_CACHE, size: model.sizeMB * 1e6, exact: false, minBytes: model.minBytes }];
   const webllm = await import(WEBLLM_URL);
   const id = await effectiveModelId(model);
   const rec = webllm.prebuiltAppConfig.model_list.find((m) => m.model_id === id);
@@ -361,6 +390,7 @@ async function exactSize(url) {
 
 // هل الملف محفوظ أصلاً (من تنزيل سابق انقطع)؟ نتخطاه فيكمل التنزيل بدل أن يبدأ من الصفر
 async function alreadyCached(f) {
+  if (f.cache === MODELS_CACHE) return !!(await cachedBlob(f.url, f.minBytes)); // يتحقق أنه كامل
   try { return !!(await (await caches.open(f.cache)).match(f.url)); } catch { return false; }
 }
 

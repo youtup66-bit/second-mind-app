@@ -1,7 +1,7 @@
 // عامل الخدمة: يجعل التطبيق يعمل دون اتصال.
 // ملفات التطبيق: الشبكة أولاً (لتصلك آخر نسخة فوراً)، والمخزّن عند انقطاع الاتصال.
 // الخطوط: المخزّن أولاً. طلبات Gemini لا تمر عبر المخزّن أبداً.
-const CACHE = 'second-mind-v44';
+const CACHE = 'second-mind-v45';
 const ASSETS = [
   './',
   './index.html',
@@ -88,6 +88,15 @@ self.addEventListener('fetch', (e) => {
 
 // ---- التنزيل في الخلفية (نماذج الذكاء): يستمر حتى لو أُغلق التطبيق ----
 // عند الاكتمال نحفظ كل ملف في المخزن الذي تقرأ منه مكتبته (حسب خريطة يتركها التطبيق)
+// هل وصل الملف كاملاً؟ (تنزيل منقطع قد يعطي رداً "ناجحاً" فارغاً أو ناقصاً)
+async function complete(res) {
+  try {
+    const size = (await res.clone().blob()).size;
+    const expected = +res.headers.get('content-length') || 0;
+    return size > 0 && size >= expected;
+  } catch { return false; }
+}
+
 self.addEventListener('backgroundfetchsuccess', (event) => {
   event.waitUntil((async () => {
     const reg = event.registration;
@@ -104,6 +113,7 @@ self.addEventListener('backgroundfetchsuccess', (event) => {
           report.failed.push({ url, status: res ? res.status : 0, type: res ? res.type : 'none' });
           continue;
         }
+        if (!(await complete(res))) { report.failed.push({ url, status: res.status, type: 'partial' }); continue; }
         await (await caches.open(map[url] || 'webllm/model')).put(url, res);
         report.stored++;
       } catch (err) {
@@ -128,7 +138,7 @@ self.addEventListener('backgroundfetchfail', (event) => {
       const map = mapRes ? await mapRes.json() : {};
       for (const rec of await reg.matchAll()) {
         const res = await rec.responseReady.catch(() => null);
-        if (res && res.ok) await (await caches.open(map[rec.request.url] || 'webllm/model')).put(rec.request.url, res);
+        if (res && res.ok && await complete(res)) await (await caches.open(map[rec.request.url] || 'webllm/model')).put(rec.request.url, res);
       }
     } catch { /* لا شيء */ }
     try { await event.updateUI({ title: 'تعذّر تنزيل الذكاء، افتح التطبيق لتحاول مجدداً' }); } catch { /* لا شيء */ }
