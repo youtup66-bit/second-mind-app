@@ -55,7 +55,41 @@ function buildModel(entries) {
   if (!known.length) {
     CATEGORIES.forEach((c, i) => links.push({ a: c.id, b: CATEGORIES[(i + 1) % CATEGORIES.length].id, w: 0 }));
   }
-  return { weights, links, total: known.length };
+  return { weights, links, total: known.length, groups: findGroups(weights, pairs) };
+}
+
+// يكتشف مجموعات الأقسام المترابطة (انتشار التسميات الموزون):
+// كل قسم يتبنّى تسمية جيرانه الأقوى رابطاً، حتى تستقر، فتتكون مجموعات متماسكة.
+function findGroups(weights, pairs) {
+  const adj = {};
+  for (const [k, n] of Object.entries(pairs)) {
+    const [a, b] = k.split('|');
+    (adj[a] ||= {})[b] = n;
+    (adj[b] ||= {})[a] = n;
+  }
+  const ids = Object.keys(adj).sort((a, b) => (weights[b] || 0) - (weights[a] || 0) || a.localeCompare(b));
+  const label = Object.fromEntries(ids.map((id) => [id, id]));
+  for (let round = 0; round < 12; round++) {
+    let changed = false;
+    for (const id of ids) {
+      const score = {};
+      for (const [nb, w] of Object.entries(adj[id])) score[label[nb]] = (score[label[nb]] || 0) + w;
+      score[label[id]] = (score[label[id]] || 0) + 0.5; // ميل بسيط للبقاء
+      const best = Object.entries(score).sort((x, y) => y[1] - x[1] || x[0].localeCompare(y[0]))[0][0];
+      if (best !== label[id]) { label[id] = best; changed = true; }
+    }
+    if (!changed) break;
+  }
+  // نرقّم المجموعات، ونُبقي فقط ما فيه قسمان فأكثر
+  const count = {};
+  Object.values(label).forEach((l) => { count[l] = (count[l] || 0) + 1; });
+  const num = {};
+  const out = {};
+  for (const [id, l] of Object.entries(label)) {
+    if (count[l] < 2) continue;
+    out[id] = num[l] ??= Object.keys(num).length;
+  }
+  return out;
 }
 
 export async function mount(root) {
@@ -148,6 +182,7 @@ export async function mount(root) {
       ...CATEGORIES.map((c) => ({ id: c.id, label: c.label, color: c.color, weight: model.weights[c.id] || 0 })),
     ];
     graph = createMindGraph(canvas, nodes, model.links, {
+      groups: model.groups,
       onTap: (n) => { if (n.id !== 'me') openSheet(n.id); },
     });
   }
@@ -163,7 +198,7 @@ export async function mount(root) {
   async function refresh() {
     entries = await getEntries();
     model = buildModel(entries);
-    graph.update(model.weights, model.links);
+    graph.update(model.weights, model.links, model.groups);
     setHint();
     if (openCat) renderNotes();
   }

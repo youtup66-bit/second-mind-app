@@ -2,7 +2,7 @@
 // المشهد يُكبَّر ويُصغَّر بإصبعين (أو بعجلة الفأرة)، ويُحرَّك بإصبع على الفراغ.
 // nodes: [{ id, label, color, weight, fixedR? }]
 // links: [{ a, b, w }]  حيث w بين 0 و1 (قوة الرابط: سماكة الخط ووضوحه وقِصره)
-export function createMindGraph(canvas, nodesIn, linksIn, { onTap } = {}) {
+export function createMindGraph(canvas, nodesIn, linksIn, { onTap, groups: groupsIn = {} } = {}) {
   const ctx = canvas.getContext('2d');
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
   let W = 0, H = 0;
@@ -22,15 +22,25 @@ export function createMindGraph(canvas, nodesIn, linksIn, { onTap } = {}) {
   const byId = Object.fromEntries(nodes.map((n) => [n.id, n]));
   let edges = [];
 
-  function setData(weights, links) {
+  // groups: { معرّف الكرة: رقم مجموعتها } للكرات المترابطة؛ الكرات بلا مجموعة تبقى منفردة
+  let groups = [];
+  function setData(weights, links, groupMap) {
     if (weights) nodes.forEach((n) => { if (n.id in weights) n.weight = weights[n.id]; });
     const maxW = Math.max(1, ...nodes.map((n) => n.weight || 0));
     nodes.forEach((n) => { n.targetR = radiusFor(n, maxW); });
     if (links) {
-      edges = links.map((l) => ({ a: byId[l.a], b: byId[l.b], w: l.w ?? 0.5 })).filter((e) => e.a && e.b);
+      // روابط "أنا" (المحور) أضعف من الروابط بين الأقسام، حتى لا تبتلع المجموعات
+      edges = links.map((l) => ({ a: byId[l.a], b: byId[l.b], w: l.w ?? 0.5, hub: l.a === 'me' || l.b === 'me' }))
+        .filter((e) => e.a && e.b);
+      nodes.forEach((n) => { n.linked = edges.some((e) => !e.hub && e.w > 0 && (e.a === n || e.b === n)); });
+    }
+    if (groupMap) {
+      nodes.forEach((n) => { n.group = groupMap[n.id] ?? null; });
+      const ids = [...new Set(nodes.map((n) => n.group).filter((g) => g !== null))];
+      groups = ids.map((g) => ({ id: g, members: nodes.filter((n) => n.group === g) })).filter((g) => g.members.length > 1);
     }
   }
-  setData(null, linksIn);
+  setData(null, linksIn, groupsIn);
   nodes.forEach((n) => { n.r = n.targetR; });
 
   function resize() {
@@ -190,6 +200,9 @@ export function createMindGraph(canvas, nodesIn, linksIn, { onTap } = {}) {
   canvas.style.cursor = 'grab';
 
   // ---- الفيزياء ----
+  // - تنافر عام بين الكرات، يشتد بين كرتين من مجموعتين مختلفتين
+  // - نوابض على الروابط: كلما قوي الرابط قصر طوله وزادت شدّته
+  // - تماسك: كل كرة تنجذب إلى مركز مجموعتها، و"أنا" تبقى في الوسط، والمنفردة تبتعد إلى الأطراف
   function step(t) {
     const cx = W / 2, cy = H / 2;
     const base = Math.min(W, H) * 0.32;
@@ -200,7 +213,8 @@ export function createMindGraph(canvas, nodesIn, linksIn, { onTap } = {}) {
         let dx = b.x - a.x, dy = b.y - a.y;
         const d = Math.hypot(dx, dy) || 0.01;
         const minD = a.r + b.r + 16;
-        let f = 900 / (d * d);
+        const apart = a.group !== null && b.group !== null && a.group !== b.group;
+        let f = (apart ? 2200 : 900) / (d * d);
         if (d < minD) f += (minD - d) * 0.08;
         dx /= d; dy /= d;
         a.vx -= dx * f; a.vy -= dy * f;
@@ -211,16 +225,34 @@ export function createMindGraph(canvas, nodesIn, linksIn, { onTap } = {}) {
       const { a, b } = e;
       const dx = b.x - a.x, dy = b.y - a.y;
       const d = Math.hypot(dx, dy) || 0.01;
-      const rest = base * (1.05 - 0.45 * e.w) + (a.r + b.r) * 0.5;
-      const f = (d - rest) * (0.0015 + 0.002 * e.w);
+      let rest, k;
+      if (e.hub) { rest = base * 1.05 + (a.r + b.r) * 0.5; k = 0.0006; }
+      else { rest = base * (0.62 - 0.34 * e.w) + (a.r + b.r) * 0.6; k = 0.002 + 0.005 * e.w; }
+      const f = (d - rest) * k;
       a.vx += (dx / d) * f; a.vy += (dy / d) * f;
       b.vx -= (dx / d) * f; b.vy -= (dy / d) * f;
+    }
+    // تماسك المجموعات
+    for (const g of groups) {
+      let gx = 0, gy = 0;
+      for (const n of g.members) { gx += n.x; gy += n.y; }
+      gx /= g.members.length; gy /= g.members.length;
+      g.cx = gx; g.cy = gy;
+      for (const n of g.members) { n.vx += (gx - n.x) * 0.006; n.vy += (gy - n.y) * 0.006; }
     }
     for (const n of nodes) {
       n.r += (n.targetR - n.r) * 0.1;
       if (n.pop) n.pop = Math.max(0, n.pop - 0.06);
-      n.vx += (cx - n.x) * 0.0008 + Math.cos(t / 1400 + n.phase) * 0.03;
-      n.vy += (cy - n.y) * 0.0008 + Math.sin(t / 1700 + n.phase) * 0.03;
+      const pull = n.id === 'me' ? 0.01 : 0.0008;
+      n.vx += (cx - n.x) * pull + Math.cos(t / 1400 + n.phase) * 0.03;
+      n.vy += (cy - n.y) * pull + Math.sin(t / 1700 + n.phase) * 0.03;
+      // كرة بلا روابط مع أقسام أخرى: تبتعد بهدوء إلى حلقة خارجية
+      if (n.id !== 'me' && !n.linked) {
+        const dx = n.x - cx, dy = n.y - cy, d = Math.hypot(dx, dy) || 1;
+        const ring = base * 1.25;
+        n.vx += (dx / d) * (ring - d) * 0.0015;
+        n.vy += (dy / d) * (ring - d) * 0.0015;
+      }
       if (drag?.node === n && drag.moved) continue;
       n.vx *= 0.92; n.vy *= 0.92;
       n.x += n.vx; n.y += n.vy;
@@ -232,13 +264,37 @@ export function createMindGraph(canvas, nodesIn, linksIn, { onTap } = {}) {
     }
   }
 
+  // هالة ملونة خلف كل مجموعة، بمزيج ألوان أفرادها
+  function drawGroups() {
+    for (const g of groups) {
+      if (g.cx == null) continue;
+      let rad = 0, R = 0, G = 0, B = 0;
+      for (const n of g.members) {
+        rad = Math.max(rad, Math.hypot(n.x - g.cx, n.y - g.cy) + n.r);
+        const c = parseInt(n.color.slice(1), 16);
+        R += c >> 16; G += (c >> 8) & 255; B += c & 255;
+      }
+      const k = g.members.length;
+      const col = `${Math.round(R / k)},${Math.round(G / k)},${Math.round(B / k)}`;
+      rad += 22;
+      const grad = ctx.createRadialGradient(g.cx, g.cy, rad * 0.2, g.cx, g.cy, rad);
+      grad.addColorStop(0, `rgba(${col},0.16)`);
+      grad.addColorStop(0.8, `rgba(${col},0.08)`);
+      grad.addColorStop(1, `rgba(${col},0)`);
+      ctx.fillStyle = grad;
+      ctx.beginPath(); ctx.arc(g.cx, g.cy, rad, 0, Math.PI * 2); ctx.fill();
+    }
+  }
+
   function draw() {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, W, H);
     ctx.setTransform(dpr * view.s, 0, 0, dpr * view.s, dpr * view.x, dpr * view.y);
-    for (const { a, b, w } of edges) {
-      ctx.strokeStyle = `rgba(255,255,255,${(0.35 + 0.55 * w).toFixed(2)})`;
-      ctx.lineWidth = 1 + 2.5 * w;
+    drawGroups();
+    for (const { a, b, w, hub } of edges) {
+      // خطوط "أنا" أخف، وخطوط المجموعات أوضح
+      ctx.strokeStyle = `rgba(255,255,255,${(hub ? 0.22 + 0.3 * w : 0.4 + 0.55 * w).toFixed(2)})`;
+      ctx.lineWidth = hub ? 1 : 1.2 + 2.8 * w;
       ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
     }
     ctx.textAlign = 'center';
