@@ -248,7 +248,7 @@ input[dir="ltr"] { text-align: left; }
 .chip.is-pending { opacity: .7; animation: cmp-dot 1.4s ease-in-out infinite; }
 
 .sheet {
-  position: fixed; inset: 0; z-index: 20; background: rgba(5, 3, 20, .6);
+  position: fixed; inset: 0; z-index: 35; /* فوق الرفيقة الطافية (30) */ background: rgba(5, 3, 20, .6);
   display: flex; align-items: flex-end;
 }
 .sheet[hidden] { display: none; }
@@ -264,7 +264,7 @@ input[dir="ltr"] { text-align: left; }
 .sheet__chips { display: flex; flex-wrap: wrap; gap: 8px; }
 
 /* ---- شاشة العقل ---- */
-.mind-hint { margin: 0 0 8px; text-align: center; }
+.mind-hint { margin: 0; text-align: start; flex: 1; font-size: .85rem; }
 .sheet__panel--tall { max-height: 75dvh; display: flex; flex-direction: column; }
 .sheet__head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
 .sheet__head .sheet__title { margin: 0; flex: 1; font-size: 1.1rem; }
@@ -498,3 +498,18 @@ input[type="range"] { width: 100%; accent-color: var(--accent); margin: 4px 0 12
 .floater .cmp-think { display: none !important; }
 .pip-video { position: fixed; width: 1px; height: 1px; opacity: 0; pointer-events: none; bottom: 0; left: 0; }
 .tool:disabled { opacity: .6; }
+
+/* ---- إضافة الأقسام ---- */
+.mind-bar { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.mind-bar .tool { flex: none; }
+.sheet__desc { margin: -4px 0 8px; font-size: .85rem; }
+.sheet__desc[hidden], #suggest-box[hidden], #delete-note[hidden] { display: none; }
+.cat-form { display: flex; flex-direction: column; gap: 4px; }
+.cat-form > * { flex: none; }
+.sheet__body { min-height: 0; }
+.cat-form label { margin-top: 8px; }
+.cat-form textarea { min-height: 72px; width: 100%; font: inherit; color: var(--text); background: var(--bg-2); border: 1px solid var(--border); border-radius: 12px; padding: 10px; resize: vertical; }
+.chips-wrap { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 4px; }
+.swatches { display: flex; flex-wrap: wrap; gap: 8px; }
+.swatch { width: 34px; height: 34px; border-radius: 50%; border: 3px solid transparent; background: var(--c); cursor: pointer; box-shadow: 0 0 0 1px rgba(255,255,255,.15); }
+.swatch.is-active { border-color: #fff; box-shadow: 0 0 12px var(--c); }

@@ -54,7 +54,9 @@ export function createMindGraph(canvas, nodesIn, linksIn, { onTap } = {}) {
     const p = pointerPos(e);
     const hit = hitTest(p);
     if (!hit) return;
-    drag = { node: hit, startX: p.x, startY: p.y, lastX: p.x, lastY: p.y, t: performance.now(), moved: false };
+    // الإصبع يهتز أكثر من الفأرة، فنتسامح معه أكثر قبل اعتبار اللمسة سحباً
+    const slop = e.pointerType === 'mouse' ? 6 : 16;
+    drag = { node: hit, startX: p.x, startY: p.y, lastX: p.x, lastY: p.y, t: performance.now(), t0: performance.now(), moved: false, slop };
     canvas.setPointerCapture(e.pointerId);
     e.preventDefault();
   }
@@ -64,7 +66,7 @@ export function createMindGraph(canvas, nodesIn, linksIn, { onTap } = {}) {
       return;
     }
     const p = pointerPos(e);
-    if (Math.hypot(p.x - drag.startX, p.y - drag.startY) > 8) drag.moved = true;
+    if (Math.hypot(p.x - drag.startX, p.y - drag.startY) > drag.slop) drag.moved = true;
     if (!drag.moved) return;
     const now = performance.now();
     const dt = Math.max(16, now - drag.t);
@@ -83,7 +85,8 @@ export function createMindGraph(canvas, nodesIn, linksIn, { onTap } = {}) {
   canvas.addEventListener('pointerdown', onDown);
   canvas.addEventListener('pointermove', onMove);
   canvas.addEventListener('pointerup', onUp);
-  canvas.addEventListener('pointercancel', () => { drag = null; });
+  const onCancel = () => { drag = null; };
+  canvas.addEventListener('pointercancel', onCancel);
   window.addEventListener('resize', resize);
 
   // ---- الفيزياء ----
@@ -167,6 +170,10 @@ export function createMindGraph(canvas, nodesIn, linksIn, { onTap } = {}) {
     destroy() {
       cancelAnimationFrame(raf);
       window.removeEventListener('resize', resize);
+      canvas.removeEventListener('pointerdown', onDown);
+      canvas.removeEventListener('pointermove', onMove);
+      canvas.removeEventListener('pointerup', onUp);
+      canvas.removeEventListener('pointercancel', onCancel);
     },
   };
 }

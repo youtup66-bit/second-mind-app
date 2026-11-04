@@ -1,5 +1,6 @@
 // خدمة Gemini: ما يغادر الجهاز هو نص المحادثة، والملاحظات القليلة ذات الصلة بها، وما تطلب تلخيصه.
 import { getSetting, setSetting } from './storage.js';
+import { CATEGORIES, NONE } from './categories.js';
 
 const API = 'https://generativelanguage.googleapis.com/v1beta';
 export const DEFAULT_MODEL = 'gemini-3.6-flash';
@@ -196,22 +197,16 @@ async function generate(body, kind = 'other') {
 }
 
 // ---- التصنيف ----
-const CLASSIFIER = `أنت مصنِّف لملاحظات شخصية مكتوبة بالعربية (فصحى أو عامية).
-صنّف "الملاحظة الحالية" فقط إلى قسم واحد هو الأنسب، واستعن بالسياق إن كانت قصيرة.
-الأقسام:
-- worry (قلق): خوف، توتر، همّ، انزعاج من أمر قادم أو حاصل.
-- thought (تفكير): تأمل، رأي، تحليل، مشاعر عامة أو وصف لحال اليوم.
-- idea (فكرة إبداعية): فكرة مشروع، اختراع، كتابة، تصميم، حل جديد.
-- task (مهمة): شيء يجب فعله أو تذكّره، موعد، التزام.
-- memory (ذكرى): حدث من الماضي يستعيده.
-- gratitude (امتنان): شكر، تقدير، شيء جميل يحمد عليه.
-- dream (حلم): حلم منام، أو أمنية وطموح بعيد.
-- decision (قرار): قرار اتخذه أو يحسمه أو حيرة بين خيارين.
-- question (سؤال): سؤال يشغله أو يريد معرفة جوابه.
-- none: تحية أو رد قصير بلا مضمون (مثل: مرحبا، شكراً، تمام).
-أعد أيضاً عنواناً قصيراً من ٢ إلى ٦ كلمات يلخّص الملاحظة.`;
+// قائمة الأقسام تُبنى في كل مرة من CATEGORIES، فتشمل الأقسام التي أضافها المستخدم.
+const categoryRules = () => `الأقسام:
+${[...CATEGORIES, NONE].map((c) => `- ${c.id} (${c.label}): ${c.desc || c.label}`).join('\n')}
+أعد أيضاً عنواناً قصيراً من ٢ إلى ٦ كلمات يلخّص الملاحظة.
+إن ناسبت الملاحظة قسماً أضافه المستخدم (معرّفه يبدأ بـ c_) وقسماً عاماً معاً، ففضّل قسم المستخدم لأنه أدق.`;
 
-const CATEGORY_IDS = ['worry', 'thought', 'idea', 'task', 'memory', 'gratitude', 'dream', 'decision', 'question', 'none'];
+const CLASSIFIER_INTRO = `أنت مصنِّف لملاحظات شخصية مكتوبة بالعربية (فصحى أو عامية).
+صنّف "الملاحظة الحالية" فقط إلى قسم واحد هو الأنسب، واستعن بالسياق إن كانت قصيرة.`;
+const classifierPrompt = () => `${CLASSIFIER_INTRO}\n${categoryRules()}`;
+const categoryIds = () => [...CATEGORIES.map((c) => c.id), 'none'];
 
 // history: [{ role: 'user'|'model', text }]
 // memories: ملاحظات ذات صلة [{ createdAt, categoryLabel, text, done }] تُرفق كسياق فقط
@@ -228,7 +223,8 @@ export async function chat(history, { memories = [], classify: withClass = true 
     }, 'chat');
     return { reply };
   }
-  const rules = CLASSIFIER.split('\n').slice(2).join('\n'); // قائمة الأقسام وقاعدة العنوان
+  const rules = categoryRules();
+  const ids = categoryIds();
   const raw = await generate({
     systemInstruction: { parts: [{ text: `${system}
 
@@ -245,7 +241,7 @@ ${rules}` }] },
         type: 'OBJECT',
         properties: {
           reply: { type: 'STRING' },
-          category: { type: 'STRING', enum: CATEGORY_IDS },
+          category: { type: 'STRING', enum: ids },
           title: { type: 'STRING' },
         },
         required: ['reply', 'category', 'title'],
@@ -258,7 +254,7 @@ ${rules}` }] },
     if (!reply) throw new Error('empty');
     return {
       reply,
-      category: CATEGORY_IDS.includes(out.category) ? out.category : null,
+      category: ids.includes(out.category) ? out.category : null,
       title: String(out.title || '').trim().slice(0, 60),
     };
   } catch {
@@ -270,8 +266,9 @@ ${rules}` }] },
 // context: رسائل سابقة قصيرة [{ role, text }] للمساعدة في فهم الردود القصيرة
 export async function classify(text, context = []) {
   const ctx = context.map((m) => `${m.role === 'user' ? 'المستخدم' : 'الرفيقة'}: ${m.text}`).join('\n');
+  const ids = categoryIds();
   const raw = await generate({
-    systemInstruction: { parts: [{ text: CLASSIFIER }] },
+    systemInstruction: { parts: [{ text: classifierPrompt() }] },
     contents: [{
       role: 'user',
       parts: [{ text: `${ctx ? `السياق:\n${ctx}\n\n` : ''}الملاحظة الحالية:\n${text}` }],
@@ -283,7 +280,7 @@ export async function classify(text, context = []) {
       responseSchema: {
         type: 'OBJECT',
         properties: {
-          category: { type: 'STRING', enum: CATEGORY_IDS },
+          category: { type: 'STRING', enum: ids },
           title: { type: 'STRING' },
         },
         required: ['category', 'title'],
@@ -296,7 +293,7 @@ export async function classify(text, context = []) {
   } catch {
     throw new GeminiError('رد التصنيف غير مفهوم.', 'PARSE');
   }
-  const category = CATEGORY_IDS.includes(out.category) ? out.category : 'thought';
+  const category = ids.includes(out.category) ? out.category : 'thought';
   return { category, title: String(out.title || '').trim().slice(0, 60) };
 }
 

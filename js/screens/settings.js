@@ -3,6 +3,7 @@ import { getSetting, setSetting, deleteSetting, clearAll, clearMessages } from '
 import { DEFAULT_MODEL, DEFAULT_LITE_MODEL, testKey, getUsage, ttsCooldownUntil, clearTtsCooldown, economyMode } from '../gemini.js';
 import { canSpeak, canRecord, canBrowserListen, speak, stopSpeaking, unlockAudio, voicesReady } from '../voice.js';
 import { SKINS, DEFAULT_SKIN, skinSVG } from '../skins.js';
+import { loadCategories } from '../categories.js';
 import { canPip, pipAction, isFloating } from '../pip.js';
 
 // يحفظ إعداداً ويُعلم بقية التطبيق (مثل الرفيقة الطافية)
@@ -463,6 +464,7 @@ export async function mount(root) {
     show(backupMsg, 'جارٍ الاستيراد…');
     try {
       const r = await importFile(file, mode);
+      await loadCategories();
       show(backupMsg, `تم استيراد ${r.entries} ملاحظة و${r.messages} رسالة.`);
       renderSnaps();
     } catch (err) {
@@ -476,6 +478,7 @@ export async function mount(root) {
     if (!confirm('ستعود ملاحظاتك ومحادثتك إلى حالها في هذه اللقطة (مع حفظ لقطة للحال الحالي). متابعة؟')) return;
     try {
       const r = await restoreSnapshot(id);
+      await loadCategories();
       show(backupMsg, `تمت الاستعادة: ${r.entries} ملاحظة.`);
       renderSnaps();
     } catch (err) {

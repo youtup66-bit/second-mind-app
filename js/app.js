@@ -6,6 +6,7 @@ import * as settings from './screens/settings.js';
 import { autoSnapshot } from './backup.js';
 import { createFloater } from './floater.js';
 import { getSetting } from './storage.js';
+import { loadCategories } from './categories.js';
 
 const routes = { home, mind, folder, settings };
 const app = document.getElementById('app');
@@ -66,7 +67,7 @@ window.addEventListener('sm:setting', (e) => {
 });
 
 window.addEventListener('hashchange', navigate);
-navigate().finally(() => { window.__appReady = true; });
+loadCategories().catch(() => {}).then(navigate).finally(() => { window.__appReady = true; });
 
 // أي خطأ غير متوقع يظهر كشريط صغير بدل أن يتعطل التطبيق بصمت
 function toast(msg) {
