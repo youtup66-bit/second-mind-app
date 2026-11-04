@@ -472,3 +472,12 @@ input[type="range"] { width: 100%; accent-color: var(--accent); margin: 4px 0 12
 }
 .composer__clear[hidden] { display: none; }
 .note__edit { margin-top: 8px; }
+
+/* ---- جدول الاستهلاك ---- */
+.usage { width: 100%; border-collapse: collapse; font-size: .85rem; margin-bottom: 8px; }
+.usage th, .usage td { padding: 6px 4px; border-bottom: 1px solid var(--border); text-align: center; }
+.usage th:first-child, .usage td:first-child { text-align: start; }
+.usage th { color: var(--muted); font-weight: 500; }
+.usage tfoot td { font-weight: 700; border-bottom: 0; }
+.usage__bad { color: var(--danger); font-weight: 700; }
+#tts-cooldown[hidden] { display: none; }

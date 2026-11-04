@@ -1,6 +1,6 @@
 // شاشة الإعدادات: مفتاح Gemini يُحفظ على الجهاز فقط
 import { getSetting, setSetting, deleteSetting, clearAll, clearMessages } from '../storage.js';
-import { DEFAULT_MODEL, testKey } from '../gemini.js';
+import { DEFAULT_MODEL, testKey, getUsage, ttsCooldownUntil, clearTtsCooldown } from '../gemini.js';
 import { canSpeak, canRecord, canBrowserListen, speak, stopSpeaking, unlockAudio, voicesReady } from '../voice.js';
 import { SKINS, DEFAULT_SKIN, skinSVG } from '../skins.js';
 import {
@@ -48,6 +48,7 @@ export async function mount(root) {
         <label class="switch"><input type="radio" name="engine" value="gemini" ${engine === 'gemini' ? 'checked' : ''}><span>صوت Gemini الطبيعي</span></label>
       </div>
       <p class="muted" id="engine-note"></p>
+      <p class="status" id="tts-cooldown" hidden></p>
 
       <div id="device-opts">
         <label for="device-voice">صوت الجهاز</label>
@@ -61,6 +62,13 @@ export async function mount(root) {
         <button class="btn" id="test-voice">🔊 جرّب الصوت</button>
       </div>
       <p class="status" id="voice-status" role="status"></p>
+    </section>
+
+    <section class="card" id="usage">
+      <h2>استهلاك Gemini اليوم</h2>
+      <div id="usage-table"></div>
+      <p class="muted">الحدود المجانية تختلف لكل نوع وتتغير من Google. نماذج الصوت حصتها أصغر بكثير.
+      للتوفير: صوت الجهاز بدل صوت Gemini، ومايك لوحة المفاتيح 🎤 بدل 🎙.</p>
     </section>
 
     <section class="card">
@@ -195,6 +203,31 @@ export async function mount(root) {
     show(keyStatus, 'تم حفظ النموذج.');
   });
 
+  // ---- الاستهلاك ----
+  const KINDS = {
+    chat: 'الردود (مع التصنيف)', classify: 'تصنيف منفصل', summary: 'الملخصات',
+    transcribe: 'تحويل كلامك إلى نص 🎙', tts: 'صوت Gemini 🔊', other: 'أخرى (فحص المفتاح والنماذج)',
+  };
+  async function renderUsage() {
+    const { today, days } = await getUsage();
+    const week = {};
+    Object.values(days).forEach((d) => Object.entries(d).forEach(([k, r]) => {
+      week[k] = (week[k] || 0) + r.ok;
+    }));
+    const rows = Object.keys(KINDS).filter((k) => today[k] || week[k]);
+    const total = rows.reduce((n, k) => n + (today[k]?.ok || 0), 0);
+    root.querySelector('#usage-table').innerHTML = rows.length ? `
+      <table class="usage">
+        <thead><tr><th>النوع</th><th>اليوم</th><th>رُفض (حد)</th><th>٧ أيام</th></tr></thead>
+        <tbody>${rows.map((k) => `<tr>
+          <td>${KINDS[k]}</td><td>${today[k]?.ok || 0}</td>
+          <td class="${today[k]?.limited ? 'usage__bad' : ''}">${today[k]?.limited || 0}</td><td>${week[k] || 0}</td></tr>`).join('')}
+        </tbody>
+        <tfoot><tr><td>المجموع اليوم</td><td>${total}</td><td></td><td></td></tr></tfoot>
+      </table>` : '<p class="muted">لم تُستخدم أي طلبات بعد.</p>';
+  }
+  renderUsage();
+
   // ---- الصوت ----
   const voiceStatus = root.querySelector('#voice-status');
   const engineNote = root.querySelector('#engine-note');
@@ -203,10 +236,23 @@ export async function mount(root) {
     device: 'فوري ومجاني ويعمل دون إنترنت، وجودته تعتمد على الأصوات المثبتة في جوالك.',
     gemini: 'صوت طبيعي أجمل بكثير يناسب الشخصية. يُرسل نص الرد فقط إلى Gemini، ويستهلك من حصة مفتاحك، ويتأخر ثوانيَ قليلة. إن تعذّر يُستخدم صوت الجهاز تلقائياً.',
   };
+  const cooldownEl = root.querySelector('#tts-cooldown');
+  const fmtTime = new Intl.DateTimeFormat('ar', { timeStyle: 'short' });
+  async function renderCooldown() {
+    const until = await ttsCooldownUntil();
+    const isGemini = root.querySelector('input[name="engine"]:checked').value === 'gemini';
+    cooldownEl.hidden = !(until && isGemini);
+    if (until) {
+      cooldownEl.className = 'status status--err';
+      cooldownEl.innerHTML = `نفدت حصة صوت Gemini مؤقتاً، فأستخدم صوت الجهاز حتى ${fmtTime.format(until)}. <button class="link-btn" id="retry-tts">جرّب الآن</button>`;
+      cooldownEl.querySelector('#retry-tts').onclick = async () => { await clearTtsCooldown(); renderCooldown(); };
+    }
+  }
   const syncEngine = () => {
     const v = root.querySelector('input[name="engine"]:checked').value;
     engineNote.textContent = NOTES[v];
     deviceOpts.hidden = v !== 'device';
+    renderCooldown();
   };
   syncEngine();
   root.querySelectorAll('input[name="engine"]').forEach((r) => r.addEventListener('change', async () => {
@@ -252,8 +298,9 @@ export async function mount(root) {
     let fellBack = false;
     speak(SAMPLES[skin] || SAMPLES.star, {
       skin,
+      force: true,
       onStart: () => { if (!fellBack) voiceStatus.textContent = ''; },
-      onEnd: () => { btn.disabled = false; },
+      onEnd: () => { btn.disabled = false; renderCooldown(); renderUsage(); },
       onSilent: () => {
         voiceStatus.className = 'status status--err';
         voiceStatus.textContent = (fellBack ? voiceStatus.textContent + ' ' : '') +

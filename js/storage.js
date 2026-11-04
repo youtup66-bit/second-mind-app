@@ -114,7 +114,7 @@ export const clearMessages = () =>
 
 // ---- التصدير والاستيراد ----
 // المفتاح لا يُصدَّر أبداً حتى لا يتسرب مع ملف النسخة، وتاريخ آخر نسخة خاص بهذا الجهاز
-const PRIVATE_SETTINGS = new Set(['geminiApiKey', 'lastExportAt']);
+const PRIVATE_SETTINGS = new Set(['geminiApiKey', 'lastExportAt', 'usage', 'ttsCooldownUntil']);
 export const BACKUP_FORMAT = 1;
 
 async function getAllSettings() {

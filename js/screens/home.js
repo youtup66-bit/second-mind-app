@@ -372,9 +372,6 @@ export async function mount(root) {
     const userMsg = await addMessage({ role: 'user', text, entryId: entry.id });
     append(userMsg, { entry });
 
-    // التصنيف يعمل بالتوازي مع رد الرفيقة
-    classifyEntry(entry).then(refreshChip).catch(() => {});
-
     companion.setState('thinking');
     say('<span class="dots"><i></i><i></i><i></i></span>');
     const pending = append({ role: 'model', text: '…' }, { pending: true });
@@ -382,7 +379,10 @@ export async function mount(root) {
     try {
       const recent = await getMessages(HISTORY_LIMIT);
       const { used, memories } = await memoriesFor(text, recent);
-      const reply = await chat(recent.map(({ role, text: t }) => ({ role, text: t })), { memories });
+      // طلب واحد يعيد الرد وتصنيف رسالتك معاً (توفيراً للحصة)
+      const result = await chat(recent.map(({ role, text: t }) => ({ role, text: t })), { memories });
+      const reply = result.reply;
+      applyClassification(entry.id, result);
       const modelMsg = await addMessage({ role: 'model', text: reply, used: used.map((e) => e.id) });
       pending.dataset.id = modelMsg.id;
       pending.querySelector('.msg__text').textContent = reply;
@@ -401,6 +401,20 @@ export async function mount(root) {
     }
   }
 
+  // يحفظ التصنيف الذي جاء مع الرد، أو يطلب تصنيفاً منفصلاً إن لم يصل
+  async function applyClassification(entryId, { category, title }) {
+    const fresh = await getEntry(entryId);
+    if (!fresh || fresh.category) return; // صنّفه المستخدم يدوياً أثناء الانتظار
+    if (!category) {
+      classifyEntry(entryId).then(refreshChip).catch(() => {});
+      return;
+    }
+    fresh.category = category;
+    fresh.meta = { ...fresh.meta, title, classifiedBy: 'ai', classifiedAt: Date.now() };
+    await updateEntry(fresh);
+    refreshChip(fresh);
+  }
+
   // رد جديد بدل رد سابق: نعيد السؤال بنفس السياق الذي سبقه
   async function regenerate(li) {
     if (busy || !li?.dataset.id) return;
@@ -417,7 +431,7 @@ export async function mount(root) {
     say('<span class="dots"><i></i><i></i><i></i></span>');
     try {
       const { used, memories } = await memoriesFor(lastUser.text, before);
-      const reply = await chat(before.map(({ role, text }) => ({ role, text })), { memories });
+      const { reply } = await chat(before.map(({ role, text }) => ({ role, text })), { memories, classify: false });
       msg.text = reply;
       msg.used = used.map((e) => e.id);
       await updateMessage(msg);

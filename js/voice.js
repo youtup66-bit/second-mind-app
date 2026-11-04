@@ -2,7 +2,7 @@
 // محرّكان للنطق: صوت الجهاز (فوري ومجاني) أو صوت Gemini الطبيعي (اختياري).
 import { getSetting } from './storage.js';
 import { skinVoice } from './skins.js';
-import { tts } from './gemini.js';
+import { tts, ttsCooldownUntil } from './gemini.js';
 
 const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 
@@ -261,14 +261,15 @@ async function voiceSettings() {
 
 // skin: معرّف الشخصية لاختيار صوتها. onFallback: يُستدعى إن فشل صوت Gemini وعدنا لصوت الجهاز
 // onWaiting: يُستدعى أثناء انتظار صوت Gemini. onSilent: إن لم يبدأ صوت الجهاز أبداً
-export async function speak(text, { skin, onStart, onEnd, onFallback, onWaiting, onSilent } = {}) {
+// force: يتجاهل فترة الراحة (لزر "جرّب الصوت" في الإعدادات)
+export async function speak(text, { skin, onStart, onEnd, onFallback, onWaiting, onSilent, force = false } = {}) {
   stopSpeaking();
   const my = ++token;
   const profile = skinVoice(skin);
   const opts = await voiceSettings();
   if (my !== token) return;
 
-  if (opts.engine === 'gemini') {
+  if (opts.engine === 'gemini' && (force || !(await ttsCooldownUntil()))) {
     try {
       onWaiting?.();
       const audio = await tts(text.slice(0, MAX_TTS_CHARS), { voice: profile.gemini, style: profile.style });

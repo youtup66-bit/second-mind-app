@@ -43,8 +43,34 @@ async function getKey() {
   return key;
 }
 
+// ---- عدّاد الطلبات (على الجهاز فقط) ----
+// يحفظ لكل يوم عدد الطلبات من كل نوع: ناجحة، ومرفوضة لتجاوز الحد. نحتفظ بآخر ٧ أيام.
+const dayKey = (d = new Date()) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+let usageQueue = Promise.resolve();
+
+function track(kind, outcome) {
+  usageQueue = usageQueue.then(async () => {
+    const u = await getSetting('usage', { days: {} });
+    const k = dayKey();
+    const day = (u.days[k] ||= {});
+    const row = (day[kind] ||= { ok: 0, limited: 0, error: 0 });
+    row[outcome]++;
+    const keep = Object.keys(u.days).sort().slice(-7);
+    u.days = Object.fromEntries(keep.map((d) => [d, u.days[d]]));
+    await setSetting('usage', u);
+  }).catch(() => {});
+  return usageQueue;
+}
+
+export async function getUsage() {
+  await usageQueue;
+  const u = await getSetting('usage', { days: {} });
+  return { today: u.days[dayKey()] || {}, days: u.days };
+}
+
 // كل طلب له مهلة، حتى لا تبقى الرفيقة "تفكر" إلى الأبد إن تعلّق الاتصال
-async function call(path, key, body, timeoutMs = 60_000) {
+// kind: نوع الطلب للعدّاد (chat, classify, summary, transcribe, tts, other)
+async function call(path, key, body, timeoutMs = 60_000, kind = 'other') {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), timeoutMs);
   let res, data;
@@ -62,6 +88,7 @@ async function call(path, key, body, timeoutMs = 60_000) {
   } finally {
     clearTimeout(timer);
   }
+  track(kind, res.ok ? 'ok' : res.status === 429 ? 'limited' : 'error');
   if (!res.ok) {
     const msg = data?.error?.message || `HTTP ${res.status}`;
     if (res.status === 400 && /api key/i.test(msg)) throw new GeminiError('المفتاح غير صالح.', 'BAD_KEY');
@@ -99,33 +126,22 @@ function toContents(history) {
 }
 
 // طلب توليد مع اختيار نموذج بديل تلقائياً إن لم يكن المحفوظ متاحاً
-async function generate(body) {
+async function generate(body, kind = 'other') {
   const key = await getKey();
   let model = await getSetting('geminiModel', DEFAULT_MODEL);
   let data;
   try {
-    data = await call(`models/${model}:generateContent`, key, body);
+    data = await call(`models/${model}:generateContent`, key, body, 60_000, kind);
   } catch (err) {
     if (err.code !== 'NO_MODEL') throw err;
     model = await findWorkingModel(key);
     await setSetting('geminiModel', model);
-    data = await call(`models/${model}:generateContent`, key, body);
+    data = await call(`models/${model}:generateContent`, key, body, 60_000, kind);
   }
   const text = data?.candidates?.[0]?.content?.parts
     ?.filter((p) => !p.thought).map((p) => p.text || '').join('').trim();
   if (!text) throw new GeminiError('لم يصلني رد، جرّب مرة أخرى.', 'EMPTY');
   return text;
-}
-
-// history: [{ role: 'user'|'model', text }]
-// memories: ملاحظات ذات صلة [{ createdAt, categoryLabel, text, done }] تُرفق كسياق فقط
-// ملاحظة: الحد الأعلى للرموز واسع لأن نماذج التفكير تحتسب تفكيرها منه.
-export function chat(history, { memories = [] } = {}) {
-  return generate({
-    systemInstruction: { parts: [{ text: PERSONA + memoriesBlock(memories) }] },
-    contents: toContents(history),
-    generationConfig: { temperature: 0.8, maxOutputTokens: 2048 },
-  });
 }
 
 // ---- التصنيف ----
@@ -145,6 +161,60 @@ const CLASSIFIER = `أنت مصنِّف لملاحظات شخصية مكتوبة
 أعد أيضاً عنواناً قصيراً من ٢ إلى ٦ كلمات يلخّص الملاحظة.`;
 
 const CATEGORY_IDS = ['worry', 'thought', 'idea', 'task', 'memory', 'gratitude', 'dream', 'decision', 'question', 'none'];
+
+// history: [{ role: 'user'|'model', text }]
+// memories: ملاحظات ذات صلة [{ createdAt, categoryLabel, text, done }] تُرفق كسياق فقط
+// classify: نطلب في الطلب نفسه تصنيف رسالته الأخيرة وعنوانها، فنوفّر طلباً كاملاً لكل رسالة.
+// يعيد { reply, category?, title? }
+// ملاحظة: الحد الأعلى للرموز واسع لأن نماذج التفكير تحتسب تفكيرها منه.
+export async function chat(history, { memories = [], classify: withClass = true } = {}) {
+  const system = PERSONA + memoriesBlock(memories);
+  if (!withClass) {
+    const reply = await generate({
+      systemInstruction: { parts: [{ text: system }] },
+      contents: toContents(history),
+      generationConfig: { temperature: 0.8, maxOutputTokens: 2048 },
+    }, 'chat');
+    return { reply };
+  }
+  const rules = CLASSIFIER.split('\n').slice(2).join('\n'); // قائمة الأقسام وقاعدة العنوان
+  const raw = await generate({
+    systemInstruction: { parts: [{ text: `${system}
+
+صيغة الناتج: JSON فقط.
+- reply: ردّك على رسالته الأخيرة كما ستكتبينه له، بالأسلوب الموصوف أعلاه.
+- category و title: تصنيف رسالته الأخيرة وحدها، وعنوان قصير لها، وفق ما يلي:
+${rules}` }] },
+    contents: toContents(history),
+    generationConfig: {
+      temperature: 0.8,
+      maxOutputTokens: 2048,
+      responseMimeType: 'application/json',
+      responseSchema: {
+        type: 'OBJECT',
+        properties: {
+          reply: { type: 'STRING' },
+          category: { type: 'STRING', enum: CATEGORY_IDS },
+          title: { type: 'STRING' },
+        },
+        required: ['reply', 'category', 'title'],
+      },
+    },
+  }, 'chat');
+  try {
+    const out = JSON.parse(raw.replace(/^```(?:json)?\s*|\s*```$/g, ''));
+    const reply = String(out.reply || '').trim();
+    if (!reply) throw new Error('empty');
+    return {
+      reply,
+      category: CATEGORY_IDS.includes(out.category) ? out.category : null,
+      title: String(out.title || '').trim().slice(0, 60),
+    };
+  } catch {
+    // إن لم يلتزم النموذج بالصيغة نعرض النص كما هو، ويُصنَّف لاحقاً بطلب منفصل
+    return { reply: raw.replace(/^\{[\s\S]*?"reply"\s*:\s*"|"\s*,\s*"category[\s\S]*$/g, '').trim() || raw };
+  }
+}
 
 // context: رسائل سابقة قصيرة [{ role, text }] للمساعدة في فهم الردود القصيرة
 export async function classify(text, context = []) {
@@ -168,7 +238,7 @@ export async function classify(text, context = []) {
         required: ['category', 'title'],
       },
     },
-  });
+  }, 'classify');
   let out;
   try {
     out = JSON.parse(raw.replace(/^```(?:json)?\s*|\s*```$/g, ''));
@@ -218,7 +288,7 @@ export async function summarize(notes, periodLabel) {
         required: ['headline', 'mood', 'moodEmoji', 'overview', 'themes', 'openTasks', 'ideas', 'gratitude', 'suggestion'],
       },
     },
-  });
+  }, 'summary');
   try {
     const out = JSON.parse(raw.replace(/^```(?:json)?\s*|\s*```$/g, ''));
     const arr = (x) => (Array.isArray(x) ? x.map(String).filter(Boolean).slice(0, 8) : []);
@@ -248,8 +318,33 @@ async function findTtsModel(key) {
   return pick;
 }
 
+const TTS_COOLDOWN = 60 * 60 * 1000;
+
+// متى يُسمح بمحاولة صوت Gemini مجدداً (0 = الآن)
+export async function ttsCooldownUntil() {
+  const until = Number(await getSetting('ttsCooldownUntil', 0));
+  return until > Date.now() ? until : 0;
+}
+export const clearTtsCooldown = () => setSetting('ttsCooldownUntil', 0);
+
 // يعيد { samples: Int16Array, rate }
 export async function tts(text, { voice, style }) {
+  try {
+    const out = await ttsRequest(text, { voice, style });
+    clearTtsCooldown();
+    return out;
+  } catch (err) {
+    // عند نفاد الحصة لا نحاول مع كل رد (كل محاولة فاشلة تُهدر طلباً)؛ نرتاح ساعة
+    if (err.code === 'RATE') {
+      await setSetting('ttsCooldownUntil', Date.now() + TTS_COOLDOWN);
+      err.message = 'نفدت حصة صوت Gemini مؤقتاً؛ سأستخدم صوت الجهاز لمدة ساعة.';
+      err.code = 'TTS_COOLDOWN';
+    }
+    throw err;
+  }
+}
+
+async function ttsRequest(text, { voice, style }) {
   const key = await getKey();
   let model = await getSetting('geminiTtsModel', DEFAULT_TTS_MODEL);
   const body = {
@@ -261,12 +356,12 @@ export async function tts(text, { voice, style }) {
   };
   let data;
   try {
-    data = await call(`models/${model}:generateContent`, key, body, 30_000);
+    data = await call(`models/${model}:generateContent`, key, body, 30_000, 'tts');
   } catch (err) {
     if (err.code !== 'NO_MODEL') throw err;
     model = await findTtsModel(key);
     await setSetting('geminiTtsModel', model);
-    data = await call(`models/${model}:generateContent`, key, body, 30_000);
+    data = await call(`models/${model}:generateContent`, key, body, 30_000, 'tts');
   }
   const part = data?.candidates?.[0]?.content?.parts?.find((p) => p.inlineData?.data);
   if (!part) throw new GeminiError('لم يصل صوت.', 'EMPTY');
@@ -295,7 +390,7 @@ export async function transcribe(blob) {
     systemInstruction: { parts: [{ text: TRANSCRIBER }] },
     contents: [{ role: 'user', parts: [{ inlineData: { mimeType, data: await blobToBase64(blob) } }, { text: 'فرّغ التسجيل.' }] }],
     generationConfig: { temperature: 0, maxOutputTokens: 2048 },
-  }).catch((err) => { if (err.code === 'EMPTY') return ''; throw err; });
+  }, 'transcribe').catch((err) => { if (err.code === 'EMPTY') return ''; throw err; });
   return text.replace(/^["«]|["»]$/g, '').trim();
 }
 
