@@ -481,3 +481,8 @@ input[type="range"] { width: 100%; accent-color: var(--accent); margin: 4px 0 12
 .usage tfoot td { font-weight: 700; border-bottom: 0; }
 .usage__bad { color: var(--danger); font-weight: 700; }
 #tts-cooldown[hidden] { display: none; }
+
+.radio-col { display: grid; gap: 4px; margin-bottom: 12px; }
+.radio-col .switch { align-items: flex-start; }
+.radio-col .switch input { margin-top: 4px; flex: none; }
+#lite-model + .muted { margin-top: 6px; }

@@ -3,6 +3,16 @@ import { getSetting, setSetting } from './storage.js';
 
 const API = 'https://generativelanguage.googleapis.com/v1beta';
 export const DEFAULT_MODEL = 'gemini-3.6-flash';
+export const DEFAULT_LITE_MODEL = 'gemini-3.5-flash-lite';
+
+// وضع التوفير: أي المهام تذهب إلى نموذج Flash-Lite (حصته المجانية أكبر عادة)
+//   off: لا شيء  |  saver: المهام الجانبية  |  max: كل شيء بما فيه المحادثة
+export const ECONOMY_DEFAULT = 'saver';
+const LITE_KINDS = {
+  off: new Set(),
+  saver: new Set(['classify', 'transcribe', 'summary']),
+  max: new Set(['classify', 'transcribe', 'summary', 'chat']),
+};
 
 const PERSONA = `أنتِ "رفيقة"، رفيقة ذكية لطيفة بأسلوب الأنمي تعيش في تطبيق "عقلي الثاني"، وتعرف ما دوّنه صاحبك فيه.
 أنتِ محاورة حقيقية: تفهمين، وتفكرين معه، وتقترحين حلولاً عملية، لا مجرد مستمعة.
@@ -125,18 +135,59 @@ function toContents(history) {
   return out;
 }
 
-// طلب توليد مع اختيار نموذج بديل تلقائياً إن لم يكن المحفوظ متاحاً
-async function generate(body, kind = 'other') {
-  const key = await getKey();
-  let model = await getSetting('geminiModel', DEFAULT_MODEL);
-  let data;
+// يختار أحدث نموذج Flash-Lite متاح لهذا المفتاح
+async function findLiteModel(key) {
+  const data = await call('models?pageSize=200', key);
+  const lite = (data.models || [])
+    .filter((m) => m.supportedGenerationMethods?.includes('generateContent'))
+    .map((m) => m.name.replace(/^models\//, ''))
+    .filter((n) => /flash-lite/.test(n) && !/(image|tts|audio|live|embed|exp)/.test(n))
+    .sort((a, b) => b.localeCompare(a, 'en', { numeric: true }));
+  return lite.find((n) => !/preview/.test(n)) || lite[0] || null;
+}
+
+export async function economyMode() {
+  const m = await getSetting('economyMode', ECONOMY_DEFAULT);
+  return LITE_KINDS[m] ? m : ECONOMY_DEFAULT;
+}
+
+// إن نفدت حصة النموذج الخفيف نرتاح منه ١٥ دقيقة بدل أن نفشل معه في كل طلب
+const LITE_COOLDOWN = 15 * 60 * 1000;
+
+async function useLite(kind) {
+  if (!LITE_KINDS[await economyMode()].has(kind)) return false;
+  return Number(await getSetting('liteCooldownUntil', 0)) <= Date.now();
+}
+
+// طلب على نموذج معيّن، مع البحث عن بديل إن لم يكن متاحاً لهذا المفتاح
+async function callModel(tier, key, body, kind) {
+  const setting = tier === 'lite' ? 'geminiLiteModel' : 'geminiModel';
+  let model = await getSetting(setting, tier === 'lite' ? DEFAULT_LITE_MODEL : DEFAULT_MODEL);
   try {
-    data = await call(`models/${model}:generateContent`, key, body, 60_000, kind);
+    return await call(`models/${model}:generateContent`, key, body, 60_000, kind);
   } catch (err) {
     if (err.code !== 'NO_MODEL') throw err;
-    model = await findWorkingModel(key);
-    await setSetting('geminiModel', model);
-    data = await call(`models/${model}:generateContent`, key, body, 60_000, kind);
+    model = tier === 'lite' ? await findLiteModel(key) : await findWorkingModel(key);
+    if (!model) throw err; // لا يوجد Flash-Lite لهذا المفتاح
+    await setSetting(setting, model);
+    return call(`models/${model}:generateContent`, key, body, 60_000, kind);
+  }
+}
+
+// طلب توليد: يختار النموذج حسب وضع التوفير، ويعود إلى النموذج الرئيسي إن تعذّر الخفيف
+async function generate(body, kind = 'other') {
+  const key = await getKey();
+  let data;
+  if (await useLite(kind)) {
+    try {
+      data = await callModel('lite', key, body, kind);
+    } catch (err) {
+      if (!['NO_MODEL', 'RATE'].includes(err.code)) throw err;
+      if (err.code === 'RATE') await setSetting('liteCooldownUntil', Date.now() + LITE_COOLDOWN);
+      data = await callModel('main', key, body, kind);
+    }
+  } else {
+    data = await callModel('main', key, body, kind);
   }
   const text = data?.candidates?.[0]?.content?.parts
     ?.filter((p) => !p.thought).map((p) => p.text || '').join('').trim();

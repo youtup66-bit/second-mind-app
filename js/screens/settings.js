@@ -1,6 +1,6 @@
 // شاشة الإعدادات: مفتاح Gemini يُحفظ على الجهاز فقط
 import { getSetting, setSetting, deleteSetting, clearAll, clearMessages } from '../storage.js';
-import { DEFAULT_MODEL, testKey, getUsage, ttsCooldownUntil, clearTtsCooldown } from '../gemini.js';
+import { DEFAULT_MODEL, DEFAULT_LITE_MODEL, testKey, getUsage, ttsCooldownUntil, clearTtsCooldown, economyMode } from '../gemini.js';
 import { canSpeak, canRecord, canBrowserListen, speak, stopSpeaking, unlockAudio, voicesReady } from '../voice.js';
 import { SKINS, DEFAULT_SKIN, skinSVG } from '../skins.js';
 import {
@@ -16,6 +16,8 @@ export const title = 'الإعدادات';
 export async function mount(root) {
   const key = await getSetting('geminiApiKey', '');
   const model = await getSetting('geminiModel', DEFAULT_MODEL);
+  const liteModel = await getSetting('geminiLiteModel', DEFAULT_LITE_MODEL);
+  const economy = await economyMode();
   const speakOn = await getSetting('speakReplies', true);
   const memoryOn = await getSetting('useMemory', true);
   const stt = await getSetting('sttEngine', canRecord ? 'gemini' : 'browser');
@@ -88,6 +90,19 @@ export async function mount(root) {
       <label for="model">النموذج</label>
       <input id="model" type="text" dir="ltr" spellcheck="false" value="${model.replace(/"/g, '&quot;')}">
       <p class="muted">إن لم يكن النموذج متاحاً لمفتاحك، يختار التطبيق نموذجاً مناسباً تلقائياً.</p>
+
+      <h3 class="subhead">وضع التوفير 🌿</h3>
+      <div class="radio-col" role="radiogroup" aria-label="وضع التوفير">
+        <label class="switch"><input type="radio" name="economy" value="off" ${economy === 'off' ? 'checked' : ''}>
+          <span>إيقاف: كل شيء بالنموذج الرئيسي</span></label>
+        <label class="switch"><input type="radio" name="economy" value="saver" ${economy === 'saver' ? 'checked' : ''}>
+          <span>توفير (موصى به): التصنيف وتحويل الكلام والملخصات بنموذج خفيف، والمحادثة بالرئيسي</span></label>
+        <label class="switch"><input type="radio" name="economy" value="max" ${economy === 'max' ? 'checked' : ''}>
+          <span>توفير أقصى: كل شيء بالنموذج الخفيف، والردود أبسط قليلاً</span></label>
+      </div>
+      <label for="lite-model">النموذج الخفيف</label>
+      <input id="lite-model" type="text" dir="ltr" spellcheck="false" value="${liteModel.replace(/"/g, '&quot;')}">
+      <p class="muted">نماذج Flash-Lite حصتها المجانية أكبر عادة. إن نفدت حصتها أو لم تتوفر، يُستخدم النموذج الرئيسي تلقائياً.</p>
     </section>
 
     <section class="card" id="talk">
@@ -195,6 +210,16 @@ export async function mount(root) {
     } finally {
       btn.disabled = false;
     }
+  });
+
+  root.querySelectorAll('input[name="economy"]').forEach((r) => r.addEventListener('change', async () => {
+    await setSetting('economyMode', r.value);
+    show(keyStatus, 'تم حفظ وضع التوفير.');
+  }));
+  root.querySelector('#lite-model').addEventListener('change', async (e) => {
+    const v = e.target.value.trim();
+    if (v) await setSetting('geminiLiteModel', v); else { await deleteSetting('geminiLiteModel'); e.target.value = DEFAULT_LITE_MODEL; }
+    show(keyStatus, 'تم حفظ النموذج الخفيف.');
   });
 
   root.querySelector('#model').addEventListener('change', async (e) => {
