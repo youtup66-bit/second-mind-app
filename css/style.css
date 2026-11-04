@@ -486,3 +486,15 @@ input[type="range"] { width: 100%; accent-color: var(--accent); margin: 4px 0 12
 .radio-col .switch { align-items: flex-start; }
 .radio-col .switch input { margin-top: 4px; flex: none; }
 #lite-model + .muted { margin-top: 6px; }
+
+/* ---- الرفيقة الطافية داخل التطبيق ---- */
+.floater {
+  position: fixed; z-index: 30; touch-action: none; cursor: grab; user-select: none; -webkit-user-select: none;
+  filter: drop-shadow(0 4px 10px rgba(0,0,0,.45));
+}
+.floater[hidden] { display: none; }
+.floater.is-dragging { cursor: grabbing; transform: scale(1.08); }
+.floater .companion { width: 100%; }
+.floater .cmp-think { display: none !important; }
+.pip-video { position: fixed; width: 1px; height: 1px; opacity: 0; pointer-events: none; bottom: 0; left: 0; }
+.tool:disabled { opacity: .6; }

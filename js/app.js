@@ -4,6 +4,8 @@ import * as mind from './screens/mind.js';
 import * as folder from './screens/folder.js';
 import * as settings from './screens/settings.js';
 import { autoSnapshot } from './backup.js';
+import { createFloater } from './floater.js';
+import { getSetting } from './storage.js';
 
 const routes = { home, mind, folder, settings };
 const app = document.getElementById('app');
@@ -32,10 +34,36 @@ async function navigate() {
   });
 
   current = screen;
+  floaterRoute = routes[name] ? name : 'home';
+  syncFloater();
   await screen.mount(view);
   // إن انتقل المستخدم لشاشة أخرى أثناء التحميل نُنهي هذه
   if (myNav !== navId && current !== screen) screen.unmount?.();
 }
+
+// ---- الرفيقة الطافية داخل التطبيق ----
+let floater = null;
+let floaterOn = true;
+let floaterRoute = 'home';
+const syncFloater = () => floater?.setVisible(floaterOn && floaterRoute !== 'home');
+
+(async () => {
+  floaterOn = await getSetting('floaterOn', true);
+  floater = createFloater({
+    skin: await getSetting('companionSkin', 'star'),
+    size: await getSetting('floaterSize', 'medium'),
+    onTap: () => { location.hash = '#/home'; },
+  });
+  syncFloater();
+})();
+
+// الإعدادات تُعلن عن تغييراتها فنحدّث الرفيقة الطافية فوراً
+window.addEventListener('sm:setting', (e) => {
+  const { key, value } = e.detail;
+  if (key === 'floaterOn') { floaterOn = value; syncFloater(); }
+  if (key === 'floaterSize') floater?.setSize(value);
+  if (key === 'companionSkin') floater?.setSkin(value);
+});
 
 window.addEventListener('hashchange', navigate);
 navigate().finally(() => { window.__appReady = true; });

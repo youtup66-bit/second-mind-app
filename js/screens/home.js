@@ -9,6 +9,7 @@ import { CATEGORIES, NONE, categoryById } from '../categories.js';
 import { classifyEntry, classifyPending, setCategory } from '../classifier.js';
 import { recall } from '../recall.js';
 import { canListen, canRecord, canBrowserListen, listen, record, speak, stopSpeaking, unlockAudio } from '../voice.js';
+import { canPip, pipAction, isFloating } from '../pip.js';
 
 export const title = 'الرفيقة';
 
@@ -47,6 +48,7 @@ export async function mount(root) {
         <div class="chat__tools">
           <button type="button" class="tool" id="voice-toggle" ${textOnly ? 'hidden' : ''}></button>
           <button type="button" class="tool tool--stop" id="stop-voice" hidden aria-label="أوقف الصوت">⏹ أوقف الصوت</button>
+          ${canPip ? '<button type="button" class="tool" id="pip">🪟 فوق التطبيقات</button>' : ''}
           ${textOnly ? '<a class="tool" href="#/settings?talk" title="غيّره من الإعدادات">⌨️ كتابة فقط</a>' : ''}
         </div>
         <p class="bubble" id="bubble" role="status">${greeting()}</p>
@@ -133,6 +135,15 @@ export async function mount(root) {
     setTalking(false);
   }
   stopVoiceBtn.addEventListener('click', stopVoice);
+
+  // ---- الطفو فوق التطبيقات ----
+  const pipBtn = root.querySelector('#pip');
+  pipBtn?.addEventListener('click', async () => {
+    pipBtn.disabled = true;
+    await pipAction(skin, (t) => say(t));
+    pipBtn.disabled = false;
+    pipBtn.textContent = isFloating() ? '↩️ أعِدها' : '🪟 فوق التطبيقات';
+  });
 
   // ---- عرض الرسائل ----
   function append(msg, { entry = null, used = [], pending = false } = {}) {

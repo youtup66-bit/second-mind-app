@@ -3,6 +3,13 @@ import { getSetting, setSetting, deleteSetting, clearAll, clearMessages } from '
 import { DEFAULT_MODEL, DEFAULT_LITE_MODEL, testKey, getUsage, ttsCooldownUntil, clearTtsCooldown, economyMode } from '../gemini.js';
 import { canSpeak, canRecord, canBrowserListen, speak, stopSpeaking, unlockAudio, voicesReady } from '../voice.js';
 import { SKINS, DEFAULT_SKIN, skinSVG } from '../skins.js';
+import { canPip, pipAction, isFloating } from '../pip.js';
+
+// يحفظ إعداداً ويُعلم بقية التطبيق (مثل الرفيقة الطافية)
+async function saveAndAnnounce(key, value) {
+  await setSetting(key, value);
+  window.dispatchEvent(new CustomEvent('sm:setting', { detail: { key, value } }));
+}
 import {
   downloadBackup, shareBackup, canShareFiles, importFile,
   listSnapshots, restoreSnapshot, backupStatus, requestPersistence,
@@ -24,6 +31,8 @@ export async function mount(root) {
   const textOnly = await getSetting('textOnly', false);
   const voiceReview = await getSetting('voiceReview', true);
   let skin = await getSetting('companionSkin', DEFAULT_SKIN);
+  const floaterOn = await getSetting('floaterOn', true);
+  const floaterSize = await getSetting('floaterSize', 'medium');
   const engine = await getSetting('voiceEngine', 'device');
   const deviceVoice = await getSetting('deviceVoice', '');
   const pitchShift = Number(await getSetting('voicePitchShift', 0));
@@ -40,6 +49,26 @@ export async function mount(root) {
             <span class="skin__note">${k.note}</span>
           </button>`).join('')}
       </div>
+    </section>
+
+    <section class="card" id="floating">
+      <h2>الرفيقة الطافية</h2>
+      <label class="switch">
+        <input type="checkbox" id="floater-on" ${floaterOn ? 'checked' : ''}>
+        <span>تطفو صغيرة في كل شاشات التطبيق (اسحبها لأي مكان، والمسها لتفتح المحادثة)</span>
+      </label>
+      <h3 class="subhead">حجمها</h3>
+      <div class="radio-row" role="radiogroup" aria-label="حجم الرفيقة الطافية">
+        <label class="switch"><input type="radio" name="fsize" value="small" ${floaterSize === 'small' ? 'checked' : ''}><span>صغيرة جداً</span></label>
+        <label class="switch"><input type="radio" name="fsize" value="medium" ${floaterSize === 'medium' ? 'checked' : ''}><span>صغيرة (~١ سم)</span></label>
+        <label class="switch"><input type="radio" name="fsize" value="large" ${floaterSize === 'large' ? 'checked' : ''}><span>متوسطة</span></label>
+      </div>
+      <h3 class="subhead">فوق التطبيقات الأخرى 🪟 (تجريبي)</h3>
+      <p class="muted">تفتح الرفيقة في نافذة عائمة صغيرة تبقى فوق أي تطبيق، مثل فيديو YouTube العائم. للعرض فقط، ولمسها يعيدك إلى التطبيق. حجم النافذة يحدده الجوال، ويمكنك تصغيرها بإصبعين.</p>
+      <div class="row">
+        <button class="btn" id="pip-btn" ${canPip ? '' : 'disabled'}>🪟 اجعلها تطفو فوق التطبيقات</button>
+      </div>
+      <p class="status" id="pip-status" role="status">${canPip ? '' : 'متصفحك لا يدعم النوافذ العائمة. جرّب Chrome على أندرويد.'}</p>
     </section>
 
     <section class="card" id="voice">
@@ -340,11 +369,24 @@ export async function mount(root) {
     setTimeout(() => { btn.disabled = false; }, 15000);
   });
 
+  // ---- الرفيقة الطافية ----
+  root.querySelector('#floater-on').addEventListener('change', (e) => saveAndAnnounce('floaterOn', e.target.checked));
+  root.querySelectorAll('input[name="fsize"]').forEach((r) => r.addEventListener('change', () => saveAndAnnounce('floaterSize', r.value)));
+  const pipStatus = root.querySelector('#pip-status');
+  const pipBtn = root.querySelector('#pip-btn');
+  const pipLabel = () => { pipBtn.textContent = isFloating() ? '↩️ أعِدها إلى التطبيق' : '🪟 اجعلها تطفو فوق التطبيقات'; };
+  pipBtn.addEventListener('click', async () => {
+    pipBtn.disabled = true;
+    await pipAction(skin, (t) => { pipStatus.className = 'status'; pipStatus.textContent = t; });
+    pipBtn.disabled = false;
+    pipLabel();
+  });
+
   root.querySelector('.skins').addEventListener('click', async (e) => {
     const b = e.target.closest('[data-skin]');
     if (!b) return;
     skin = b.dataset.skin;
-    await setSetting('companionSkin', b.dataset.skin);
+    await saveAndAnnounce('companionSkin', b.dataset.skin);
     root.querySelectorAll('.skin').forEach((x) => {
       x.classList.toggle('is-active', x === b);
       x.setAttribute('aria-checked', x === b);
@@ -443,6 +485,7 @@ export async function mount(root) {
 
   if (location.hash.includes('backup')) root.querySelector('#backup').scrollIntoView({ block: 'start' });
   if (location.hash.includes('talk')) root.querySelector('#talk').scrollIntoView({ block: 'start' });
+  if (location.hash.includes('floating')) root.querySelector('#floating').scrollIntoView({ block: 'start' });
 
   root.querySelector('#remove-key').addEventListener('click', async () => {
     await deleteSetting('geminiApiKey');
