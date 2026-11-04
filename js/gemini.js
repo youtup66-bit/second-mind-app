@@ -1,6 +1,7 @@
 // خدمة Gemini: ما يغادر الجهاز هو نص المحادثة، والملاحظات القليلة ذات الصلة بها، وما تطلب تلخيصه.
 import { getSetting, setSetting } from './storage.js';
 import { CATEGORIES, NONE } from './categories.js';
+import { actionsPrompt, actionsSchema, ACTION_IDS } from './actions-spec.js';
 
 const API = 'https://generativelanguage.googleapis.com/v1beta';
 export const DEFAULT_MODEL = 'gemini-3.6-flash';
@@ -231,7 +232,9 @@ export async function chat(history, { memories = [], classify: withClass = true 
 صيغة الناتج: JSON فقط.
 - reply: ردّك على رسالته الأخيرة كما ستكتبينه له، بالأسلوب الموصوف أعلاه.
 - category و title: تصنيف رسالته الأخيرة وحدها، وعنوان قصير لها، وفق ما يلي:
-${rules}` }] },
+${rules}
+- actions: أوامر للتطبيق (غالباً فارغة).
+${actionsPrompt()}` }] },
     contents: toContents(history),
     generationConfig: {
       temperature: 0.8,
@@ -243,6 +246,7 @@ ${rules}` }] },
           reply: { type: 'STRING' },
           category: { type: 'STRING', enum: ids },
           title: { type: 'STRING' },
+          actions: actionsSchema,
         },
         required: ['reply', 'category', 'title'],
       },
@@ -256,6 +260,7 @@ ${rules}` }] },
       reply,
       category: ids.includes(out.category) ? out.category : null,
       title: String(out.title || '').trim().slice(0, 60),
+      actions: (Array.isArray(out.actions) ? out.actions : []).filter((a) => ACTION_IDS.includes(a?.action)),
     };
   } catch {
     // إن لم يلتزم النموذج بالصيغة نعرض النص كما هو، ويُصنَّف لاحقاً بطلب منفصل

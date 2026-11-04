@@ -6,6 +6,7 @@ import {
 } from '../storage.js';
 import { transcribe } from '../gemini.js';
 import { smartChat } from '../ai.js';
+import { executeActions } from '../actions.js';
 import { CATEGORIES, NONE, categoryById } from '../categories.js';
 import { classifyEntry, classifyPending, setCategory } from '../classifier.js';
 import { recall } from '../recall.js';
@@ -338,6 +339,7 @@ export async function mount(root) {
       used: (m.used || []).map((id) => entriesById[id]).filter(Boolean),
     });
     markEngine(li, m.engine);
+    if (m.actions) renderActions(li, m.actions);
   });
 
   // ما فات تصنيفه سابقاً (بلا مفتاح أو اتصال) نصنّفه الآن بهدوء
@@ -546,6 +548,18 @@ export async function mount(root) {
       applyClassification(entry.id, result);
       const modelMsg = await addMessage({ role: 'model', text: reply, used: used.map((e) => e.id), engine: result.engine === 'local' ? 'local' : undefined });
       markEngine(pending, result.engine);
+      // أوامر طلبتها الرفيقة (إنشاء قسم، تغيير إعداد...): ننفذها ونعرض نتيجتها تحت الرد
+      if (result.actions?.length) {
+        const done = await executeActions(result.actions, {
+          entryId: entry.id,
+          onCategory: refreshChip,
+          setWaMode,
+          setVoice: (on) => { speakOn = on; renderVoiceToggle(); if (!on) stopVoice(); },
+          remount: () => window.dispatchEvent(new HashChangeEvent('hashchange')),
+        });
+        renderActions(pending, done);
+        await updateMessage({ ...modelMsg, actions: done });
+      }
       pending.dataset.id = modelMsg.id;
       pending.querySelector('.msg__text').textContent = reply;
       pending.classList.remove('msg--pending');
@@ -569,6 +583,16 @@ export async function mount(root) {
     li.classList.remove('msg--pending');
     li.querySelector('.msg__text').textContent = text;
     log.scrollTop = log.scrollHeight;
+  }
+
+  // نتائج أوامر الرفيقة: سطر لكل أمر، مع رابط "عرض" إن وُجد
+  function renderActions(li, done) {
+    li.querySelector('.msg__acts')?.remove();
+    if (!done?.length) return;
+    const box = document.createElement('div');
+    box.className = 'msg__acts';
+    box.innerHTML = done.map((d) => `<span class="act ${d.ok ? '' : 'act--fail'}">${d.ok ? '⚙️' : '⚠️'} ${escapeHtml(d.text)}${d.link ? ` <a href="${d.link}">عرض</a>` : ''}</span>`).join('');
+    li.querySelector('.msg__text').after(box);
   }
 
   // شارة صغيرة على الردود التي جاءت من النموذج على الجهاز
