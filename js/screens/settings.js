@@ -15,6 +15,56 @@ import {
 import { aiMode } from '../ai.js';
 
 // يحفظ إعداداً ويُعلم بقية التطبيق (مثل الرفيقة الطافية)
+// وصف مختصر تحت اسم كل قسم (مثل إعدادات واتساب)
+const GROUP_HINTS = {
+  'شكل الرفيقة': 'اختر شخصية الرفيقة',
+  'تثبيت التطبيق': 'أضفه إلى الشاشة الرئيسية ليعمل كتطبيق',
+  'الرفيقة الطافية': 'الظهور فوق الشاشات والتطبيقات، والحجم',
+  'صوت الرفيقة': 'نوع الصوت وطبقته وسرعته',
+  'استهلاك Gemini اليوم': 'عدد الطلبات والحصة',
+  'الذكاء على الجهاز': 'نماذج تعمل دون إنترنت',
+  'مفتاح Gemini API': 'المفتاح ووضع التوفير',
+  'المحادثة': 'الكتابة والصوت وإخفاء الرفيقة والتعرف على الكلام',
+  'النسخ الاحتياطي': 'تصدير واستيراد ونسخ تلقائية',
+  'الخصوصية': 'ما يُرسل خارج جهازك، ومسح البيانات',
+};
+
+// يحوّل كل بطاقة إلى سطر باسمها، تنسدل خياراتها عند لمسه (واحد مفتوح في كل مرة)
+function groupSettings(root) {
+  const groups = [...root.querySelectorAll(':scope > section.card')];
+  const setOpen = (sec, on) => {
+    sec.classList.toggle('is-open', on);
+    sec.querySelector('.set-head').setAttribute('aria-expanded', String(on));
+    sec.querySelector('.set-body').hidden = !on;
+  };
+  const open = (sec) => {
+    if (!sec) return;
+    groups.forEach((g) => g !== sec && setOpen(g, false));
+    setOpen(sec, true);
+    sec.scrollIntoView({ block: 'start', behavior: 'smooth' });
+  };
+  for (const sec of groups) {
+    const h = sec.querySelector(':scope > h2');
+    if (!h) continue;
+    const title = h.textContent.trim();
+    const body = document.createElement('div');
+    body.className = 'set-body';
+    while (h.nextSibling) body.append(h.nextSibling);
+    const head = document.createElement('button');
+    head.type = 'button';
+    head.className = 'set-head';
+    head.innerHTML = `<span class="set-head__text"><b></b><small></small></span><span class="set-head__chev" aria-hidden="true">⌄</span>`;
+    head.querySelector('b').textContent = title;
+    head.querySelector('small').textContent = GROUP_HINTS[title] || '';
+    h.replaceWith(head);
+    sec.append(body);
+    sec.classList.add('set-group');
+    setOpen(sec, false);
+    head.addEventListener('click', () => (sec.classList.contains('is-open') ? setOpen(sec, false) : open(sec)));
+  }
+  return open;
+}
+
 async function saveAndAnnounce(key, value) {
   await setSetting(key, value);
   window.dispatchEvent(new CustomEvent('sm:setting', { detail: { key, value } }));
@@ -64,7 +114,7 @@ export async function mount(root) {
     </section>
 
     <section class="card" id="install">
-      <h2>📲 تثبيت التطبيق</h2>
+      <h2>تثبيت التطبيق</h2>
       <p class="muted" id="install-state"></p>
       <div class="row"><button class="btn" id="install-btn" hidden>📲 ثبّت التطبيق على الشاشة الرئيسية</button></div>
       <div class="install-help" id="install-help" hidden>
@@ -137,7 +187,7 @@ export async function mount(root) {
     </section>
 
     <section class="card" id="local">
-      <h2>الذكاء على الجهاز 📱</h2>
+      <h2>الذكاء على الجهاز</h2>
       <p class="muted">نماذج ذكاء صغيرة تُنزَّل مرة واحدة ثم تحاورك دون إنترنت ودون أي حصة، ولا يغادر كلامك جوالك إطلاقاً. أبسط من Gemini، لكنها معك دائماً.</p>
       <h3 class="subhead">من يرد عليك؟</h3>
       <div class="radio-col" role="radiogroup" aria-label="محرك الذكاء">
@@ -261,6 +311,10 @@ export async function mount(root) {
       <p class="status" id="wipe-status" role="status"></p>
     </section>
   `;
+  const openGroup = groupSettings(root);
+  // رابط مباشر إلى قسم (مثل #/settings?local) يفتحه
+  const target = ['backup', 'talk', 'floating', 'local', 'voice', 'install'].find((id) => location.hash.includes(id));
+  if (target) openGroup(root.querySelector(`#${target}`));
 
   const input = root.querySelector('#api-key');
   const keyStatus = root.querySelector('#key-status');
@@ -810,10 +864,6 @@ export async function mount(root) {
     }
   });
 
-  if (location.hash.includes('backup')) root.querySelector('#backup').scrollIntoView({ block: 'start' });
-  if (location.hash.includes('talk')) root.querySelector('#talk').scrollIntoView({ block: 'start' });
-  if (location.hash.includes('floating')) root.querySelector('#floating').scrollIntoView({ block: 'start' });
-  if (location.hash.includes('local')) root.querySelector('#local').scrollIntoView({ block: 'start' });
 
   root.querySelector('#remove-key').addEventListener('click', async () => {
     await deleteSetting('geminiApiKey');
