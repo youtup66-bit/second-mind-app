@@ -1,0 +1,171 @@
+// شاشة "الموظفين" (للمدير فقط): أسماء الموظفين، وإضافة موظف بدعوة
+import {
+  session, listMembers, listInvites, createInvite, deleteInvite, inviteLink, removeMember,
+} from '../cloud.js';
+
+export const title = 'الموظفين';
+
+const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const initial = (name) => esc(String(name || '؟').trim().charAt(0));
+
+let alive = false;
+
+export async function mount(root) {
+  alive = true;
+  root.innerHTML = '<p class="muted org-wait">لحظة…</p>';
+  let s;
+  try { s = await session(); } catch (e) {
+    if (alive) root.innerHTML = `<p class="status status--err">${esc(e.message)}</p><a class="btn btn--ghost org-wide" href="#/org">المؤسسة</a>`;
+    return;
+  }
+  if (!alive) return;
+  if (s?.member?.role !== 'manager') {
+    root.innerHTML = `<div class="org"><div class="org-hero"><div class="org-hero__icon" aria-hidden="true">🔐</div>
+      <h2>للمدير فقط</h2><p class="muted">سجّل الدخول بحساب المدير لرؤية الموظفين.</p></div>
+      <a class="btn org-wide" href="#/org">تسجيل الدخول</a></div>`;
+    return;
+  }
+
+  const params = new URLSearchParams(location.hash.split('?')[1] || '');
+  if (params.get('id')) return renderEmployee(root, params.get('id'));
+
+  root.innerHTML = `
+    <div class="staff">
+      <p class="muted staff__org">${esc(s.org?.name)}</p>
+      <ul class="staff-list" id="list" aria-label="الموظفون"></ul>
+      <button type="button" class="staff-add" id="add-btn"><span class="staff-add__plus" aria-hidden="true">＋</span> إضافة موظف</button>
+      <form class="card org-form" id="add-form" hidden>
+        <label class="org-field"><span>اسم الموظف</span><input id="ad-name" type="text" required maxlength="60" placeholder="مثال: أحمد علي"></label>
+        <label class="org-field"><span>اسم المستخدم (بالإنجليزية، للدخول)</span><input id="ad-user" type="text" dir="ltr" autocapitalize="none" spellcheck="false" required placeholder="ahmed"></label>
+        <div class="row">
+          <button class="btn" id="ad-go" type="submit">إنشاء دعوة</button>
+          <button class="btn btn--ghost" id="ad-cancel" type="button">إلغاء</button>
+        </div>
+        <p class="status" id="ad-msg" role="status"></p>
+      </form>
+      <div class="card invite-out" id="invite-out" hidden></div>
+    </div>`;
+
+  const list = root.querySelector('#list');
+  const form = root.querySelector('#add-form');
+  const out = root.querySelector('#invite-out');
+
+  async function render() {
+    let members = [], invites = [];
+    try { [members, invites] = await Promise.all([listMembers(), listInvites()]); } catch (e) {
+      list.innerHTML = `<li class="status status--err">${esc(e.message)}</li>`;
+      return;
+    }
+    if (!alive) return;
+    const staff = members.filter((m) => m.role === 'employee');
+    list.innerHTML = [
+      ...staff.map((m) => `
+        <li><a class="staff-row" href="#/staff?id=${encodeURIComponent(m.user_id)}">
+          <span class="staff-row__avatar" aria-hidden="true">${initial(m.display_name)}</span>
+          <span class="staff-row__name">${esc(m.display_name)}</span>
+        </a></li>`),
+      ...invites.map((i) => `
+        <li><button type="button" class="staff-row staff-row--pending" data-code="${esc(i.code)}" data-name="${esc(i.display_name)}">
+          <span class="staff-row__avatar" aria-hidden="true">${initial(i.display_name)}</span>
+          <span class="staff-row__name">${esc(i.display_name)}<small>لم ينضم بعد · المس لإعادة إرسال الدعوة</small></span>
+        </button></li>`),
+    ].join('') || '<li class="muted staff-empty">لا يوجد موظفون بعد. أضف أول موظف من الزر أدناه.</li>';
+  }
+
+  // يعرض رابط الدعوة مع المشاركة والنسخ
+  async function showInvite(code, name) {
+    const link = await inviteLink(code);
+    out.hidden = false;
+    out.innerHTML = `
+      <p><b>دعوة ${esc(name)}</b></p>
+      <p class="muted">أرسل هذا الرابط إلى ${esc(name)} (واتساب مثلاً). يفتحه، ويختار كلمة مروره، فيصبح حسابه جاهزاً. الرابط يُستخدم مرة واحدة.</p>
+      <input class="invite-out__link" dir="ltr" readonly value="${esc(link)}">
+      <div class="row">
+        ${navigator.share ? '<button class="btn" type="button" id="inv-share">مشاركة</button>' : ''}
+        <button class="btn ${navigator.share ? 'btn--ghost' : ''}" type="button" id="inv-copy">نسخ الرابط</button>
+        <button class="btn btn--danger" type="button" id="inv-del">إلغاء الدعوة</button>
+      </div>
+      <p class="status" id="inv-msg" role="status"></p>`;
+    const msg = out.querySelector('#inv-msg');
+    out.querySelector('#inv-share')?.addEventListener('click', () => {
+      navigator.share({ title: 'دعوة إلى عقل المؤسسة', text: `${name}، هذه دعوتك للانضمام:`, url: link }).catch(() => {});
+    });
+    out.querySelector('#inv-copy').addEventListener('click', async () => {
+      try { await navigator.clipboard.writeText(link); msg.textContent = 'نُسخ الرابط ✓'; msg.className = 'status status--ok'; } catch {
+        out.querySelector('.invite-out__link').select();
+        msg.textContent = 'حدّد الرابط وانسخه يدوياً.';
+      }
+    });
+    out.querySelector('#inv-del').addEventListener('click', async () => {
+      if (!confirm(`إلغاء دعوة ${name}؟ لن يعمل الرابط بعد ذلك.`)) return;
+      await deleteInvite(code).catch((e) => { msg.textContent = e.message; });
+      out.hidden = true;
+      render();
+    });
+    out.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }
+
+  list.addEventListener('click', (e) => {
+    const b = e.target.closest('.staff-row--pending');
+    if (b) showInvite(b.dataset.code, b.dataset.name);
+  });
+  root.querySelector('#add-btn').addEventListener('click', () => {
+    form.hidden = false;
+    out.hidden = true;
+    root.querySelector('#ad-name').focus();
+  });
+  root.querySelector('#ad-cancel').addEventListener('click', () => { form.hidden = true; });
+  const goBtn = root.querySelector('#ad-go');
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (goBtn.disabled) return;
+    goBtn.disabled = true;
+    const msg = root.querySelector('#ad-msg');
+    const name = root.querySelector('#ad-name').value;
+    try {
+      const code = await createInvite({ name, username: root.querySelector('#ad-user').value });
+      form.reset();
+      form.hidden = true;
+      msg.textContent = '';
+      await render();
+      showInvite(code, name.trim());
+    } catch (err) {
+      msg.textContent = err.message;
+      msg.className = 'status status--err';
+    } finally { goBtn.disabled = false; }
+  });
+
+  render();
+}
+
+// ملف الموظف: الكرات والمهارات والملخص تأتي في مرحلة لاحقة؛ ملاحظاته لا تظهر أبداً
+async function renderEmployee(root, id) {
+  let m;
+  try { m = (await listMembers()).find((x) => x.user_id === id); } catch (e) {
+    root.innerHTML = `<p class="status status--err">${esc(e.message)}</p>`;
+    return;
+  }
+  if (!alive) return;
+  if (!m) { location.hash = '#/staff'; return; }
+  root.innerHTML = `
+    <div class="org">
+      <a class="link-btn staff-back" href="#/staff">→ الموظفين</a>
+      <div class="org-hero">
+        <div class="staff-row__avatar staff-row__avatar--big" aria-hidden="true">${initial(m.display_name)}</div>
+        <h2>${esc(m.display_name)}</h2>
+        <p class="muted"><span dir="ltr">@${esc(m.username)}</span> · انضم ${new Date(m.created_at).toLocaleDateString('ar')}</p>
+      </div>
+      <section class="card">
+        <h3>العقل الثاني والمهارات</h3>
+        <p class="muted">هنا ستظهر كرات عقل ${esc(m.display_name)} ومهاراته وملخص سيرته، كما يستخرجها الذكاء من جواله. ملاحظاته نفسها تبقى خاصة ولا تظهر لك. (المرحلة القادمة)</p>
+      </section>
+      <button type="button" class="btn btn--danger org-wide" id="remove">إزالة ${esc(m.display_name)} من المؤسسة</button>
+      <p class="status" id="rm-msg" role="status"></p>
+    </div>`;
+  root.querySelector('#remove').addEventListener('click', async () => {
+    if (!confirm(`إزالة ${m.display_name} من المؤسسة؟ لن يستطيع الدخول إليها بعد ذلك.`)) return;
+    try { await removeMember(id); location.hash = '#/staff'; } catch (e) { root.querySelector('#rm-msg').textContent = e.message; }
+  });
+}
+
+export function unmount() { alive = false; }

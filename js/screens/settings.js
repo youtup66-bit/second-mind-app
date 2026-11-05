@@ -17,6 +17,7 @@ import { aiMode } from '../ai.js';
 // يحفظ إعداداً ويُعلم بقية التطبيق (مثل الرفيقة الطافية)
 // وصف مختصر تحت اسم كل قسم (مثل إعدادات واتساب)
 const GROUP_HINTS = {
+  'المؤسسة': 'الدخول، وحساب المدير، والموظفون',
   'المظهر': 'ألوان التطبيق: واتساب أو البنفسجي',
   'شكل الرفيقة': 'اختر شخصية الرفيقة',
   'تثبيت التطبيق': 'أضفه إلى الشاشة الرئيسية ليعمل كتطبيق',
@@ -104,6 +105,12 @@ export async function mount(root) {
   const rateScale = Number(await getSetting('voiceRateScale', 1));
 
   root.innerHTML = `
+    <section class="card" id="org">
+      <h2>المؤسسة</h2>
+      <p class="muted">حساب للمدير والموظفين، ومحادثة مشتركة ونقاط وتقارير. ملاحظاتك الشخصية تبقى على جهازك.</p>
+      <div class="row"><a class="btn" href="#/org" id="org-open">الدخول إلى المؤسسة</a></div>
+    </section>
+
     <section class="card" id="look">
       <h2>المظهر</h2>
       <div class="radio-col" role="radiogroup" aria-label="ألوان التطبيق">

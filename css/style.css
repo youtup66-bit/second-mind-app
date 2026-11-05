@@ -45,7 +45,7 @@ body {
 
 .tabbar {
   position: fixed; inset-inline: 0; bottom: 0; z-index: 10;
-  display: grid; grid-template-columns: repeat(4, 1fr);
+  display: grid; grid-auto-flow: column; grid-auto-columns: 1fr;
   height: calc(var(--tabbar-h) + env(safe-area-inset-bottom));
   padding-bottom: env(safe-area-inset-bottom);
   background: var(--bg-2);
@@ -746,3 +746,50 @@ body.theme-wa textarea, body.theme-wa select { background: #2a3942; border-color
 .chat--wa .rec-bar { background: #2a3942; color: var(--wa-text); }
 @keyframes rec-blink { 50% { opacity: .2; } }
 @keyframes rec-up { 50% { transform: translateY(-3px); } }
+
+/* ---- المؤسسة: الدخول والموظفون ---- */
+.tabbar__item[hidden] { display: none; }
+.org { display: flex; flex-direction: column; gap: 14px; max-width: 460px; margin: 0 auto; }
+.org-hero { text-align: center; padding: 8px 0 4px; }
+.org-hero__icon { font-size: 2.6rem; line-height: 1.2; }
+.org-hero h2 { margin: 6px 0 4px; font-size: 1.3rem; }
+.org-hero p { margin: 0; }
+.org .card { margin: 0; }
+.org .card h3 { margin: 0 0 6px; font-size: 1.05rem; }
+.org-form { display: flex; flex-direction: column; gap: 12px; }
+.org-form[hidden], .invite-out[hidden] { display: none; }
+.org-form .btn { width: 100%; justify-content: center; }
+.org-field { display: flex; flex-direction: column; gap: 6px; font-size: .9rem; color: var(--muted); }
+.org-field input {
+  width: 100%; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--border);
+  background: var(--surface-2); color: var(--text); font: inherit; font-size: 1rem;
+}
+.org-field input:focus { outline: 2px solid var(--accent); outline-offset: 0; }
+.org-field input[readonly] { opacity: .75; }
+.org-wide { width: 100%; justify-content: center; text-align: center; }
+.org-center, .org-foot, .org-wait { text-align: center; }
+.org-foot .link-btn { color: var(--muted); font-size: .85rem; }
+
+.staff__org { margin: 0 0 6px; }
+.staff-list { list-style: none; margin: 0; padding: 0; }
+.staff-row {
+  width: 100%; display: flex; align-items: center; gap: 14px; padding: 10px 4px;
+  background: none; border: 0; border-bottom: 1px solid var(--border); color: var(--text);
+  font: inherit; text-align: start; text-decoration: none; cursor: pointer;
+}
+.staff-row__avatar {
+  width: 46px; height: 46px; border-radius: 50%; flex: none; display: grid; place-items: center;
+  background: color-mix(in srgb, var(--accent) 35%, var(--surface-2)); color: #fff; font-size: 1.2rem; font-weight: 700;
+}
+.staff-row__avatar--big { width: 84px; height: 84px; font-size: 2.2rem; margin: 0 auto; }
+.staff-row__name { display: flex; flex-direction: column; font-size: 1.02rem; }
+.staff-row__name small { color: var(--muted); font-size: .8rem; }
+.staff-row--pending .staff-row__avatar { background: var(--surface-2); color: var(--muted); }
+.staff-empty { padding: 18px 4px; }
+.staff-add {
+  display: flex; align-items: center; gap: 14px; width: 100%; padding: 12px 4px; margin: 6px 0 12px;
+  background: none; border: 0; color: var(--accent); font: inherit; font-size: 1rem; cursor: pointer;
+}
+.staff-add__plus { width: 46px; height: 46px; border-radius: 50%; display: grid; place-items: center; background: var(--accent); color: #fff; font-size: 1.4rem; }
+.invite-out__link { width: 100%; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--border); background: var(--surface-2); color: var(--text); font-size: .8rem; }
+.staff-back { text-decoration: none; align-self: flex-start; }

@@ -3,12 +3,14 @@ import * as home from './screens/home.js';
 import * as mind from './screens/mind.js';
 import * as folder from './screens/folder.js';
 import * as settings from './screens/settings.js';
+import * as org from './screens/org.js';
+import * as staff from './screens/staff.js';
 import { autoSnapshot } from './backup.js';
 import { createFloater } from './floater.js';
 import { getSetting } from './storage.js';
 import { loadCategories } from './categories.js';
 
-const routes = { home, mind, folder, settings };
+const routes = { home, mind, folder, settings, org, join: org, staff };
 const app = document.getElementById('app');
 const titleEl = document.getElementById('screen-title');
 
@@ -30,7 +32,7 @@ async function navigate() {
   document.title = `${screen.title} · عقلي الثاني`;
 
   document.querySelectorAll('.tabbar__item').forEach((a) => {
-    const active = a.dataset.route === (routes[name] ? name : 'home');
+    const active = a.dataset.route === (name === 'join' ? 'org' : routes[name] ? name : 'home');
     a.classList.toggle('is-active', active);
     if (active) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
   });
@@ -58,6 +60,12 @@ let floaterRoute = 'home';
 let noCompanion = false;
 const syncFloater = () => floater?.setVisible(floaterOn && !noCompanion && floaterRoute !== 'home');
 // بلا رفيقة: تبويب "المحادثة"، والشاشة الرئيسية بلا شريط عنوان (رأس المحادثة يكفي)
+// تبويب "الموظفين" يظهر للمدير فقط (الصلاحية الفعلية تفرضها قاعدة البيانات)
+function applyRole(role) {
+  const tab = document.querySelector('.tabbar__item[data-route="staff"]');
+  if (tab) tab.hidden = role !== 'manager';
+}
+
 // المظهر: auto = واتساب حين تُخفى الرفيقة، وإلا البنفسجي
 let appTheme = 'auto';
 function applyTheme() {
@@ -78,6 +86,7 @@ function applyNoCompanion() {
 (async () => {
   floaterOn = await getSetting('floaterOn', true);
   noCompanion = await getSetting('hideCompanion', false);
+  applyRole(await getSetting('orgRole', null));
   appTheme = await getSetting('appTheme', 'auto');
   applyNoCompanion();
   floater = createFloater({
@@ -92,6 +101,7 @@ function applyNoCompanion() {
 window.addEventListener('sm:setting', (e) => {
   const { key, value } = e.detail;
   if (key === 'floaterOn') { floaterOn = value; syncFloater(); }
+  if (key === 'orgRole') applyRole(value);
   if (key === 'appTheme') { appTheme = value; applyTheme(); }
   if (key === 'hideCompanion') { noCompanion = value; syncFloater(); applyNoCompanion(); }
   if (key === 'floaterSize') floater?.setSize(value);
