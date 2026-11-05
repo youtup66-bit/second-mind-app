@@ -723,3 +723,26 @@ body.theme-wa .set-group.is-open .set-head__text b { color: #00a884; }
 body.theme-wa .btn--ghost { border-color: #2a3942; }
 body.theme-wa input[type="text"], body.theme-wa input[type="password"], body.theme-wa input[type="search"],
 body.theme-wa textarea, body.theme-wa select { background: #2a3942; border-color: #2a3942; color: #e9edef; }
+
+/* ---- التسجيل بالضغط المطوّل (مثل واتساب) ---- */
+.composer__mic { touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+.composer__mic.is-on { transform: scale(1.35); transition: transform .15s ease, box-shadow .08s linear; position: relative; z-index: 2; }
+.composer.is-locked .composer__mic { transform: scaleX(-1); background: var(--accent); box-shadow: none; }
+.composer.is-recording textarea, .composer.is-recording .composer__clear, .composer.is-recording .composer__send { display: none !important; }
+.composer.is-recording .composer__mic { display: inline-block !important; }
+.rec-bar {
+  flex: 1; display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 0 14px;
+  border-radius: 22px; background: var(--surface-2); color: var(--text); user-select: none; overflow: hidden;
+}
+.rec-bar[hidden] { display: none; }
+.rec-bar__dot { width: 10px; height: 10px; border-radius: 50%; background: var(--danger); animation: rec-blink 1s ease-in-out infinite; flex: none; }
+.rec-bar__time { font-variant-numeric: tabular-nums; direction: ltr; min-width: 2.6em; }
+.rec-bar__hint { flex: 1; text-align: center; color: var(--muted); font-size: .9rem; white-space: nowrap; transition: opacity .1s; }
+.rec-bar__trash { display: none; background: none; border: 0; font-size: 1.2rem; padding: 4px; cursor: pointer; }
+.composer.is-locked .rec-bar__trash { display: inline-block; }
+.composer.is-locked .rec-bar__lock { display: none; }
+.rec-bar__lock { display: flex; flex-direction: column; align-items: center; line-height: .9; font-size: .85rem; color: var(--muted); animation: rec-up 1.4s ease-in-out infinite; }
+.rec-bar__lock small { font-size: .8rem; }
+.chat--wa .rec-bar { background: #2a3942; color: var(--wa-text); }
+@keyframes rec-blink { 50% { opacity: .2; } }
+@keyframes rec-up { 50% { transform: translateY(-3px); } }

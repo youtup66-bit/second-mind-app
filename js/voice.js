@@ -71,7 +71,7 @@ export function listen({ onText, onInterim, onEnd, onError, onStart }) {
 // ---- تسجيل الصوت (لتفريغه عبر Gemini) ----
 // onLevel(0..1): مستوى الصوت لعرضه. يتوقف تلقائياً بعد ثانيتين من الصمت (بعد أن يبدأ الكلام) أو بعد دقيقة.
 // يعيد { stop() } ويستدعي onDone(blob) عند الانتهاء.
-export async function record({ onStart, onLevel, onDone, onError, maxMs = 60_000 }) {
+export async function record({ onStart, onLevel, onDone, onError, maxMs = 60_000, silenceStop = true }) {
   stopSpeaking();
   suspendAudio();
   let stream;
@@ -105,10 +105,10 @@ export async function record({ onStart, onLevel, onDone, onError, maxMs = 60_000
       const level = Math.min(1, Math.sqrt(sum / buf.length) * 6);
       onLevel?.(level);
       const now = performance.now();
-      if (level > 0.12) { heard = true; silentSince = 0; }
+      if (level > 0.08) { heard = true; silentSince = 0; }
       else if (heard) {
         silentSince ||= now;
-        if (now - silentSince > 2000) return stop();
+        if (silenceStop && now - silentSince > 2000) return stop();
       }
       if (now - started > maxMs) return stop();
     }

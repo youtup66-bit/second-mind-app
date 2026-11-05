@@ -746,73 +746,158 @@ export async function mount(root) {
     }
   }
 
-  // الطريقة الافتراضية: نسجّل الصوت ونفرّغه عبر Gemini (تعمل حتى لو كانت خدمة المتصفح معطلة)
-  async function listenWithGemini() {
-    let rec = null;
-    stopListening = () => rec?.stop();
-    rec = await record({
-      onStart: () => say('أسمعك… تكلّم، وسأتوقف حين تسكت (أو المس 🎙).'),
-      onLevel: (l) => mic.style.setProperty('--lvl', l.toFixed(2)),
-      onError: (code) => { micOff(); micError(code); },
-      onDone: async (blob, wasHeard) => {
-        micOff();
-        if (!wasHeard || blob.size < 2000) { say('لم أسمع شيئاً، جرّب مرة أخرى وتكلّم قريباً من الجوال.'); return; }
-        companion.setState('thinking');
-        say('<span class="dots"><i></i><i></i><i></i></span> أحوّل كلامك إلى نص…');
-        try {
-          const text = await transcribe(blob);
-          companion.setState('idle');
-          if (!text) { say('لم أفهم الكلام جيداً، جرّب مرة أخرى.'); return; }
-          heard(text);
-        } catch (err) {
-          companion.setState('idle');
-          say(`${escapeHtml(err.message)} جرّب مرة أخرى أو اكتب.`);
-        }
-      },
-    });
-  }
+  // ---- تسجيل بالضغط المطوّل (مثل واتساب) ----
+  // اضغط مطولاً وتكلّم، ثم أفلت للإرسال. اسحب جانباً للإلغاء، أو للأعلى لتثبيت التسجيل دون إمساك.
+  const recBar = document.createElement('div');
+  recBar.className = 'rec-bar';
+  recBar.hidden = true;
+  recBar.innerHTML = `
+    <button type="button" class="rec-bar__trash" aria-label="ألغِ التسجيل">🗑</button>
+    <span class="rec-bar__dot" aria-hidden="true"></span>
+    <span class="rec-bar__time">0:00</span>
+    <span class="rec-bar__hint">→ اسحب للإلغاء</span>
+    <span class="rec-bar__lock" aria-hidden="true">🔒<small>⌃</small></span>`;
+  input.before(recBar);
+  const recTime = recBar.querySelector('.rec-bar__time');
+  const recHint = recBar.querySelector('.rec-bar__hint');
+  const fmtDur = (ms) => { const t = Math.floor(ms / 1000); return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`; };
+  const MIN_HOLD = 600; // أقصر من هذا = لمسة عادية، لا تسجيل
+  let cap = null; // التسجيل الجاري
 
-  function listenWithBrowser() {
-    const before = input.value;
-    stopListening = listen({
-      onStart: () => say('أسمعك… تكلّم، ثم المس 🎙 لتنهي.'),
-      onInterim: (t) => { input.value = (before ? `${before} ` : '') + t; autosize(); },
-      onText: (t) => { input.value = before; heard(t); },
-      onError: micError,
-      onEnd: () => { if (stopListening) micOff(); },
-    });
+  function recUi(on, c) {
+    form.classList.toggle('is-recording', on);
+    form.classList.toggle('is-locked', !!c?.locked);
+    recBar.hidden = !on;
+    mic.textContent = c?.locked ? '➤' : '🎙';
+    mic.style.removeProperty('--dx');
+    if (!on) { recHint.style.transform = ''; recHint.style.opacity = ''; }
+    recHint.textContent = c?.locked ? 'اضغط ➤ للإرسال' : '→ اسحب للإلغاء';
   }
-
-  mic.addEventListener('click', async () => {
-    // ضغطة ثانية: إيقاف فوري
-    if (stopListening) {
-      const stop = stopListening;
+  function finishUi(c) {
+    clearInterval(c.timer);
+    if (cap === c) cap = null;
+    recUi(false);
+  }
+  // send=false: إلغاء (لا يُرسل شيء)
+  function endCapture(send, why) {
+    const c = cap;
+    if (!c) return;
+    c.cancelled = !send;
+    finishUi(c);
+    if (c.stop) c.stop(); else c.pendingStop = true;
+    if (!send) {
       micOff();
-      stop();
-      return;
+      if (why === 'short') say('اضغط مطولاً على 🎙 وتكلّم، ثم أفلت للإرسال.');
+      else if (why === 'cancel') say('أُلغي التسجيل 🗑');
     }
-    if (busy) { say('لحظة، ما زلت أفكر… 💭'); return; }
+  }
+
+  async function pickEngine() {
     const hasKey = !!(await getSetting('geminiApiKey', ''));
     let engine = await getSetting('sttEngine', canRecord ? 'gemini' : 'browser');
     if (engine === 'gemini' && (!canRecord || !hasKey)) engine = canBrowserListen ? 'browser' : 'none';
     if (engine === 'browser' && !canBrowserListen) engine = canRecord && hasKey ? 'gemini' : 'none';
     if (engine === 'none') {
       say(hasKey ? 'الإدخال الصوتي غير متاح هنا. استخدم مايك لوحة المفاتيح 🎤.' : 'أضف مفتاح Gemini في <a href="#/settings">الإعدادات</a> لأفهم كلامك الصوتي.');
-      return;
+      return null;
     }
+    return engine;
+  }
+
+  async function startEngine(engine, c) {
+    if (engine === 'gemini') {
+      // التسجيل يستمر ما دمت تضغط (لا يتوقف عند السكوت)، ثم نفرّغه عبر Gemini
+      const rec = await record({
+        silenceStop: false,
+        maxMs: 120_000,
+        onLevel: (l) => mic.style.setProperty('--lvl', l.toFixed(2)),
+        onError: (code) => { finishUi(c); micOff(); if (!c.cancelled) micError(code); },
+        onDone: async (blob, wasHeard) => {
+          finishUi(c); // قد ينتهي وحده عند بلوغ الحد الأقصى
+          micOff();
+          if (c.cancelled) return;
+          if (!wasHeard || blob.size < 2000) { say('لم أسمع شيئاً، جرّب مرة أخرى وتكلّم قريباً من الجوال.'); return; }
+          companion.setState('thinking');
+          say('<span class="dots"><i></i><i></i><i></i></span> أحوّل كلامك إلى نص…');
+          try {
+            const text = await transcribe(blob);
+            companion.setState('idle');
+            if (!text) { say('لم أفهم الكلام جيداً، جرّب مرة أخرى.'); return; }
+            heard(text);
+          } catch (err) {
+            companion.setState('idle');
+            say(`${escapeHtml(err.message)} جرّب مرة أخرى أو اكتب.`);
+          }
+        },
+      });
+      c.stop = () => rec.stop();
+    } else {
+      const before = input.value;
+      c.stop = listen({
+        onInterim: (t) => { if (!c.cancelled) { input.value = (before ? `${before} ` : '') + t; autosize(); } },
+        onText: (t) => { input.value = before; autosize(); if (!c.cancelled) heard(t); },
+        onError: (code) => { if (!c.cancelled) micError(code); },
+        onEnd: () => { finishUi(c); micOff(); },
+      });
+    }
+    // أُفلت الزر قبل أن يجهز الميكروفون (مثلاً أثناء طلب الإذن)
+    if (c.pendingStop) c.stop();
+  }
+
+  mic.addEventListener('contextmenu', (e) => e.preventDefault());
+  mic.addEventListener('pointerdown', async (e) => {
+    if (e.button > 0) return;
+    e.preventDefault();
+    if (cap?.locked) { endCapture(true); return; } // مثبّت: ➤ يرسل
+    if (cap) return;
+    if (busy) { say('لحظة، ما زلت أفكر… 💭'); return; }
+    try { mic.setPointerCapture(e.pointerId); } catch { /* لا شيء */ }
+    const c = cap = { x0: e.clientX, y0: e.clientY, t0: Date.now(), pointer: e.pointerId, cancelled: false, locked: false };
+    const engine = await pickEngine();
+    if (!engine) { cap = null; return; }
+    if (cap !== c) return; // أُفلت أثناء الانتظار
     stopVoice();
     companion.setState('listening');
     mic.classList.add('is-on');
-    mic.setAttribute('aria-label', 'أوقف الاستماع');
-    say('أجهّز الميكروفون…');
+    mic.setAttribute('aria-label', 'أفلت للإرسال');
+    stopListening = () => endCapture(false);
+    recTime.textContent = '0:00';
+    recUi(true, c);
+    c.timer = setInterval(() => { recTime.textContent = fmtDur(Date.now() - c.t0); }, 250);
+    navigator.vibrate?.(30);
     try {
-      if (engine === 'gemini') await listenWithGemini();
-      else listenWithBrowser();
+      await startEngine(engine, c);
     } catch {
+      finishUi(c);
       micOff();
       say('الإدخال الصوتي غير متاح في هذا المتصفح. استخدم مايك لوحة المفاتيح 🎤.');
     }
   });
+  mic.addEventListener('pointermove', (e) => {
+    const c = cap;
+    if (!c || c.locked || e.pointerId !== c.pointer) return;
+    const dx = e.clientX - c.x0, dy = e.clientY - c.y0;
+    // اسحب نحو خانة الكتابة للإلغاء
+    recHint.style.transform = `translateX(${Math.max(-60, Math.min(60, dx / 2))}px)`;
+    recHint.style.opacity = String(Math.max(0.25, 1 - Math.abs(dx) / 140));
+    if (Math.abs(dx) > 110) { navigator.vibrate?.(20); endCapture(false, 'cancel'); return; }
+    if (dy < -70) { c.locked = true; navigator.vibrate?.(20); recUi(true, c); } // اسحب للأعلى: تثبيت
+  });
+  const release = (e) => {
+    const c = cap;
+    if (!c || c.locked || e.pointerId !== c.pointer) return;
+    if (Date.now() - c.t0 < MIN_HOLD) endCapture(false, 'short');
+    else endCapture(true);
+  };
+  mic.addEventListener('pointerup', release);
+  mic.addEventListener('pointercancel', (e) => {
+    const c = cap;
+    if (!c || c.locked || e.pointerId !== c.pointer) return;
+    // نافذة إذن الميكروفون تقطع اللمسة: نلغي ونطلب المحاولة
+    endCapture(false);
+    say('الميكروفون جاهز. اضغط مطولاً على 🎙 وتكلّم، ثم أفلت للإرسال.');
+  });
+  recBar.querySelector('.rec-bar__trash').addEventListener('click', () => endCapture(false, 'cancel'));
 }
 
 export function unmount() {
