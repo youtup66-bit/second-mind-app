@@ -56,15 +56,17 @@ export async function mount(root) {
   const textOnly = await getSetting('textOnly', false);
   let speakOn = !textOnly && await getSetting('speakReplies', true);
   const showMic = canListen && !textOnly;
+  // بلا رفيقة: محادثة عادية مثل واتساب، دون شخصية ولا انسدال
+  const plain = await getSetting('hideCompanion', false);
 
   root.innerHTML = `
-    <section class="chat">
+    <section class="chat${plain ? ' chat--wa chat--plain' : ''}">
       <header class="wa-head" id="wa-head" hidden>
         <button type="button" class="wa-head__who" id="wa-who" aria-label="أظهر الرفيقة">
           <span class="wa-avatar" id="wa-avatar" aria-hidden="true"></span>
-          <span class="wa-head__text"><b id="wa-name"></b><small id="wa-status">متصلة</small></span>
+          <span class="wa-head__text"><b id="wa-name"></b><small id="wa-status">${plain ? 'متصل' : 'متصلة'}</small></span>
         </button>
-        <button type="button" class="wa-head__btn" id="wa-expand" aria-label="أظهر الرفيقة" title="أظهر الرفيقة">⌄</button>
+        ${plain ? '<span class="wa-head__tools" id="wa-tools"></span>' : '<button type="button" class="wa-head__btn" id="wa-expand" aria-label="أظهر الرفيقة" title="أظهر الرفيقة">⌄</button>'}
       </header>
       <p class="wa-note" id="wa-note" hidden role="status"></p>
       <div class="chat__hero">
@@ -148,16 +150,27 @@ export async function mount(root) {
   // ---- واجهة المحادثة (شبيهة بواتساب): الرفيقة تنسدل وتختفي، وتبقى المحادثة ----
   const chatEl = root.querySelector('.chat');
   const waNote = root.querySelector('#wa-note');
-  let waMode = (await getSetting('chatStyle', 'companion')) === 'whatsapp';
+  let waMode = plain || (await getSetting('chatStyle', 'companion')) === 'whatsapp';
   let lastReplyBubble = '';
-  root.querySelector('#wa-name').textContent = SKINS[skin]?.label || 'رفيقتي';
-  root.querySelector('#wa-avatar').innerHTML = skinSVG(skin).replace('viewBox="0 0 200 250"', 'viewBox="38 18 124 124"');
+  if (plain) {
+    root.querySelector('#wa-name').textContent = 'عقلي الثاني';
+    // صورة عامة كصورة جهة اتصال بلا صورة
+    root.querySelector('#wa-avatar').innerHTML = '<svg viewBox="0 0 40 40"><circle cx="20" cy="15" r="7" fill="#cfd8dc"/><path d="M6 36c1.5-8 7-12 14-12s12.5 4 14 12z" fill="#cfd8dc"/></svg>';
+    root.querySelector('#wa-avatar').classList.add('wa-avatar--plain');
+    root.querySelector('#wa-who').setAttribute('aria-label', 'عقلي الثاني');
+    // أزرار الصوت تنتقل إلى الرأس كأيقونات
+    root.querySelector('#wa-tools').append(root.querySelector('#stop-voice'), root.querySelector('#voice-toggle'));
+  } else {
+    root.querySelector('#wa-name').textContent = SKINS[skin]?.label || 'رفيقتي';
+    root.querySelector('#wa-avatar').innerHTML = skinSVG(skin).replace('viewBox="0 0 200 250"', 'viewBox="38 18 124 124"');
+  }
   function setWaMode(on) {
+    if (plain) on = true; // الرفيقة مخفية نهائياً من الإعدادات
     waMode = on;
     chatEl.classList.toggle('chat--wa', on);
     root.querySelector('#wa-head').hidden = !on;
     if (!on) waNote.hidden = true;
-    setSetting('chatStyle', on ? 'whatsapp' : 'companion');
+    if (!plain) setSetting('chatStyle', on ? 'whatsapp' : 'companion');
     log.scrollTop = log.scrollHeight;
   }
   if (waMode) setWaMode(true);
@@ -175,6 +188,7 @@ export async function mount(root) {
     return h || 320;
   };
   function startPull(e) {
+    if (plain) return;
     pull = { y0: e.clientY, full: fullHeight(), from: waMode ? 'wa' : 'companion', moved: false, id: e.pointerId };
     e.currentTarget.setPointerCapture(e.pointerId);
     hero.style.transition = 'none';
@@ -206,27 +220,30 @@ export async function mount(root) {
       setWaMode(collapse);
     });
   }
-  for (const el of [handle, root.querySelector('#wa-who'), root.querySelector('#wa-expand')]) {
+  for (const el of [handle, root.querySelector('#wa-who'), root.querySelector('#wa-expand')].filter(Boolean)) {
     el.addEventListener('pointerdown', startPull);
     el.addEventListener('pointermove', movePull);
     el.addEventListener('pointerup', endPull);
     el.addEventListener('pointercancel', endPull);
   }
   // الحالة في الرأس تتبع حالة الرفيقة
-  const STATUS = { thinking: 'تكتب…', listening: 'تستمع…', talking: 'تتكلم…' };
+  const STATUS = plain
+    ? { thinking: 'يكتب…', listening: 'يستمع…', talking: 'يتكلم…' }
+    : { thinking: 'تكتب…', listening: 'تستمع…', talking: 'تتكلم…' };
   const waStatus = root.querySelector('#wa-status');
   const origSetState = companion.setState;
   companion.setState = (st) => {
     origSetState(st);
     // "تتكلم…" فقط حين يُسمع صوت فعلاً (زر الإيقاف ظاهر)، لا في حركة الفم الصامتة
     const label = st === 'talking' && stopVoiceBtn.hidden ? null : STATUS[st];
-    waStatus.textContent = label || 'متصلة';
+    waStatus.textContent = label || (plain ? 'متصل' : 'متصلة');
     waStatus.classList.toggle('is-active', !!label);
   };
 
   // ---- التحكم في الصوت ----
   const renderVoiceToggle = () => {
-    voiceToggle.textContent = speakOn ? '🔊 الصوت يعمل' : '🔇 بلا صوت';
+    voiceToggle.textContent = plain ? (speakOn ? '🔊' : '🔇') : (speakOn ? '🔊 الصوت يعمل' : '🔇 بلا صوت');
+    voiceToggle.title = speakOn ? 'الصوت يعمل' : 'بلا صوت';
     voiceToggle.setAttribute('aria-pressed', String(speakOn));
   };
   renderVoiceToggle();

@@ -666,6 +666,20 @@ input[type="range"] { width: 100%; accent-color: var(--accent); margin: 4px 0 12
 .chat--wa .chat__handle span { width: 36px; height: 4px; }
 .wa-head__who, .wa-head__btn { touch-action: none; }
 /* أثناء السحب في واجهة المحادثة: الرفيقة تظهر تحت الرأس وهي تنسدل */
+/* بلا رفيقة نهائياً: محادثة عادية */
+body.no-companion.on-home .topbar { display: none; }
+body.no-companion.on-home .tabbar { background: #202c33; border-top-color: rgba(255,255,255,.06); }
+body.no-companion.on-home .tabbar__item.is-active { color: #00a884; }
+body.no-companion.on-home .wa-head { padding-top: calc(env(safe-area-inset-top) + 8px); }
+body.no-companion.on-home .chat--plain { height: calc(100dvh - var(--tabbar-h) - env(safe-area-inset-bottom)); }
+.chat--plain .chat__hero, .chat--plain .chat__handle, .chat--plain #wa-expand { display: none; }
+.chat--plain .wa-head__who { cursor: default; touch-action: auto; }
+.wa-avatar--plain { background: #6b7c85; }
+.wa-head__tools { display: flex; align-items: center; gap: 2px; }
+.wa-head__tools .tool { background: none; border: 0; padding: 0; width: 40px; height: 40px; border-radius: 50%; font-size: 1.15rem; color: var(--wa-meta); box-shadow: none; }
+.wa-head__tools .tool[hidden] { display: none; }
+.wa-head__tools .tool--stop { font-size: 0; }
+.wa-head__tools .tool--stop::before { content: '⏹'; font-size: 1.15rem; }
 .chat--wa.is-pulling .chat__hero { pointer-events: none; overflow: hidden; }
 
 /* ---- نتائج أوامر الرفيقة ---- */

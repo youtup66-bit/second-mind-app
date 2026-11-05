@@ -26,6 +26,7 @@ async function navigate() {
   view.className = 'view';
   app.replaceChildren(view);
   titleEl.textContent = screen.title;
+  document.body.classList.toggle('on-home', screen === home);
   document.title = `${screen.title} · عقلي الثاني`;
 
   document.querySelectorAll('.tabbar__item').forEach((a) => {
@@ -54,10 +55,22 @@ window.addEventListener('appinstalled', () => { window.__installPrompt = null; }
 let floater = null;
 let floaterOn = true;
 let floaterRoute = 'home';
-const syncFloater = () => floater?.setVisible(floaterOn && floaterRoute !== 'home');
+let noCompanion = false;
+const syncFloater = () => floater?.setVisible(floaterOn && !noCompanion && floaterRoute !== 'home');
+// بلا رفيقة: تبويب "المحادثة"، والشاشة الرئيسية بلا شريط عنوان (رأس المحادثة يكفي)
+function applyNoCompanion() {
+  document.body.classList.toggle('no-companion', noCompanion);
+  const tab = document.querySelector('.tabbar__item[data-route="home"]');
+  if (tab) {
+    tab.querySelector('.tabbar__icon').textContent = noCompanion ? '💬' : '✦';
+    tab.querySelector('span:last-child').textContent = noCompanion ? 'المحادثة' : 'الرفيقة';
+  }
+}
 
 (async () => {
   floaterOn = await getSetting('floaterOn', true);
+  noCompanion = await getSetting('hideCompanion', false);
+  applyNoCompanion();
   floater = createFloater({
     skin: await getSetting('companionSkin', 'star'),
     size: await getSetting('floaterSize', 'medium'),
@@ -70,6 +83,7 @@ const syncFloater = () => floater?.setVisible(floaterOn && floaterRoute !== 'hom
 window.addEventListener('sm:setting', (e) => {
   const { key, value } = e.detail;
   if (key === 'floaterOn') { floaterOn = value; syncFloater(); }
+  if (key === 'hideCompanion') { noCompanion = value; syncFloater(); applyNoCompanion(); }
   if (key === 'floaterSize') floater?.setSize(value);
   if (key === 'companionSkin') floater?.setSkin(value);
 });

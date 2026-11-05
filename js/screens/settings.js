@@ -40,6 +40,7 @@ export async function mount(root) {
   const memoryOn = await getSetting('useMemory', true);
   const stt = await getSetting('sttEngine', canRecord ? 'gemini' : 'browser');
   const textOnly = await getSetting('textOnly', false);
+  const noCompanion = await getSetting('hideCompanion', false);
   const voiceReview = await getSetting('voiceReview', true);
   let skin = await getSetting('companionSkin', DEFAULT_SKIN);
   const floaterOn = await getSetting('floaterOn', true);
@@ -188,6 +189,11 @@ export async function mount(root) {
 
     <section class="card" id="talk">
       <h2>المحادثة</h2>
+      <label class="switch">
+        <input type="checkbox" id="hide-companion" ${noCompanion ? 'checked' : ''}>
+        <span>إخفاء الرفيقة نهائياً (محادثة عادية مثل واتساب)</span>
+      </label>
+      <p class="muted">تختفي الرفيقة من الشاشة الرئيسية ومن فوق الشاشات الأخرى، وتبقى المحادثة والتصنيف والصوت كما هي.</p>
       <h3 class="subhead">طريقة التواصل</h3>
       <div class="radio-row" role="radiogroup" aria-label="طريقة التواصل">
         <label class="switch"><input type="radio" name="mode-talk" value="both" ${textOnly ? '' : 'checked'}><span>كتابة وصوت</span></label>
@@ -711,6 +717,7 @@ export async function mount(root) {
     });
   });
 
+  root.querySelector('#hide-companion').addEventListener('change', (e) => saveAndAnnounce('hideCompanion', e.target.checked));
   root.querySelector('#speak').addEventListener('change', (e) => setSetting('speakReplies', e.target.checked));
   root.querySelector('#memory').addEventListener('change', (e) => setSetting('useMemory', e.target.checked));
   root.querySelectorAll('input[name="mode-talk"]').forEach((r) => r.addEventListener('change', async () => {
