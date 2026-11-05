@@ -1,7 +1,7 @@
 // شاشة الإعدادات: مفتاح Gemini يُحفظ على الجهاز فقط
 import { getSetting, setSetting, deleteSetting, clearAll, clearMessages } from '../storage.js';
 import { DEFAULT_MODEL, DEFAULT_LITE_MODEL, testKey, getUsage, ttsCooldownUntil, clearTtsCooldown, economyMode } from '../gemini.js';
-import { canSpeak, canRecord, canBrowserListen, speak, stopSpeaking, unlockAudio, voicesReady } from '../voice.js';
+import { canSpeak, canListen, canRecord, canBrowserListen, speak, stopSpeaking, unlockAudio, voicesReady } from '../voice.js';
 import { SKINS, DEFAULT_SKIN, skinSVG } from '../skins.js';
 import { loadCategories } from '../categories.js';
 import { canPip, pipAction, isFloating } from '../pip.js';
@@ -91,6 +91,7 @@ export async function mount(root) {
   const memoryOn = await getSetting('useMemory', true);
   const stt = await getSetting('sttEngine', canRecord ? 'gemini' : 'browser');
   const textOnly = await getSetting('textOnly', false);
+  const micOn = await getSetting('micOn', true);
   const noCompanion = await getSetting('hideCompanion', false);
   const appTheme = await getSetting('appTheme', 'auto');
   const voiceReview = await getSetting('voiceReview', true);
@@ -255,12 +256,18 @@ export async function mount(root) {
         <span>إخفاء الرفيقة نهائياً (محادثة عادية مثل واتساب)</span>
       </label>
       <p class="muted">تختفي الرفيقة من الشاشة الرئيسية ومن فوق الشاشات الأخرى، وتبقى المحادثة والتصنيف والصوت كما هي.</p>
-      <h3 class="subhead">طريقة التواصل</h3>
-      <div class="radio-row" role="radiogroup" aria-label="طريقة التواصل">
-        <label class="switch"><input type="radio" name="mode-talk" value="both" ${textOnly ? '' : 'checked'}><span>كتابة وصوت</span></label>
-        <label class="switch"><input type="radio" name="mode-talk" value="text" ${textOnly ? 'checked' : ''}><span>كتابة فقط ⌨️</span></label>
+      <h3 class="subhead">الإدخال الصوتي</h3>
+      <label class="switch">
+        <input type="checkbox" id="mic-on" ${micOn ? 'checked' : ''} ${canListen ? '' : 'disabled'}>
+        <span>زر الميكروفون في المحادثة (تكلّم بدل الكتابة)</span>
+      </label>
+      ${canListen ? '' : '<p class="muted">متصفحك لا يسمح بتسجيل الصوت.</p>'}
+      <h3 class="subhead">الردود</h3>
+      <div class="radio-row" role="radiogroup" aria-label="الردود">
+        <label class="switch"><input type="radio" name="mode-talk" value="both" ${textOnly ? '' : 'checked'}><span>نص وصوت</span></label>
+        <label class="switch"><input type="radio" name="mode-talk" value="text" ${textOnly ? 'checked' : ''}><span>نص فقط 🔇</span></label>
       </div>
-      <p class="muted">"كتابة فقط" يُخفي الميكروفون ويوقف نطق الردود تماماً.</p>
+      <p class="muted">"نص فقط" يوقف نطق الردود تماماً ويُخفي زر الصوت. الميكروفون يبقى حسب الخيار أعلاه.</p>
       <label class="switch">
         <input type="checkbox" id="speak" ${speakOn ? 'checked' : ''} ${canSpeak ? '' : 'disabled'}>
         <span>الرفيقة تنطق ردودها بصوت (اضبطه من "صوت الرفيقة")</span>
@@ -784,6 +791,7 @@ export async function mount(root) {
 
   root.querySelectorAll('input[name="theme"]').forEach((r) => r.addEventListener('change', () => saveAndAnnounce('appTheme', r.value)));
   root.querySelector('#hide-companion').addEventListener('change', (e) => saveAndAnnounce('hideCompanion', e.target.checked));
+  root.querySelector('#mic-on').addEventListener('change', (e) => setSetting('micOn', e.target.checked));
   root.querySelector('#speak').addEventListener('change', (e) => setSetting('speakReplies', e.target.checked));
   root.querySelector('#memory').addEventListener('change', (e) => setSetting('useMemory', e.target.checked));
   root.querySelectorAll('input[name="mode-talk"]').forEach((r) => r.addEventListener('change', async () => {

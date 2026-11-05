@@ -55,7 +55,8 @@ let busy = false;
 export async function mount(root) {
   const textOnly = await getSetting('textOnly', false);
   let speakOn = !textOnly && await getSetting('speakReplies', true);
-  const showMic = canListen && !textOnly;
+  // الميكروفون مستقل عن "نص فقط" (الذي يوقف نطق الردود فقط)
+  const showMic = canListen && await getSetting('micOn', true);
   // بلا رفيقة: محادثة عادية مثل واتساب، دون شخصية ولا انسدال
   const plain = await getSetting('hideCompanion', false);
 
@@ -75,7 +76,7 @@ export async function mount(root) {
           <button type="button" class="tool" id="voice-toggle" ${textOnly ? 'hidden' : ''}></button>
           <button type="button" class="tool tool--stop" id="stop-voice" hidden aria-label="أوقف الصوت">⏹ أوقف الصوت</button>
           ${canPip ? '<button type="button" class="tool" id="pip">🪟 فوق التطبيقات</button>' : ''}
-          ${textOnly ? '<a class="tool" href="#/settings?talk" title="غيّره من الإعدادات">⌨️ كتابة فقط</a>' : ''}
+          ${textOnly ? '<a class="tool" href="#/settings?talk" title="غيّره من الإعدادات">🔇 ردود بلا صوت</a>' : ''}
         </div>
         <p class="bubble" id="bubble" role="status">${greeting()}</p>
         <div class="chat__stage" id="stage"></div>
