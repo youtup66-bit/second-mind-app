@@ -1,7 +1,7 @@
 // عامل الخدمة: يجعل التطبيق يعمل دون اتصال.
 // ملفات التطبيق: الشبكة أولاً (لتصلك آخر نسخة فوراً)، والمخزّن عند انقطاع الاتصال.
 // الخطوط: المخزّن أولاً. طلبات Gemini لا تمر عبر المخزّن أبداً.
-const CACHE = 'second-mind-v52';
+const CACHE = 'second-mind-v53';
 const ASSETS = [
   './',
   './index.html',
@@ -87,6 +87,8 @@ self.addEventListener('fetch', (e) => {
   if (/(^|\.)fonts\.(googleapis|gstatic)\.com$/.test(url.hostname)) return e.respondWith(cacheFirst(e.request));
   // مكوّنات صوت Piper من jsDelivr: روابطها بإصدارات ثابتة لا تتغير، فنحفظها ليعمل الصوت دون إنترنت
   if (url.hostname === 'cdn.jsdelivr.net' && /@\d/.test(url.pathname)) return e.respondWith(cacheFirst(e.request));
+  // مكتبة Firebase (إصدار ثابت): تُحفظ لتعمل دون إنترنت
+  if (url.hostname === 'www.gstatic.com' && /^\/firebasejs\/\d/.test(url.pathname)) return e.respondWith(cacheFirst(e.request));
 });
 
 // ---- التنزيل في الخلفية (نماذج الذكاء): يستمر حتى لو أُغلق التطبيق ----

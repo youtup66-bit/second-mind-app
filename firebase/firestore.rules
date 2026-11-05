@@ -1,0 +1,99 @@
+rules_version = '2';
+
+// عقلي الثاني: قواعد حماية المؤسسة على Firestore
+// المرحلة ١: الحسابات (المدير، والموظفون، والدعوات)
+//
+// انسخ هذا الملف كاملاً في Firebase ← Firestore Database ← Rules، ثم اضغط Publish.
+//
+// المبادئ:
+// • مؤسسة واحدة فقط في المشروع (المستند orgs/main)، وأول من يُنشئها هو المدير الوحيد.
+// • لا يضيف موظفاً ولا يحذفه ولا يرى الدعوات إلا المدير؛ مفروض هنا لا في الواجهة فقط.
+// • الموظف ينضم بدعوة صالحة تُستهلك في اللحظة نفسها؛ من يسجّل دون دعوة لا يرى شيئاً.
+// • ملاحظات الموظف الشخصية لا تصل إلى هنا أبداً؛ تبقى على جواله.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() { return request.auth != null; }
+    function me() { return /databases/$(database)/documents/members/$(request.auth.uid); }
+    function orgDoc() { return /databases/$(database)/documents/orgs/main; }
+    function invite(code) { return /databases/$(database)/documents/invites/$(code); }
+    function isMember() { return signedIn() && exists(me()); }
+    function isManager() { return isMember() && get(me()).data.role == 'manager'; }
+    function text(v, max) { return v is string && v.size() > 0 && v.size() <= max; }
+    function validUsername(v) { return v is string && v.matches('^[a-z0-9._-]{3,30}$'); }
+
+    // ---- المؤسسة ----
+    match /orgs/{id} {
+      // الاسم ظاهر لشاشة الدخول والدعوة؛ لا شيء سري هنا
+      allow get: if true;
+      allow list: if false;
+      // تُنشأ مرة واحدة، ومعها عضوية المدير في الدفعة نفسها
+      allow create: if signedIn() && id == 'main'
+        && request.resource.data.keys().hasOnly(['name', 'owner', 'createdAt'])
+        && text(request.resource.data.name, 80)
+        && request.resource.data.owner == request.auth.uid
+        && request.resource.data.createdAt == request.time
+        && getAfter(me()).data.role == 'manager';
+      // المدير يغيّر الاسم فقط، ولا ينقل الملكية
+      allow update: if isManager()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name'])
+        && text(request.resource.data.name, 80);
+      allow delete: if false;
+    }
+
+    // ---- الأعضاء ----
+    match /members/{uid} {
+      // الأعضاء يرون أسماء بعضهم، وكل حساب يقرأ عضويته هو (ولو لم يكن عضواً بعد)
+      allow read: if isMember() || (signedIn() && uid == request.auth.uid);
+      allow create: if signedIn() && uid == request.auth.uid && !exists(me())
+        && text(request.resource.data.displayName, 60)
+        && validUsername(request.resource.data.username)
+        && request.resource.data.createdAt == request.time
+        && (
+          // المدير: صاحب المؤسسة التي تُنشأ في الدفعة نفسها
+          (request.resource.data.keys().hasOnly(['role', 'displayName', 'username', 'createdAt'])
+            && request.resource.data.role == 'manager'
+            && !exists(orgDoc())
+            && getAfter(orgDoc()).data.owner == request.auth.uid)
+          ||
+          // الموظف: بدعوة صالحة باسمه، تُحذف في الدفعة نفسها (فلا تُستخدم مرتين)
+          (request.resource.data.keys().hasOnly(['role', 'displayName', 'username', 'createdAt', 'invite'])
+            && request.resource.data.role == 'employee'
+            && request.resource.data.invite is string
+            && exists(invite(request.resource.data.invite))
+            && get(invite(request.resource.data.invite)).data.username == request.resource.data.username
+            && get(invite(request.resource.data.invite)).data.displayName == request.resource.data.displayName
+            && !existsAfter(invite(request.resource.data.invite)))
+        );
+      // لا تعديل للأدوار أبداً
+      allow update: if false;
+      // المدير يزيل موظفاً، ولا يزيل نفسه
+      allow delete: if isManager() && uid != request.auth.uid;
+    }
+
+    // ---- الدعوات ----
+    match /invites/{code} {
+      // الرمز سري (١٠ أحرف عشوائية)؛ يكفي لعرض اسم المدعو قبل التسجيل
+      allow get: if true;
+      allow list: if isManager();
+      allow create: if isManager() && code.size() >= 10
+        && request.resource.data.keys().hasOnly(['displayName', 'username', 'createdBy', 'createdAt'])
+        && text(request.resource.data.displayName, 60)
+        && validUsername(request.resource.data.username)
+        && request.resource.data.createdBy == request.auth.uid
+        && request.resource.data.createdAt == request.time;
+      allow update: if false;
+      // يلغيها المدير، أو يستهلكها المدعو نفسه وهو ينضم
+      allow delete: if isManager()
+        || (signedIn() && !exists(me())
+            && getAfter(me()).data.role == 'employee'
+            && getAfter(me()).data.invite == code);
+    }
+
+    // كل ما عدا ذلك مغلق
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

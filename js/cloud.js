@@ -1,8 +1,8 @@
-// خدمة المؤسسة (Supabase): الحسابات، والمدير، والموظفون، والدعوات.
+// خدمة المؤسسة (Firebase): الحسابات، والمدير، والموظفون، والدعوات.
 // الملاحظات الشخصية لا تمر من هنا أبداً؛ تبقى على الجهاز.
 import { getSetting, setSetting, deleteSetting } from './storage.js';
 
-const LIB_URL = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.99.3/dist/umd/supabase.js';
+const FB = 'https://www.gstatic.com/firebasejs/12.19.0';
 // أسماء المستخدمين تتحول داخلياً إلى بريد لا يُرسل إليه شيء (نطاق example.com محجوز عالمياً لهذا)
 const EMAIL_DOMAIN = 'staff.example.com';
 
@@ -10,76 +10,78 @@ export class CloudError extends Error {
   constructor(message, code) { super(message); this.code = code; }
 }
 
-// ---- الإعداد: رابط المشروع ومفتاحه العام ----
-export const cloudConfig = () => getSetting('cloud', null); // { url, key }
-export async function setCloudConfig({ url, key }) {
-  const u = String(url || '').trim().replace(/\/+$/, '');
-  const k = String(key || '').trim();
-  if (!/^https:\/\/[a-z0-9-]+\.supabase\.co$/i.test(u)) throw new CloudError('رابط المشروع غير صحيح. يشبه: https://abcd.supabase.co', 'BAD_CONFIG');
-  if (k.length < 30) throw new CloudError('المفتاح العام (anon/publishable) غير صحيح.', 'BAD_CONFIG');
+// ---- الإعداد: لصقة firebaseConfig من موقع Firebase ----
+// تقبل اللصقة كما هي (const firebaseConfig = {...}) أو JSON
+export function parseFirebaseConfig(text) {
+  const src = String(text || '');
+  const pick = (k) => src.match(new RegExp(`["']?${k}["']?\\s*:\\s*["']([^"']+)["']`))?.[1]?.trim();
+  const cfg = { apiKey: pick('apiKey'), authDomain: pick('authDomain'), projectId: pick('projectId'), appId: pick('appId') };
+  if (!cfg.apiKey || !cfg.projectId || !cfg.appId) {
+    throw new CloudError('لم أجد إعداد Firebase في النص. انسخ لصقة firebaseConfig كاملة من إعدادات المشروع.', 'BAD_CONFIG');
+  }
+  if (!/^AIza[0-9A-Za-z_-]{20,}$/.test(cfg.apiKey)) throw new CloudError('قيمة apiKey غير صحيحة.', 'BAD_CONFIG');
+  cfg.authDomain ||= `${cfg.projectId}.firebaseapp.com`;
+  return cfg;
+}
+
+export const cloudConfig = () => getSetting('cloud', null); // { apiKey, authDomain, projectId, appId }
+export async function setCloudConfig(cfg) {
+  const c = typeof cfg === 'string' ? parseFirebaseConfig(cfg) : parseFirebaseConfig(JSON.stringify(cfg));
   const old = await cloudConfig();
-  if (old && (old.url !== u || old.key !== k)) await signOut().catch(() => {});
-  await setSetting('cloud', { url: u, key: k });
-  client = null;
+  if (old && old.projectId !== c.projectId) await signOut().catch(() => {});
+  await setSetting('cloud', c);
+  fb = null;
 }
 export async function clearCloudConfig() {
   await signOut().catch(() => {});
   await deleteSetting('cloud');
-  client = null;
+  fb = null;
 }
 
-let client = null;
-let libPromise = null;
-function loadLib() {
-  if (window.supabase?.createClient) return Promise.resolve(window.supabase);
-  libPromise ||= new Promise((resolve, reject) => {
-    const s = document.createElement('script');
-    s.src = LIB_URL;
-    s.onload = () => (window.supabase?.createClient ? resolve(window.supabase) : reject(new Error('lib')));
-    s.onerror = () => { libPromise = null; s.remove(); reject(new CloudError('تعذّر الاتصال. تحقق من الإنترنت وحاول مجدداً.', 'NETWORK')); };
-    document.head.append(s);
-  });
-  return libPromise;
-}
-
-export async function sb() {
-  if (client) return client;
-  const cfg = await cloudConfig();
-  if (!cfg) throw new CloudError('لم تُربط المؤسسة بعد.', 'NO_CONFIG');
-  const lib = await loadLib();
-  client = lib.createClient(cfg.url, cfg.key, { auth: { persistSession: true, autoRefreshToken: true, storageKey: 'sm-org-auth' } });
-  return client;
+// ---- تحميل Firebase عند الحاجة فقط ----
+let fb = null; // { auth, db, A (دوال الدخول), F (دوال القاعدة) }
+let loading = null;
+async function api() {
+  if (fb) return fb;
+  loading ||= (async () => {
+    const cfg = await cloudConfig();
+    if (!cfg) throw new CloudError('لم تُربط المؤسسة بعد.', 'NO_CONFIG');
+    let appMod, A, F;
+    try {
+      [appMod, A, F] = await Promise.all([
+        import(`${FB}/firebase-app.js`), import(`${FB}/firebase-auth.js`), import(`${FB}/firebase-firestore.js`),
+      ]);
+    } catch { throw new CloudError('تعذّر الاتصال. تحقق من الإنترنت وحاول مجدداً.', 'NETWORK'); }
+    const name = `org-${cfg.projectId}`;
+    const app = appMod.getApps().find((a) => a.name === name) || appMod.initializeApp(cfg, name);
+    const auth = A.getAuth(app);
+    const db = F.getFirestore(app);
+    return { auth, db, A, F };
+  })();
+  try { fb = await loading; return fb; } finally { loading = null; }
 }
 
 // ---- أخطاء بالعربية ----
 function explain(err) {
-  const m = String(err?.message || err || '');
   if (err instanceof CloudError) return err;
-  if (/Invalid login credentials/i.test(m)) return new CloudError('اسم المستخدم أو كلمة المرور غير صحيحة.', 'BAD_LOGIN');
-  if (/already registered|already exists|User already/i.test(m)) return new CloudError('اسم المستخدم هذا مستخدم من قبل. اختر اسماً آخر.', 'TAKEN');
-  if (/Password should be|weak/i.test(m)) return new CloudError('كلمة المرور ضعيفة: ٨ أحرف على الأقل، ويُفضّل خلط أرقام وحروف.', 'WEAK');
-  if (/org_exists/.test(m)) return new CloudError('المؤسسة أُنشئت من قبل، ولها مدير واحد فقط. سجّل الدخول بدلاً من ذلك.', 'ORG_EXISTS');
-  if (/bad_code/.test(m)) return new CloudError('رابط الدعوة غير صالح أو استُخدم من قبل. اطلب من المدير دعوة جديدة.', 'BAD_CODE');
-  if (/already_member/.test(m)) return new CloudError('هذا الحساب منضم إلى المؤسسة من قبل.', 'ALREADY');
-  if (/duplicate key.*username|invites_org_id_username/i.test(m)) return new CloudError('يوجد موظف أو دعوة بهذا الاسم من قبل.', 'TAKEN');
-  if (/rate limit|too many/i.test(m)) return new CloudError('محاولات كثيرة. انتظر دقيقة ثم حاول.', 'RATE');
-  if (/Email signups are disabled|Signups not allowed/i.test(m)) return new CloudError('التسجيل مغلق في إعدادات Supabase. فعّل "Allow new users to sign up".', 'SIGNUP_OFF');
-  if (/invalid.*email|Email address .* is invalid/i.test(m)) return new CloudError('Supabase رفض اسم المستخدم كبريد. استخدم حروفاً إنجليزية وأرقاماً فقط.', 'BAD_USER');
-  if (/Failed to fetch|NetworkError|network/i.test(m)) return new CloudError('تعذّر الاتصال. تحقق من الإنترنت.', 'NETWORK');
-  if (/relation .* does not exist|function .* does not exist|Could not find the function/i.test(m)) {
-    return new CloudError('قاعدة البيانات لم تُجهَّز. شغّل ملف supabase/schema.sql في Supabase ← SQL Editor.', 'NO_SCHEMA');
-  }
-  return new CloudError(m || 'خطأ غير معروف', 'UNKNOWN');
+  const code = String(err?.code || '');
+  const m = String(err?.message || err || '');
+  const E = (t, c = code || 'UNKNOWN') => new CloudError(t, c);
+  if (/invalid-credential|wrong-password|user-not-found|invalid-login/.test(code)) return E('اسم المستخدم أو كلمة المرور غير صحيحة.', 'BAD_LOGIN');
+  if (/email-already-in-use/.test(code)) return E('اسم المستخدم هذا مستخدم من قبل. اختر اسماً آخر.', 'TAKEN');
+  if (/weak-password/.test(code)) return E('كلمة المرور ضعيفة: ٨ أحرف على الأقل.', 'WEAK');
+  if (/too-many-requests/.test(code)) return E('محاولات كثيرة. انتظر قليلاً ثم حاول.', 'RATE');
+  if (/operation-not-allowed/.test(code)) return E('فعّل الدخول بالبريد وكلمة المرور في Firebase: Authentication ← Sign-in method ← Email/Password.', 'AUTH_OFF');
+  if (/api-key-not-valid|invalid-api-key/.test(code)) return E('مفتاح apiKey غير صحيح. انسخ لصقة firebaseConfig من جديد.', 'BAD_CONFIG');
+  if (/network-request-failed|unavailable/.test(code) || /Failed to fetch|offline/i.test(m)) return E('تعذّر الاتصال. تحقق من الإنترنت.', 'NETWORK');
+  if (/not-found/.test(code) && /database/i.test(m)) return E('أنشئ قاعدة Firestore في المشروع: Firestore Database ← Create database.', 'NO_DB');
+  if (/failed-precondition|Cloud Firestore API/i.test(code + m)) return E('قاعدة Firestore غير مفعّلة في المشروع. أنشئها من Firestore Database ← Create database.', 'NO_DB');
+  if (/permission-denied/.test(code)) return E('العملية غير مسموحة. تأكد من لصق قواعد الحماية (firestore.rules) في Firebase، أو أن هذا للمدير فقط.', 'FORBIDDEN');
+  return E(m || 'خطأ غير معروف');
 }
-const run = async (p) => {
-  try {
-    const { data, error } = await p;
-    if (error) throw error;
-    return data;
-  } catch (err) { throw explain(err); }
-};
+const run = async (fn) => { try { return await fn(); } catch (err) { throw explain(err); } };
 
-// ---- أسماء المستخدمين ----
+// ---- أسماء المستخدمين وكلمات المرور ----
 export const normalizeUsername = (u) => String(u || '').trim().toLowerCase();
 export function checkUsername(u) {
   const n = normalizeUsername(u);
@@ -92,18 +94,24 @@ function checkPassword(p) {
 }
 
 // ---- الجلسة ----
-// يعيد { user, member: { role, display_name, username, org_id }, org: { name } } أو null
+const memberShape = (id, d) => d && ({
+  user_id: id, role: d.role, display_name: d.displayName, username: d.username,
+  created_at: d.createdAt?.toDate?.()?.toISOString?.() || null, org_id: 'main',
+});
+
+// يعيد { user, member, org } أو null
 export async function session() {
   if (!(await cloudConfig())) return null;
-  const c = await sb();
-  const { data } = await c.auth.getSession();
-  const user = data?.session?.user;
-  if (!user) return null;
-  const member = await run(c.from('members').select('user_id, org_id, role, display_name, username').eq('user_id', user.id).maybeSingle());
-  const org = member ? await run(c.from('orgs').select('id, name').eq('id', member.org_id).maybeSingle()) : null;
-  const s = { user, member, org };
-  cacheRole(s);
-  return s;
+  const { auth, db, F } = await api();
+  await auth.authStateReady();
+  const user = auth.currentUser;
+  if (!user) { cacheRole(null); return null; }
+  return run(async () => {
+    const [m, o] = await Promise.all([F.getDoc(F.doc(db, 'members', user.uid)), F.getDoc(F.doc(db, 'orgs', 'main'))]);
+    const s = { user: { id: user.uid }, member: m.exists() ? memberShape(user.uid, m.data()) : null, org: o.exists() ? { name: o.data().name } : null };
+    cacheRole(s);
+    return s;
+  });
 }
 
 // نتذكر الدور على الجهاز لإظهار تبويب "الموظفين" فوراً عند فتح التطبيق
@@ -114,29 +122,31 @@ function cacheRole(s) {
 }
 
 export async function orgExists() {
-  return run((await sb()).rpc('org_exists'));
+  const { db, F } = await api();
+  return run(async () => (await F.getDoc(F.doc(db, 'orgs', 'main'))).exists());
 }
 
 export async function signIn(username, password) {
-  const c = await sb();
-  await run(c.auth.signInWithPassword({ email: toEmail(username), password }));
+  const { auth, A } = await api();
+  await run(() => A.signInWithEmailAndPassword(auth, toEmail(username), password));
   return session();
 }
 
 export async function signOut() {
-  if (client) await client.auth.signOut().catch(() => {});
+  if (fb) await fb.A.signOut(fb.auth).catch(() => {});
   cacheRole(null);
 }
 
-async function signUp(username, password) {
+// ينشئ الحساب، أو يدخل به إن كان موجوداً بكلمة المرور نفسها (موظف أُزيل ثم دُعي مجدداً)
+async function signUpOrIn(username, password) {
   checkPassword(password);
-  const c = await sb();
-  const data = await run(c.auth.signUp({ email: toEmail(username), password }));
-  if (!data?.session) {
-    // تأكيد البريد مفعّل: الحساب ينتظر رسالة لن تصل
-    throw new CloudError('أوقف تأكيد البريد في Supabase: Authentication ← Sign In / Providers ← Email ← أطفئ "Confirm email"، ثم احذف المستخدم من Authentication ← Users وأعد المحاولة.', 'CONFIRM_ON');
+  const { auth, A } = await api();
+  try {
+    await A.createUserWithEmailAndPassword(auth, toEmail(username), password);
+  } catch (err) {
+    if (!/email-already-in-use/.test(err?.code || '')) throw explain(err);
+    try { await A.signInWithEmailAndPassword(auth, toEmail(username), password); } catch { throw explain(err); }
   }
-  return data;
 }
 
 // المدير: إنشاء المؤسسة وحسابه (مرة واحدة فقط)
@@ -144,66 +154,112 @@ export async function createOrg({ orgName, name, username, password }) {
   if (!String(orgName || '').trim()) throw new CloudError('اكتب اسم المؤسسة.', 'BAD_INPUT');
   if (!String(name || '').trim()) throw new CloudError('اكتب اسمك.', 'BAD_INPUT');
   const u = checkUsername(username);
-  if (await orgExists()) throw explain('org_exists');
-  await signUp(u, password);
-  await run((await sb()).rpc('create_org', { org_name: orgName.trim(), my_name: name.trim(), my_username: u }));
+  if (await orgExists()) throw new CloudError('المؤسسة أُنشئت من قبل، ولها مدير واحد فقط. سجّل الدخول بدلاً من ذلك.', 'ORG_EXISTS');
+  await signUpOrIn(u, password);
+  const { auth, db, F } = await api();
+  const uid = auth.currentUser.uid;
+  await run(async () => {
+    const b = F.writeBatch(db);
+    b.set(F.doc(db, 'orgs', 'main'), { name: orgName.trim(), owner: uid, createdAt: F.serverTimestamp() });
+    b.set(F.doc(db, 'members', uid), { role: 'manager', displayName: name.trim(), username: u, createdAt: F.serverTimestamp() });
+    await b.commit();
+  }).catch(async (err) => {
+    // سبقه غيره بإنشاء المؤسسة
+    if (err.code === 'FORBIDDEN' && await orgExists().catch(() => false)) throw new CloudError('المؤسسة أُنشئت من قبل، ولها مدير واحد فقط.', 'ORG_EXISTS');
+    throw err;
+  });
   return session();
 }
 
 // ---- الدعوات ----
 function randomCode() {
   const abc = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // بلا أحرف متشابهة
-  const b = crypto.getRandomValues(new Uint8Array(10));
+  const b = crypto.getRandomValues(new Uint8Array(12));
   return [...b].map((x) => abc[x % abc.length]).join('');
 }
 
 export async function createInvite({ name, username }) {
   if (!String(name || '').trim()) throw new CloudError('اكتب اسم الموظف.', 'BAD_INPUT');
+  const u = checkUsername(username);
   const s = await session();
   if (s?.member?.role !== 'manager') throw new CloudError('هذا للمدير فقط.', 'FORBIDDEN');
+  const [members, invites] = await Promise.all([listMembers(), listInvites()]);
+  if (members.some((m) => m.username === u) || invites.some((i) => i.username === u)) {
+    throw new CloudError('يوجد موظف أو دعوة بهذا الاسم من قبل.', 'TAKEN');
+  }
+  const { db, F } = await api();
   const code = randomCode();
-  await run((await sb()).from('invites').insert({
-    code, org_id: s.member.org_id, display_name: name.trim(), username: checkUsername(username), created_by: s.user.id,
+  await run(() => F.setDoc(F.doc(db, 'invites', code), {
+    displayName: name.trim(), username: u, createdBy: s.user.id, createdAt: F.serverTimestamp(),
   }));
   return code;
 }
 
 export async function listInvites() {
-  return run((await sb()).from('invites').select('code, display_name, username, created_at').is('used_by', null).order('created_at'));
+  const { db, F } = await api();
+  return run(async () => {
+    const snap = await F.getDocs(F.collection(db, 'invites'));
+    return snap.docs.map((d) => ({ code: d.id, display_name: d.data().displayName, username: d.data().username, created_at: d.data().createdAt?.toMillis?.() || 0 }))
+      .sort((a, b) => a.created_at - b.created_at);
+  });
 }
 export async function deleteInvite(code) {
-  await run((await sb()).from('invites').delete().eq('code', code));
+  const { db, F } = await api();
+  await run(() => F.deleteDoc(F.doc(db, 'invites', code)));
 }
 
+// الرابط يحمل إعداد المشروع العام (ليس سرياً) ورمز الدعوة
+const b64 = (s) => btoa(unescape(encodeURIComponent(s))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+const unb64 = (s) => decodeURIComponent(escape(atob(s.replace(/-/g, '+').replace(/_/g, '/'))));
 export async function inviteLink(code) {
   const cfg = await cloudConfig();
-  const p = new URLSearchParams({ c: code, u: cfg.url, k: cfg.key });
+  const p = new URLSearchParams({ c: code, f: b64(JSON.stringify(cfg)) });
   return `${location.origin}${location.pathname}#/join?${p}`;
 }
 
-// يقرأ رابط الدعوة: يحفظ إعداد المؤسسة من الرابط ثم يجلب الاسم واسم المستخدم
+// يقرأ رابط الدعوة: يحفظ إعداد المؤسسة منه ثم يجلب الاسم واسم المستخدم
 export async function readInvite(params) {
   const code = params.get('c');
-  if (!code) throw explain('bad_code');
-  if (params.get('u') && params.get('k')) {
-    const cfg = await cloudConfig();
-    if (!cfg || cfg.url !== params.get('u')) await setCloudConfig({ url: params.get('u'), key: params.get('k') });
+  const bad = new CloudError('رابط الدعوة غير صالح أو استُخدم من قبل. اطلب من المدير دعوة جديدة.', 'BAD_CODE');
+  if (!code) throw bad;
+  if (params.get('f')) {
+    let cfg;
+    try { cfg = JSON.parse(unb64(params.get('f'))); } catch { throw bad; }
+    const cur = await cloudConfig();
+    if (!cur || cur.projectId !== cfg.projectId) await setCloudConfig(cfg);
   }
-  const rows = await run((await sb()).rpc('invite_info', { c: code }));
-  if (!rows?.length) throw explain('bad_code');
-  return { code, ...rows[0] };
+  const { db, F } = await api();
+  const [inv, org] = await run(() => Promise.all([F.getDoc(F.doc(db, 'invites', code)), F.getDoc(F.doc(db, 'orgs', 'main'))]));
+  if (!inv.exists()) throw bad;
+  return { code, org_name: org.exists() ? org.data().name : '', display_name: inv.data().displayName, username: inv.data().username };
 }
 
 export async function joinWithInvite({ code, username, password }) {
-  await signUp(username, password);
-  await run((await sb()).rpc('redeem_invite', { c: code }));
+  const inv = await readInvite(new URLSearchParams({ c: code }));
+  await signUpOrIn(username, password);
+  const { auth, db, F } = await api();
+  const uid = auth.currentUser.uid;
+  await run(async () => {
+    if ((await F.getDoc(F.doc(db, 'members', uid))).exists()) throw new CloudError('هذا الحساب منضم إلى المؤسسة من قبل.', 'ALREADY');
+    const b = F.writeBatch(db);
+    b.set(F.doc(db, 'members', uid), {
+      role: 'employee', displayName: inv.display_name, username: inv.username, invite: code, createdAt: F.serverTimestamp(),
+    });
+    b.delete(F.doc(db, 'invites', code));
+    await b.commit();
+  });
   return session();
 }
 
 // ---- الأعضاء ----
 export async function listMembers() {
-  return run((await sb()).from('members').select('user_id, role, display_name, username, created_at').order('created_at'));
+  const { db, F } = await api();
+  return run(async () => {
+    const snap = await F.getDocs(F.collection(db, 'members'));
+    return snap.docs.map((d) => memberShape(d.id, d.data())).sort((a, b) => String(a.created_at).localeCompare(String(b.created_at)));
+  });
 }
 export async function removeMember(userId) {
-  await run((await sb()).from('members').delete().eq('user_id', userId));
+  const { db, F } = await api();
+  await run(() => F.deleteDoc(F.doc(db, 'members', userId)));
 }

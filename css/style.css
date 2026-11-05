@@ -760,11 +760,12 @@ body.theme-wa textarea, body.theme-wa select { background: #2a3942; border-color
 .org-form[hidden], .invite-out[hidden] { display: none; }
 .org-form .btn { width: 100%; justify-content: center; }
 .org-field { display: flex; flex-direction: column; gap: 6px; font-size: .9rem; color: var(--muted); }
-.org-field input {
+.org-field input, .org-field textarea {
   width: 100%; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--border);
   background: var(--surface-2); color: var(--text); font: inherit; font-size: 1rem;
 }
-.org-field input:focus { outline: 2px solid var(--accent); outline-offset: 0; }
+.org-field textarea { font-family: ui-monospace, monospace; font-size: .8rem; resize: vertical; }
+.org-field input:focus, .org-field textarea:focus { outline: 2px solid var(--accent); outline-offset: 0; }
 .org-field input[readonly] { opacity: .75; }
 .org-wide { width: 100%; justify-content: center; text-align: center; }
 .org-center, .org-foot, .org-wait { text-align: center; }

@@ -64,10 +64,11 @@ function renderSetup(root) {
       </section>
       <section class="card">
         <h3>أنا المدير</h3>
-        <p class="muted">اربط مشروع Supabase الخاص بمؤسستك. تجد الرابط والمفتاح في موقع Supabase من صفحة <bdi dir="ltr">Project Settings → API</bdi>. الخطوات كاملة في ملف <bdi dir="ltr">supabase/SETUP.md</bdi>.</p>
+        <p class="muted">اربط مشروع Firebase الخاص بمؤسستك: من إعدادات المشروع في Firebase انسخ لصقة <bdi dir="ltr">firebaseConfig</bdi> كاملة والصقها هنا. الخطوات كاملة في ملف <bdi dir="ltr">firebase/SETUP.md</bdi>.</p>
         <form id="cfg-form" class="org-form">
-          ${field('cfg-url', 'Project URL', 'type="url" dir="ltr" placeholder="https://xxxx.supabase.co" autocomplete="off" required')}
-          ${field('cfg-key', 'المفتاح العام (anon أو publishable)', 'type="text" dir="ltr" autocomplete="off" spellcheck="false" required')}
+          <label class="org-field"><span>لصقة firebaseConfig</span>
+            <textarea id="cfg-text" dir="ltr" rows="7" spellcheck="false" autocomplete="off" required placeholder="const firebaseConfig = {&#10;  apiKey: &quot;AIza...&quot;,&#10;  authDomain: &quot;...&quot;,&#10;  projectId: &quot;...&quot;,&#10;  appId: &quot;...&quot;&#10;};"></textarea>
+          </label>
           <button class="btn" id="cfg-save" type="submit">ربط المؤسسة</button>
           <p class="status" id="cfg-msg" role="status"></p>
         </form>
@@ -77,7 +78,7 @@ function renderSetup(root) {
   root.querySelector('#cfg-form').addEventListener('submit', busyButton(btn, async () => {
     const msg = root.querySelector('#cfg-msg');
     try {
-      await setCloudConfig({ url: root.querySelector('#cfg-url').value, key: root.querySelector('#cfg-key').value });
+      await setCloudConfig(root.querySelector('#cfg-text').value);
       await orgExists(); // يتحقق من الاتصال ومن تجهيز قاعدة البيانات
       reload();
     } catch (e) { setMsg(msg, e.message); }
@@ -184,9 +185,9 @@ async function renderJoin(root, params) {
   root.innerHTML = '<p class="muted org-wait">أفتح الدعوة…</p>';
   let inv;
   try {
-    // جهاز عليه حساب آخر: نخرج منه أولاً
-    if (await cloudConfig() && (await session().catch(() => null))?.user) await signOut();
     inv = await readInvite(params);
+    // دعوة صالحة وعلى الجهاز حساب آخر: نخرج منه لينضم المدعو بحسابه
+    if ((await session().catch(() => null))?.user) await signOut();
   } catch (e) {
     if (!alive) return;
     root.innerHTML = `<div class="org"><div class="org-hero"><div class="org-hero__icon" aria-hidden="true">✉️</div><h2>الدعوة</h2></div>
