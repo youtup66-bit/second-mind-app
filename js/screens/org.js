@@ -65,6 +65,12 @@ function renderSetup(root) {
       <section class="card">
         <h3>أنا المدير</h3>
         <p class="muted">اربط مشروع Firebase الخاص بمؤسستك: من إعدادات المشروع في Firebase انسخ لصقة <bdi dir="ltr">firebaseConfig</bdi> كاملة والصقها هنا. الخطوات كاملة في ملف <bdi dir="ltr">firebase/SETUP.md</bdi>.</p>
+        <div class="org-rules">
+          <p><b>قواعد الحماية:</b> انسخها والصقها في Firebase ← Firestore Database ← Rules، ثم اضغط Publish.</p>
+          <button type="button" class="btn btn--ghost" id="copy-rules">📋 نسخ قواعد الحماية</button>
+          <p class="status" id="rules-msg" role="status"></p>
+          <textarea id="rules-text" class="org-rules__text" dir="ltr" readonly hidden></textarea>
+        </div>
         <form id="cfg-form" class="org-form">
           <label class="org-field"><span>لصقة firebaseConfig</span>
             <textarea id="cfg-text" dir="ltr" rows="7" spellcheck="false" autocomplete="off" required placeholder="const firebaseConfig = {&#10;  apiKey: &quot;AIza...&quot;,&#10;  authDomain: &quot;...&quot;,&#10;  projectId: &quot;...&quot;,&#10;  appId: &quot;...&quot;&#10;};"></textarea>
@@ -75,6 +81,25 @@ function renderSetup(root) {
       </section>
     </div>`;
   const btn = root.querySelector('#cfg-save');
+  // ينسخ ملف القواعد من التطبيق نفسه (أسهل من نسخه من GitHub على الجوال)
+  root.querySelector('#copy-rules').addEventListener('click', async () => {
+    const msg = root.querySelector('#rules-msg');
+    const box = root.querySelector('#rules-text');
+    try {
+      const text = await (await fetch('firebase/firestore.rules', { cache: 'no-cache' })).text();
+      if (!/service cloud\.firestore/.test(text)) throw new Error();
+      box.value = text;
+      try {
+        await navigator.clipboard.writeText(text);
+        setMsg(msg, 'نُسخت القواعد ✓ الصقها الآن في Firebase.', true);
+      } catch {
+        // النسخ التلقائي غير مسموح: نعرض النص محدداً لينسخه يدوياً
+        box.hidden = false;
+        box.focus(); box.select();
+        setMsg(msg, 'حدّد النص أدناه كله وانسخه.', true);
+      }
+    } catch { setMsg(msg, 'تعذّر جلب القواعد. تحقق من الإنترنت.'); }
+  });
   root.querySelector('#cfg-form').addEventListener('submit', busyButton(btn, async () => {
     const msg = root.querySelector('#cfg-msg');
     try {

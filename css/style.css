@@ -794,3 +794,8 @@ body.theme-wa textarea, body.theme-wa select { background: #2a3942; border-color
 .staff-add__plus { width: 46px; height: 46px; border-radius: 50%; display: grid; place-items: center; background: var(--accent); color: #fff; font-size: 1.4rem; }
 .invite-out__link { width: 100%; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--border); background: var(--surface-2); color: var(--text); font-size: .8rem; }
 .staff-back { text-decoration: none; align-self: flex-start; }
+.org-rules { margin: 4px 0 16px; padding: 12px; border-radius: 12px; background: var(--surface-2); }
+.org-rules p { margin: 0 0 8px; font-size: .9rem; }
+.org-rules .btn { width: 100%; justify-content: center; }
+.org-rules__text { width: 100%; height: 160px; margin-top: 8px; font: .72rem ui-monospace, monospace; background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 8px; }
+.org-rules__text[hidden] { display: none; }
