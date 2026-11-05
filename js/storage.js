@@ -1,6 +1,6 @@
 // خدمة التخزين المحلي (IndexedDB). لا شيء هنا يغادر الجهاز.
 const DB_NAME = 'second-mind';
-const DB_VERSION = 5;
+const DB_VERSION = 6;
 
 let dbPromise;
 
@@ -30,6 +30,10 @@ function openDB() {
       // رسائل مجموعة المؤسسة: الأرشيف على هذا الجهاز (السحابة تنقلها فقط)
       if (!db.objectStoreNames.contains('group')) {
         db.createObjectStore('group', { keyPath: 'id' }).createIndex('sentAt', 'sentAt');
+      }
+      // نقاط الموظفين (للمدير فقط، على جهازه)
+      if (!db.objectStoreNames.contains('points')) {
+        db.createObjectStore('points', { keyPath: 'id' }).createIndex('at', 'at');
       }
     };
     req.onsuccess = () => {
@@ -127,6 +131,12 @@ export async function getGroupMessages() {
 }
 export const clearGroup = () => run('group', 'readwrite', (s) => s.clear());
 
+// ---- نقاط الموظفين ----
+// { id, user, workId, workName, points, count, at, msgId?, quote?, status: 'suggested'|'approved'|'rejected', source: 'ai'|'manual' }
+export const putPoint = (p) => run('points', 'readwrite', (s) => s.put(p));
+export const deletePoint = (id) => run('points', 'readwrite', (s) => s.delete(id));
+export const getPoints = () => run('points', 'readonly', (s) => s.getAll());
+
 // ---- التصدير والاستيراد ----
 // المفتاح لا يُصدَّر أبداً حتى لا يتسرب مع ملف النسخة، وتاريخ آخر نسخة خاص بهذا الجهاز
 const PRIVATE_SETTINGS = new Set(['geminiApiKey', 'lastExportAt', 'usage', 'ttsCooldownUntil', 'liteCooldownUntil', 'cloud', 'orgRole', 'groupSeenAt']);
@@ -147,7 +157,8 @@ async function getAllSettings() {
   });
 }
 
-export async function exportData() {
+// withGroup: أرشيف المجموعة (قد يكون كبيراً بالصور)؛ النسخ التلقائية الداخلية تتركه لتوفير المساحة
+export async function exportData({ withGroup = true } = {}) {
   return {
     app: 'second-mind',
     format: BACKUP_FORMAT,
@@ -155,6 +166,8 @@ export async function exportData() {
     entries: await run('entries', 'readonly', (s) => s.getAll()),
     messages: await run('messages', 'readonly', (s) => s.getAll()),
     summaries: await run('summaries', 'readonly', (s) => s.getAll()),
+    points: await run('points', 'readonly', (s) => s.getAll()),
+    ...(withGroup ? { group: await run('group', 'readonly', (s) => s.getAll()) } : {}),
     settings: await getAllSettings(),
   };
 }
@@ -170,10 +183,12 @@ export async function importData(data, mode = 'merge') {
   const messages = (data.messages || []).filter((m) => valid(m) && (m.role === 'user' || m.role === 'model'));
   const summaries = (data.summaries || []).filter((x) => x && typeof x.id === 'string' && x.result && Number.isFinite(x.createdAt));
   const settings = Object.entries(data.settings || {}).filter(([k]) => !PRIVATE_SETTINGS.has(k));
+  const group = (data.group || []).filter((m) => m && typeof m.id === 'string' && Number.isFinite(m.sentAt));
+  const points = (data.points || []).filter((p) => p && typeof p.id === 'string' && typeof p.user === 'string' && Number.isFinite(p.at));
 
   const db = await openDB();
   await new Promise((resolve, reject) => {
-    const tx = db.transaction(['entries', 'messages', 'summaries', 'settings'], 'readwrite');
+    const tx = db.transaction(['entries', 'messages', 'summaries', 'settings', 'group', 'points'], 'readwrite');
     const es = tx.objectStore('entries'), ms = tx.objectStore('messages'), ss = tx.objectStore('settings');
     const sums = tx.objectStore('summaries');
     if (mode === 'replace') { es.clear(); ms.clear(); sums.clear(); }
@@ -181,6 +196,9 @@ export async function importData(data, mode = 'merge') {
     entries.forEach((e) => es.put({ category: null, source: 'text', meta: {}, ...e }));
     messages.forEach((m) => ms.put({ entryId: null, ...m }));
     settings.forEach(([k, v]) => ss.put(v, k));
+    // أرشيف المجموعة والنقاط يُدمجان دائماً (لا يُمسحان)
+    group.forEach((m) => tx.objectStore('group').put(m));
+    points.forEach((p) => tx.objectStore('points').put(p));
     tx.oncomplete = resolve;
     tx.onerror = () => reject(tx.error);
     tx.onabort = () => reject(tx.error);
@@ -204,7 +222,7 @@ export const deleteSummary = (id) => run('summaries', 'readwrite', (s) => s.dele
 
 // ---- لقطات داخلية (نسخ احتياطية تلقائية على الجهاز نفسه) ----
 export async function saveSnapshot(reason = 'auto') {
-  const data = await exportData();
+  const data = await exportData({ withGroup: false });
   const snap = { id: crypto.randomUUID(), createdAt: Date.now(), reason, count: data.entries.length, data };
   await run('snapshots', 'readwrite', (s) => s.put(snap));
   return snap;
@@ -221,6 +239,7 @@ export const deleteSnapshot = (id) => run('snapshots', 'readwrite', (s) => s.del
 export async function clearAll() {
   await run('summaries', 'readwrite', (s) => s.clear());
   await run('group', 'readwrite', (s) => s.clear());
+  await run('points', 'readwrite', (s) => s.clear());
   await run('snapshots', 'readwrite', (s) => s.clear());
   await run('messages', 'readwrite', (s) => s.clear());
   await run('entries', 'readwrite', (s) => s.clear());

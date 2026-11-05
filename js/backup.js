@@ -123,7 +123,7 @@ export async function autoSnapshot() {
   const snaps = await listSnapshots();
   const last = snaps.find((s) => s.reason === 'auto');
   if (last && Date.now() - last.createdAt < SNAPSHOT_EVERY) return null;
-  const data = await exportData();
+  const data = await exportData({ withGroup: false });
   if (!data.entries.length) return null;
   const snap = await saveSnapshot('auto');
   await pruneSnapshots();

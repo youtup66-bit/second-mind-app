@@ -52,6 +52,7 @@ export async function mount(root) {
       <div class="seg struct-seg" role="tablist">
         <a href="#/staff" role="tab">الأسماء</a>
         <button type="button" class="is-active" role="tab" aria-selected="true">الهيكل</button>
+        <a href="#/points" role="tab">النقاط</a>
       </div>
       <div class="struct-legend">
         <span>${dot(TYPES.dept.color)}القسم</span><span>${dot(TYPES.division.color)}شعبة</span>

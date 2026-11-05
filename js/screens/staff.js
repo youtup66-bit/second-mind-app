@@ -2,6 +2,8 @@
 import {
   session, listMembers, listInvites, createInvite, deleteInvite, inviteLink, removeMember,
 } from '../cloud.js';
+import { totals, PERIODS } from '../points.js';
+import { getSetting } from '../storage.js';
 
 export const title = 'الموظفين';
 
@@ -34,6 +36,7 @@ export async function mount(root) {
       <div class="seg struct-seg" role="tablist">
         <button type="button" class="is-active" role="tab" aria-selected="true">الأسماء</button>
         <a href="#/structure" role="tab">الهيكل</a>
+        <a href="#/points" role="tab">النقاط</a>
       </div>
       <p class="muted staff__org">${esc(s.org?.name)}</p>
       <ul class="staff-list" id="list" aria-label="الموظفون"></ul>
@@ -62,11 +65,15 @@ export async function mount(root) {
     }
     if (!alive) return;
     const staff = members.filter((m) => m.role === 'employee');
+    // النقاط أمام الأسماء (حسب الفترة المختارة في شاشة النقاط)
+    const period = await getSetting('pointsPeriod', 'month');
+    const t = await totals(period).catch(() => new Map());
     list.innerHTML = [
       ...staff.map((m) => `
         <li><a class="staff-row" href="#/staff?id=${encodeURIComponent(m.user_id)}">
           <span class="staff-row__avatar" aria-hidden="true">${initial(m.display_name)}</span>
           <span class="staff-row__name">${esc(m.display_name)}</span>
+          <span class="pts-total" title="${PERIODS[period]}">${t.get(m.user_id)?.points || 0}</span>
         </a></li>`),
       ...invites.map((i) => `
         <li><button type="button" class="staff-row staff-row--pending" data-code="${esc(i.code)}" data-name="${esc(i.display_name)}">
@@ -159,6 +166,7 @@ async function renderEmployee(root, id) {
         <h2>${esc(m.display_name)}</h2>
         <p class="muted"><span dir="ltr">@${esc(m.username)}</span> · انضم ${new Date(m.created_at).toLocaleDateString('ar')}</p>
       </div>
+      <section class="card" id="emp-points"></section>
       <section class="card">
         <h3>العقل الثاني والمهارات</h3>
         <p class="muted">هنا ستظهر كرات عقل ${esc(m.display_name)} ومهاراته وملخص سيرته، كما يستخرجها الذكاء من جواله. ملاحظاته نفسها تبقى خاصة ولا تظهر لك. (المرحلة القادمة)</p>
@@ -166,6 +174,22 @@ async function renderEmployee(root, id) {
       <button type="button" class="btn btn--danger org-wide" id="remove">إزالة ${esc(m.display_name)} من المؤسسة</button>
       <p class="status" id="rm-msg" role="status"></p>
     </div>`;
+  // نقاطه (للمدير فقط)
+  const [w, mo, all] = await Promise.all(['week', 'month', 'all'].map((p) => totals(p).then((t) => t.get(id))));
+  const recent = (all?.items || []).slice(0, 8);
+  const fmt = new Intl.DateTimeFormat('ar', { day: 'numeric', month: 'short' });
+  const box = root.querySelector('#emp-points');
+  if (box) {
+    box.innerHTML = `
+      <h3>النقاط <small class="muted">🔒 لا يراها الموظف</small></h3>
+      <div class="pts-stats">
+        <div><b>${w?.points || 0}</b><small>هذا الأسبوع</small></div>
+        <div><b>${mo?.points || 0}</b><small>هذا الشهر</small></div>
+        <div><b>${all?.points || 0}</b><small>الكل</small></div>
+      </div>
+      ${recent.length ? `<ul class="pts-log">${recent.map((p) => `<li><span>${esc(p.workName)}${p.count > 1 ? ` ×${p.count}` : ''} <span class="pts-plus">+${p.points}</span><small>${fmt.format(p.at)}</small></span></li>`).join('')}</ul>` : '<p class="muted">لا نقاط بعد.</p>'}
+      <a class="link-btn" href="#/points">كل النقاط ←</a>`;
+  }
   root.querySelector('#remove').addEventListener('click', async () => {
     if (!confirm(`إزالة ${m.display_name} من المؤسسة؟ لن يستطيع الدخول إليها بعد ذلك.`)) return;
     try { await removeMember(id); location.hash = '#/staff'; } catch (e) { root.querySelector('#rm-msg').textContent = e.message; }

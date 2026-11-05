@@ -478,6 +478,42 @@ ${notes.map((n) => `[${n.key}] ${n.text}`).join('\n')}` }] }],
   }
 }
 
+// ---- نقاط المؤسسة: هل تذكر رسالة الموظف إنجاز عمل من قائمة الأعمال؟ ----
+// works: [{ key, name }] · يعيد [{ key, count }] للأعمال التي أُنجزت فعلاً فقط
+export async function detectWorks(text, works) {
+  if (!works.length || !String(text).trim()) return [];
+  const raw = await generate({
+    systemInstruction: { parts: [{ text: `أنت تساعد مدير مؤسسة في احتساب نقاط موظفيه من رسائلهم في مجموعة العمل.
+لديك قائمة أعمال. حدّد هل تقول الرسالة إن مرسلها أنجز عملاً منها فعلاً (فعل ماضٍ أو "خلصت/أنجزت/سويت/ركبت/صلّحت...").
+لا تحتسب الخطط أو الطلبات أو الأسئلة أو الأعمال المنسوبة لغيره. إن شككت فلا تحتسب.
+count: عدد المرات المذكورة صراحة (مثل "ثلاث كاميرات" = 3)، وإلا 1.` }] },
+    contents: [{ role: 'user', parts: [{ text: `الأعمال:
+${works.map((w) => `[${w.key}] ${w.name}`).join('\n')}
+
+الرسالة:
+${text}` }] }],
+    generationConfig: {
+      temperature: 0,
+      maxOutputTokens: 512,
+      responseMimeType: 'application/json',
+      responseSchema: {
+        type: 'OBJECT',
+        properties: { done: { type: 'ARRAY', items: { type: 'OBJECT', properties: { key: { type: 'STRING' }, count: { type: 'INTEGER' } }, required: ['key', 'count'] } } },
+        required: ['done'],
+      },
+    },
+  }, 'classify');
+  try {
+    const done = JSON.parse(raw.replace(/^```(?:json)?\s*|\s*```$/g, '')).done;
+    const valid = new Set(works.map((w) => w.key));
+    return (Array.isArray(done) ? done : [])
+      .filter((d) => valid.has(String(d.key)))
+      .map((d) => ({ key: String(d.key), count: Math.min(50, Math.max(1, Math.round(Number(d.count) || 1))) }));
+  } catch {
+    throw new GeminiError('رد احتساب النقاط غير مفهوم.', 'PARSE');
+  }
+}
+
 // ---- تفريغ الكلام إلى نص ----
 // يُرسل التسجيل الصوتي إلى Gemini (بديل خدمة الكلام في المتصفح التي لا تعمل على بعض الجوالات).
 const TRANSCRIBER = `فرّغ هذا التسجيل الصوتي إلى نص عربي حرفياً كما قيل، فصحى كان أو عامية، مع علامات ترقيم بسيطة.

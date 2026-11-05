@@ -7,13 +7,15 @@ import * as org from './screens/org.js';
 import * as staff from './screens/staff.js';
 import * as group from './screens/group.js';
 import * as structure from './screens/structure.js';
+import * as points from './screens/points.js';
+import { scanSoon } from './points.js';
 import { startGroupSync, groupEvents, unreadCount } from './group.js';
 import { autoSnapshot } from './backup.js';
 import { createFloater } from './floater.js';
 import { getSetting } from './storage.js';
 import { loadCategories } from './categories.js';
 
-const routes = { home, mind, folder, settings, org, join: org, staff, group, structure };
+const routes = { home, mind, folder, settings, org, join: org, staff, group, structure, points };
 const app = document.getElementById('app');
 const titleEl = document.getElementById('screen-title');
 
@@ -36,7 +38,7 @@ async function navigate() {
   document.title = `${screen.title} · عقلي الثاني`;
 
   document.querySelectorAll('.tabbar__item').forEach((a) => {
-    const tabOf = { join: 'org', structure: 'staff' };
+    const tabOf = { join: 'org', structure: 'staff', points: 'staff' };
     const active = a.dataset.route === (tabOf[name] || (routes[name] ? name : 'home'));
     a.classList.toggle('is-active', active);
     if (active) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
@@ -73,7 +75,7 @@ function applyRole(role) {
   const g = document.querySelector('.tabbar__item[data-route="group"]');
   if (g) g.hidden = !role;
   // عضو في المؤسسة: نستلم رسائل المجموعة ما دام التطبيق مفتوحاً، في أي شاشة
-  if (role) startGroupSync().then(refreshBadge).catch(() => {});
+  if (role) startGroupSync().then(() => { refreshBadge(); if (role === 'manager') scanSoon(); }).catch(() => {});
 }
 
 // عدد رسائل المجموعة غير المقروءة على التبويب
