@@ -72,7 +72,7 @@ export async function mount(root) {
     const pts = users.reduce((a, u) => a + (month.get(u)?.points || 0), 0);
     const set = new Set(users);
     const n = posts.filter((m) => set.has(m.from) && m.sentAt >= weekAgo()).length;
-    return `<p class="struct-stats">⭐ <b>${pts}</b> نقطة هذا الشهر · 📝 <b>${n}</b> منشور هذا الأسبوع</p>`;
+    return `<p class="struct-stats">نقاط هذا الشهر <b>${pts}</b> · منشورات هذا الأسبوع <b>${n}</b></p>`;
   };
   const fmtDay = new Intl.DateTimeFormat('ar', { day: 'numeric', month: 'short' });
   const recentPosts = (u) => {
@@ -81,22 +81,27 @@ export async function mount(root) {
   };
 
   root.innerHTML = `
-    <div class="struct">
-      <div class="seg struct-seg" role="tablist">
-        <a href="#/staff" role="tab">الأسماء</a>
-        <button type="button" class="is-active" role="tab" aria-selected="true">عقل المؤسسة</button>
-        <a href="#/points" role="tab">النقاط</a>
-      </div>
-      <div class="struct-legend" id="legend"></div>
+    <div class="struct struct--full">
       <div class="struct-stage">
         <canvas id="sg" aria-label="عقل المؤسسة"></canvas>
-        <div class="struct-zoom">
-          <button type="button" data-z="in" aria-label="تكبير">＋</button>
-          <button type="button" data-z="out" aria-label="تصغير">－</button>
-          <button type="button" data-z="fit" aria-label="عرض الكل">⤢</button>
+        <button type="button" class="struct-handle" id="handle" aria-label="القائمة" aria-expanded="false"><span></span></button>
+        <div class="struct-menu" id="menu" hidden>
+          <nav class="struct-tabs" aria-label="الموظفين">
+            <a href="#/staff">الأسماء</a>
+            <b aria-current="page">عقل المؤسسة</b>
+            <a href="#/points">النقاط</a>
+          </nav>
+          <div class="struct-legend" id="legend"></div>
+          <p class="struct-free" id="free" hidden></p>
+          <button type="button" class="struct-fit" id="fit">عرض الكل</button>
         </div>
+        <button type="button" class="struct-name" id="name" hidden></button>
       </div>
-      <div class="struct-panel" id="panel" aria-live="polite"></div>
+    </div>
+    <div class="sheet" id="sheet" hidden>
+      <div class="sheet__panel struct-sheet" role="dialog" aria-label="تعديل">
+        <div class="struct-panel" id="panel" aria-live="polite"></div>
+      </div>
     </div>`;
 
   // دليل الألوان، ومعه الكرات المخصصة بألوانها
@@ -113,11 +118,49 @@ export async function mount(root) {
   // نموذج فرعي في اللوحة: add | custom | rename | color | links | pick-person | pick-assistant | add-place
   let mode = null;
   let draftColor = PALETTE[0];
-  graph = createOrgGraph(root.querySelector('#sg'), { onSelect: () => { mode = null; renderPanel(); } });
-  root.querySelector('.struct-zoom').addEventListener('click', (e) => {
-    const z = e.target.closest('[data-z]')?.dataset.z;
-    if (z === 'in') graph.zoom(1.4); else if (z === 'out') graph.zoom(1 / 1.4); else if (z === 'fit') graph.fit();
+  const sheet = root.querySelector('#sheet');
+  const nameBtn = root.querySelector('#name');
+  const menu = root.querySelector('#menu');
+  const handle = root.querySelector('#handle');
+  const sheetOpen = () => !sheet.hidden;
+  const openSheet = () => { sheet.hidden = false; renderPanel(); };
+  const closeSheet = () => { sheet.hidden = true; mode = null; };
+  // لمس كرة: يظهر اسمها فقط في الأسفل؛ ولمس الاسم يفتح التعديلات
+  const renderName = () => {
+    const id = graph.selected();
+    if (!id) { nameBtn.hidden = true; return; }
+    const n = id.startsWith('p:') ? null : nodeById(st, id);
+    const label = n ? n.name : nameOf(id.slice(2));
+    const color = n ? colorOf(n) : placesOf(st, id.slice(2)).some((x) => x.assistant) ? ASSISTANT.color : PERSON.color;
+    nameBtn.innerHTML = `${dot(color)}<span>${esc(label)}</span>`;
+    nameBtn.hidden = false;
+  };
+  graph = createOrgGraph(root.querySelector('#sg'), {
+    onSelect: (n) => {
+      mode = null;
+      renderName();
+      if (!n) closeSheet(); else if (sheetOpen()) renderPanel();
+      if (n) setMenu(false);
+    },
   });
+  nameBtn.addEventListener('click', openSheet);
+  sheet.addEventListener('click', (e) => { if (e.target === sheet) closeSheet(); });
+  // النقطة المتوهجة في الأعلى تُسدل القائمة ودليل الألوان
+  function setMenu(on) {
+    menu.hidden = !on;
+    handle.setAttribute('aria-expanded', String(on));
+    handle.classList.toggle('is-open', on);
+    if (on) renderFree();
+  }
+  handle.addEventListener('click', () => setMenu(menu.hidden));
+  root.querySelector('#fit').addEventListener('click', () => { graph.fit(); setMenu(false); });
+  const renderFree = () => {
+    const free = unplaced();
+    const el = root.querySelector('#free');
+    el.hidden = !free.length && members.length > 0;
+    el.innerHTML = !members.length ? 'لا موظفين بعد. أضفهم من <a href="#/staff">الأسماء</a>.'
+      : `${dot(PERSON.color)} غير موزعين: <b>${free.map((m) => esc(m.display_name)).join('، ')}</b> · المس أي كرة ثم اسمها لتضعهم فيها.`;
+  };
 
   const commit = async (keepSel = graph.selected()) => {
     await saveStructure(st);
@@ -125,7 +168,8 @@ export async function mount(root) {
     renderLegend();
     graph.select(keepSel || null);
     mode = null;
-    renderPanel();
+    renderName();
+    if (keepSel) renderPanel(); else closeSheet();
   };
 
   const unplaced = () => members.filter((m) => !placesOf(st, m.user_id).length);
@@ -138,7 +182,7 @@ export async function mount(root) {
   const colorPicker = (current) => `
     <div class="struct-colors" role="radiogroup" aria-label="اللون">
       ${PALETTE.map((c) => `<button type="button" class="struct-color${c === current ? ' is-on' : ''}" data-color="${c}" style="background:${c}" aria-label="${c}"></button>`).join('')}
-      <label class="struct-color struct-color--any" title="لون آخر"><input type="color" id="any-color" value="${current}">🎨</label>
+      <label class="struct-color struct-color--any" title="لون آخر"><input type="color" id="any-color" value="${current}" aria-label="لون آخر"></label>
     </div>`;
   const bindColors = (onPick) => {
     panel.querySelectorAll('[data-color]').forEach((b) => b.addEventListener('click', () => onPick(b.dataset.color)));
@@ -149,14 +193,8 @@ export async function mount(root) {
     if (!alive) return;
     panel.scrollTop = 0;
     const id = graph.selected();
-    if (!id) {
-      const free = unplaced();
-      panel.innerHTML = `
-        <p class="struct-hint">المس كرة لترى ما يرتبط بها وتعدّلها. قرّب بإصبعين لتظهر الأسماء.</p>
-        ${free.length ? `<p class="struct-free">${dot(PERSON.color)} غير موزعين: <b>${free.map((m) => esc(m.display_name)).join('، ')}</b> · المس أي كرة لتضعهم فيها.</p>` : ''}
-        ${members.length ? '' : '<p class="muted">لا موظفين بعد. أضفهم من <a href="#/staff">الأسماء</a>.</p>'}`;
-      return;
-    }
+    if (!sheetOpen()) return;
+    if (!id) { closeSheet(); return; }
     if (id.startsWith('p:')) return renderPersonPanel(id.slice(2));
     const n = nodeById(st, id);
     if (!n) { panel.innerHTML = ''; return; }
@@ -206,12 +244,12 @@ export async function mount(root) {
         ${t.child ? `${count(kids.length, t.child)} · ` : ''}${count(here.length, 'person')}
       </p>`}
       ${sub || `<div class="struct-actions">
-        ${childT ? `<button type="button" data-a="add">＋ ${childT.label}</button>` : ''}
-        <button type="button" data-a="custom">＋ كرة مخصصة</button>
-        <button type="button" data-a="pick-person">＋ موظف</button>
-        ${canHaveAssistant(n.type) ? `<button type="button" data-a="pick-assistant">${asst ? 'تغيير المعاون' : '＋ معاون'}</button>` : ''}
+        ${childT ? `<button type="button" data-a="add">إضافة ${childT.label}</button>` : ''}
+        <button type="button" data-a="custom">إضافة كرة مخصصة</button>
+        <button type="button" data-a="pick-person">إضافة موظف</button>
+        ${canHaveAssistant(n.type) ? `<button type="button" data-a="pick-assistant">${asst ? 'تغيير المعاون' : 'إضافة معاون'}</button>` : ''}
         ${asst ? '<button type="button" data-a="no-assistant">إلغاء المعاون</button>' : ''}
-        ${custom ? '<button type="button" data-a="links">🔗 الربط بفروع</button><button type="button" data-a="color">🎨 اللون</button>' : ''}
+        ${custom ? '<button type="button" data-a="links">الربط بفروع</button><button type="button" data-a="color">اللون</button>' : ''}
         <button type="button" data-a="rename">تعديل الاسم</button>
         ${n.id !== 'root' ? '<button type="button" data-a="delete" class="is-danger">حذف</button>' : ''}
       </div>`}`;
@@ -288,11 +326,11 @@ export async function mount(root) {
         const n = nodeById(st, pl.node);
         return `<li>${dot(colorOf(n))}<span><b>${esc(n.name)}</b>${pl.assistant ? ' <span class="struct-tag">معاون</span>' : ''}<small>${typeLabel(n)}</small></span>
           ${canHaveAssistant(n.type) ? `<button type="button" data-asst="${esc(n.id)}">${pl.assistant ? 'إلغاء المعاون' : 'معاون'}</button>` : ''}
-          <button type="button" data-rm="${esc(n.id)}" class="is-danger" aria-label="إزالة من ${esc(n.name)}">✕</button></li>`;
+          <button type="button" data-rm="${esc(n.id)}" class="is-danger">إزالة</button></li>`;
       }).join('')}</ul>
       ${recentPosts(u)}
       <div class="struct-actions">
-        <button type="button" data-a="add-place">＋ إضافة إلى كرة أخرى</button>
+        <button type="button" data-a="add-place">إضافة إلى كرة أخرى</button>
         <a href="#/staff?id=${encodeURIComponent(u)}">صفحة الموظف</a>
         <button type="button" data-a="unplace" class="is-danger">إخراج من الهيكل</button>
       </div>`}`;
@@ -326,6 +364,8 @@ export async function mount(root) {
 
   graph.setData(toGraph(st, members), { keepView: false });
   renderLegend();
+  // أول مرة: نُظهر القائمة لحظة ليعرف المدير مكانها، إن لم يكن الهيكل مبنياً بعد
+  if (st.nodes.length < 2) setMenu(true);
   // منشور جديد أو نقاط جديدة: نحدّث الأرقام في اللوحة
   const refreshStats = async () => { await loadStats(); if (!mode) renderPanel(); };
   pointsEvents.addEventListener('change', refreshStats);
@@ -338,6 +378,7 @@ export async function mount(root) {
     if (sig(live) === sig(members)) return;
     members = live;
     graph.setData(toGraph(st, members));
+    if (!menu.hidden) renderFree();
     if (!mode) renderPanel();
   };
   groupEvents.addEventListener('members', onMembers);

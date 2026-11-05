@@ -919,3 +919,59 @@ body.on-group .chat--group .wa-head { padding-top: calc(env(safe-area-inset-top)
 .struct-places button.is-danger { color: var(--danger); background: none; }
 .struct-tag { display: inline-block; padding: 0 6px; border-radius: 8px; background: color-mix(in srgb, #2dd4bf 25%, transparent); color: #2dd4bf; font-size: .72rem; }
 .struct-seg > * { white-space: nowrap; font-size: .92rem; padding-inline: 6px; }
+
+/* ---- عقل المؤسسة بملء الشاشة ---- */
+body.on-structure .topbar { display: none; }
+.struct--full {
+  position: fixed; inset: 0 0 calc(var(--tabbar-h) + env(safe-area-inset-bottom)) 0; z-index: 5;
+  height: auto; display: block; background: #0b0f14;
+}
+.struct--full .struct-stage { position: absolute; inset: 0; border: 0; border-radius: 0; background: #0b0f14; min-height: 0; }
+/* نقطة متوهجة خفيفة في الأعلى: تُسدل القائمة */
+.struct-handle {
+  position: absolute; top: calc(env(safe-area-inset-top) + 10px); left: 50%; transform: translateX(-50%); z-index: 3;
+  width: 44px; height: 28px; border: 0; background: none; cursor: pointer; display: grid; place-items: center;
+}
+.struct-handle span {
+  width: 9px; height: 9px; border-radius: 50%; background: #9fd3ff;
+  box-shadow: 0 0 8px 2px rgba(127,184,255,.55); animation: handle-glow 2.6s ease-in-out infinite;
+}
+.struct-handle.is-open span { animation: none; background: #fff; box-shadow: 0 0 6px 1px rgba(255,255,255,.5); }
+@keyframes handle-glow { 50% { opacity: .45; box-shadow: 0 0 3px 1px rgba(127,184,255,.3); } }
+.struct-menu {
+  position: absolute; top: 0; inset-inline: 0; z-index: 2;
+  padding: calc(env(safe-area-inset-top) + 42px) 16px 14px;
+  background: linear-gradient(rgba(11,15,20,.97), rgba(11,15,20,.9) 80%, rgba(11,15,20,0));
+  animation: menu-down .22s ease-out;
+}
+.struct-menu[hidden] { display: none; }
+@keyframes menu-down { from { opacity: 0; transform: translateY(-12px); } }
+.struct-tabs { display: flex; justify-content: center; gap: 22px; margin-bottom: 12px; font-size: 1rem; }
+.struct-tabs a { color: #8a96a3; text-decoration: none; }
+.struct-tabs b { color: #e9edef; font-weight: 700; border-bottom: 2px solid var(--accent); padding-bottom: 2px; }
+.struct-menu .struct-legend { justify-content: center; }
+.struct-menu .struct-free { text-align: center; margin: 10px 0 0; }
+.struct-fit { display: block; margin: 10px auto 0; background: none; border: 0; color: #8a96a3; font: inherit; font-size: .85rem; cursor: pointer; }
+/* اسم الكرة المختارة فقط؛ لمسه يفتح التعديلات */
+.struct-name {
+  position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%); z-index: 2;
+  display: inline-flex; align-items: center; gap: 8px; max-width: calc(100% - 32px);
+  padding: 9px 16px; border-radius: 20px; border: 1px solid rgba(255,255,255,.1);
+  background: rgba(20,26,34,.92); color: #e9edef; font: inherit; font-size: .98rem; cursor: pointer;
+  animation: menu-down .18s ease-out;
+}
+.struct-name[hidden] { display: none; }
+.struct-name span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* لوحة التعديل: قائمة كلمات بلا أيقونات */
+.struct-sheet { max-height: 72dvh; overflow: hidden; display: flex; flex-direction: column; }
+.struct-sheet .struct-panel { height: auto; flex: 1; overflow-y: auto; }
+.struct-sheet .struct-actions { flex-direction: column; gap: 0; margin-top: 6px; }
+.struct-sheet .struct-actions > * {
+  width: 100%; text-align: start; padding: 13px 4px; border: 0; border-bottom: 1px solid var(--border);
+  border-radius: 0; background: none; font-size: 1rem;
+}
+.struct-sheet .struct-actions > *:last-child { border-bottom: 0; }
+.struct-sheet .struct-actions .is-danger { color: var(--danger); background: none; }
+.struct-sheet .struct-places button { background: none; border: 0; color: var(--accent); padding: 4px 6px; }
+.struct-sheet .struct-places button.is-danger { color: var(--danger); }
+.struct-color--any { font-size: 0; }
