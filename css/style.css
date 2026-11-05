@@ -896,3 +896,4 @@ body.on-group .chat--group .wa-head { padding-top: calc(env(safe-area-inset-top)
 .pts-stats b { display: block; font-size: 1.4rem; color: var(--accent); font-variant-numeric: tabular-nums; }
 .pts-stats small { color: var(--muted); font-size: .78rem; }
 .struct-seg > * { min-width: 0; }
+.zoom-ctrl button[hidden] { display: none; }

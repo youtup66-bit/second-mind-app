@@ -2,8 +2,12 @@
 // المشهد يُكبَّر ويُصغَّر بإصبعين (أو بعجلة الفأرة)، ويُحرَّك بإصبع على الفراغ.
 // nodes: [{ id, label, color, weight, fixedR? }]
 // links: [{ a, b, w }]  حيث w بين 0 و1 (قوة الرابط: سماكة الخط ووضوحه وقِصره)
-export function createMindGraph(canvas, nodesIn, linksIn, { onTap, onGroupTap, groups: groupsIn = {}, groupLabels = {}, spacing: initialSpacing = 1 } = {}) {
+// flat: نقاط صافية بلا هالات، والأسماء عند التقريب، ولمسة أولى تُبرز المرتبط بالكرة (والثانية تفتحها)
+export function createMindGraph(canvas, nodesIn, linksIn, { onTap, onGroupTap, onSelect, flat: flatIn = false, groups: groupsIn = {}, groupLabels = {}, spacing: initialSpacing = 1 } = {}) {
   const ctx = canvas.getContext('2d');
+  let flat = flatIn;
+  let selected = null;
+  const select = (n) => { selected = n; onSelect?.(n); };
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
   let W = 0, H = 0;
 
@@ -194,8 +198,10 @@ export function createMindGraph(canvas, nodesIn, linksIn, { onTap, onGroupTap, g
     }
     if (drag && !drag.moved) {
       drag.node.pop = 1; // نبضة صغيرة عند اللمس
-      onTap?.(drag.node);
+      if (!flat || selected === drag.node) onTap?.(drag.node);
+      else select(drag.node);
     }
+    if (flat && pan && !pan.moved && selected) select(null); // لمسة على الفراغ تُلغي الإبراز
     if (pan && !pan.moved && pan.label) {
       const g = pan.label;
       onGroupTap?.({ id: g.id, name: labels[g.id] || '', members: g.members.map((n) => n.id) });
@@ -378,10 +384,53 @@ export function createMindGraph(canvas, nodesIn, linksIn, { onTap, onGroupTap, g
     }
   }
 
+  // ---- النمط المسطح: نقاط صغيرة صافية وخطوط رفيعة ----
+  // حجم النقطة بعدد ملاحظات قسمها (لا بالحرارة)، و"أنا" ثابتة
+  let maxWeight = 1;
+  const dotR = (n) => (n.id === 'me' ? 7 : !n.weight ? 3.5 : 4.5 + 5.5 * Math.sqrt(n.weight / maxWeight));
+  function drawFlat() {
+    const k = view.s;
+    maxWeight = Math.max(1, ...nodes.map((n) => n.weight || 0));
+    const sel = selected && nodes.includes(selected) ? selected : null;
+    const near = sel ? new Set(edges.filter((e) => e.a === sel || e.b === sel).flatMap((e) => [e.a, e.b])) : null;
+    const lit = (n) => !sel || near.has(n);
+    for (const { a, b, w, hub } of edges) {
+      const hi = sel && (a === sel || b === sel);
+      ctx.strokeStyle = hi ? '#5aa7ff' : sel ? 'rgba(160,170,185,.07)' : `rgba(160,170,185,${(hub ? 0.16 : 0.22 + 0.3 * w).toFixed(2)})`;
+      ctx.lineWidth = (hi ? 1.6 : hub ? 1 : 1 + 0.8 * w) / k;
+      ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+    }
+    for (const n of nodes) {
+      const r = dotR(n) * (1 + 0.25 * Math.sin((n.pop || 0) * Math.PI));
+      const empty = n.id !== 'me' && !n.weight;
+      ctx.globalAlpha = empty && lit(n) ? 0.5 : 1;
+      ctx.fillStyle = lit(n) ? n.color : '#2a323c';
+      ctx.beginPath(); ctx.arc(n.x, n.y, r, 0, Math.PI * 2); ctx.fill();
+      ctx.globalAlpha = 1;
+      if (n === sel) {
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 1.2 / k;
+        ctx.beginPath(); ctx.arc(n.x, n.y, r + 3 / k + 1, 0, Math.PI * 2); ctx.stroke();
+      }
+    }
+    // الأسماء بحجم ثابت على الشاشة، تظهر عند التقريب (أو للمبرَزة)
+    ctx.font = `500 ${12.5 / k}px Tajawal, system-ui, sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+    for (const n of nodes) {
+      const show = k >= 1.3 || n.id === 'me' || (sel && lit(n));
+      if (!show) continue;
+      ctx.fillStyle = n === sel ? '#7fb8ff' : sel && !lit(n) ? 'rgba(154,164,178,.3)' : '#9aa4b2';
+      ctx.fillText(n.label, n.x, n.y + dotR(n) + 4 / k);
+    }
+    for (const g of groups) g.box = null; // لا شارات مجموعات في هذا النمط
+  }
+
   function draw() {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, W, H);
     ctx.setTransform(dpr * view.s, 0, 0, dpr * view.s, dpr * view.x, dpr * view.y);
+    if (flat) { drawFlat(); return; }
     drawGroups();
     for (const { a, b, w, hub } of edges) {
       // خطوط "أنا" أخف، وخطوط المجموعات أوضح
@@ -445,6 +494,8 @@ export function createMindGraph(canvas, nodesIn, linksIn, { onTap, onGroupTap, g
     resetView() { animateTo(fitTarget()); },
     fitView: () => animateTo(fitTarget()),
     setGroupLabels(map) { labels = { ...map }; },
+    setFlat(on) { flat = !!on; select(null); },
+    clearSelection: () => select(null),
     // تغيير المسافة بين الكرات (0.7 إلى 2.2) وإعادة ملاءمة المشهد بعد أن تستقر
     setSpacing(v) {
       spacing = Math.min(2.2, Math.max(0.7, v));
@@ -468,6 +519,8 @@ export function createMindGraph(canvas, nodesIn, linksIn, { onTap, onGroupTap, g
         x: g.box.x * view.s + view.x + g.box.w * view.s / 2, y: g.box.y * view.s + view.y + g.box.h * view.s / 2,
       }));
     },
+    // موضع كرة على الشاشة (للاختبار وإمكانية الوصول)
+    nodeScreenPos(id) { const n = byId[id]; return n && { x: n.x * view.s + view.x, y: n.y * view.s + view.y }; },
     get scale() { return view.s; },
     destroy() {
       cancelAnimationFrame(raf);

@@ -145,6 +145,7 @@ export async function mount(root) {
         <button type="button" data-zoom="in" aria-label="تكبير">＋</button>
         <button type="button" data-zoom="out" aria-label="تصغير">－</button>
         <button type="button" data-zoom="reset" aria-label="ملاءمة الشاشة">⟲</button>
+        <button type="button" data-zoom="style" aria-label="شكل الكرات: نقاط أو كرات" title="نقاط / كرات">◎</button>
         <button type="button" data-zoom="mode" aria-label="التبديل بين الحرارة والحجم" title="الحرارة / الحجم">🌡</button>
         <button type="button" data-zoom="space" aria-label="المسافة بين الكرات" title="المسافة بين الكرات">↔</button>
       </div>
@@ -212,10 +213,12 @@ export async function mount(root) {
   const form = root.querySelector('#cat-form');
   const notesEl = root.querySelector('#notes');
   let openCat = null;
+  // شكل الكرات: نقاط صافية (الافتراضي) أو كرات مضيئة بهالات
+  let mindStyle = await getSetting('mindStyle', 'dots');
 
   const setHint = () => {
     hint.textContent = model.total
-      ? 'المس كرة أو اسم مجموعة · بإصبعين كبّر وصغّر'
+      ? (mindStyle === 'dots' ? 'المس نقطة لترى ما يرتبط بها · قرّب بإصبعين لتظهر الأسماء' : 'المس كرة أو اسم مجموعة · بإصبعين كبّر وصغّر')
       : 'تحدّث مع الرفيقة، وستكبر الكرات مع كل ما تقوله.';
   };
   setHint();
@@ -240,6 +243,14 @@ export async function mount(root) {
     ];
     graph = createMindGraph(canvas, nodes, model.links, {
       spacing,
+      flat: mindStyle === 'dots',
+      // النقاط: لمسة أولى تُبرز الكرة وما يرتبط بها، والثانية تفتح ملاحظاتها
+      onSelect: (n) => {
+        if (!n) { setHint(); return; }
+        hint.textContent = n.id === 'me'
+          ? 'هذه أنت: كل الأقسام مرتبطة بك.'
+          : `«${n.label}» وما يرتبط بها. المسها مرة أخرى لعرض ملاحظاتها، أو المس الفراغ للعودة.`;
+      },
       groups: model.groups,
       groupLabels: labelsFor(model),
       onTap: (n) => { if (n.id !== 'me') openSheet(n.id); },
@@ -279,7 +290,9 @@ export async function mount(root) {
   function renderLegend() {
     const legend = root.querySelector('#heat-legend');
     const vals = counts();
-    legend.hidden = colorMode !== 'heat' || !vals.length;
+    // نمط النقاط بلون القسم دائماً: لا حرارة فيه
+    root.querySelector('[data-zoom="mode"]').hidden = mindStyle === 'dots';
+    legend.hidden = mindStyle === 'dots' || colorMode !== 'heat' || !vals.length;
     if (legend.hidden) return;
     root.querySelector('#heat-min').textContent = `${Math.min(...vals)} أقل`;
     root.querySelector('#heat-max').textContent = `أكثر ${Math.max(...vals)}`;
@@ -347,6 +360,15 @@ export async function mount(root) {
     else if (z === 'out') graph.zoomBy(1 / 1.35);
     else if (z === 'reset') graph.resetView(); // ⟲ = ملاءمة كل الكرات للشاشة
     else if (z === 'space') spaceCtrl.hidden = !spaceCtrl.hidden;
+    else if (z === 'style') {
+      mindStyle = mindStyle === 'dots' ? 'balls' : 'dots';
+      setSetting('mindStyle', mindStyle);
+      graph.setFlat(mindStyle === 'dots');
+      renderLegend();
+      hint.textContent = mindStyle === 'dots'
+        ? 'نقاط: قرّب بإصبعين لتظهر الأسماء، والمس نقطة لترى ما يرتبط بها.'
+        : 'كرات مضيئة: المس الكرة لعرض ملاحظاتها.';
+    }
     else if (z === 'mode') {
       colorMode = colorMode === 'heat' ? 'size' : 'heat';
       setSetting('mindColorMode', colorMode);
