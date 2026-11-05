@@ -735,14 +735,17 @@ export async function mount(root) {
 
   // النص المسموع: إما يُرسل مباشرة، أو يوضع في الخانة لتراجعه وتعدّله أولاً
   async function heard(text) {
-    if (await getSetting('voiceReview', true)) {
+    // افتراضياً يُرسل فور الإفلات (مثل واتساب)، إلا إن اختار المراجعة من الإعدادات
+    if (await getSetting('reviewVoice', false)) {
       input.value = (input.value ? `${input.value} ` : '') + text;
       autosize();
       input.focus();
       say('هذا ما سمعته ✍️ عدّله إن شئت، ثم اضغط ➤');
     } else {
-      input.value = ''; autosize();
+      // ما كتبته في الخانة يبقى كما هو؛ الرسالة الصوتية تُرسل وحدها
+      const draft = input.value;
       send(text, 'voice');
+      input.value = draft; autosize();
     }
   }
 

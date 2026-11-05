@@ -94,7 +94,7 @@ export async function mount(root) {
   const micOn = await getSetting('micOn', true);
   const noCompanion = await getSetting('hideCompanion', false);
   const appTheme = await getSetting('appTheme', 'auto');
-  const voiceReview = await getSetting('voiceReview', true);
+  const voiceReview = await getSetting('reviewVoice', false);
   let skin = await getSetting('companionSkin', DEFAULT_SKIN);
   const floaterOn = await getSetting('floaterOn', true);
   const floaterSize = await getSetting('floaterSize', 'medium');
@@ -280,7 +280,7 @@ export async function mount(root) {
       <h3 class="subhead">التعرف على كلامك 🎙</h3>
       <label class="switch">
         <input type="checkbox" id="voice-review" ${voiceReview ? 'checked' : ''}>
-        <span>أراجع النص المسموع وأعدّله قبل إرساله</span>
+        <span>أراجع النص المسموع قبل إرساله (بدل الإرسال فور الإفلات)</span>
       </label>
       <div class="radio-row" role="radiogroup" aria-label="التعرف على الكلام">
         <label class="switch"><input type="radio" name="stt" value="gemini" ${stt === 'gemini' ? 'checked' : ''} ${canRecord ? '' : 'disabled'}><span>Gemini (أدق ويفهم العامية)</span></label>
@@ -801,7 +801,7 @@ export async function mount(root) {
     root.querySelector('#speak').disabled = only;
   }));
   root.querySelector('#speak').disabled = textOnly;
-  root.querySelector('#voice-review').addEventListener('change', (e) => setSetting('voiceReview', e.target.checked));
+  root.querySelector('#voice-review').addEventListener('change', (e) => setSetting('reviewVoice', e.target.checked));
   root.querySelectorAll('input[name="stt"]').forEach((r) => r.addEventListener('change', () => setSetting('sttEngine', r.value)));
 
   root.querySelector('#clear-chat').addEventListener('click', async () => {
