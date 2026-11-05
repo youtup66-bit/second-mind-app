@@ -823,3 +823,40 @@ body.on-group .chat--group .wa-head { padding-top: calc(env(safe-area-inset-top)
   background: #00a884; color: #fff; font-size: .68rem; font-weight: 700; line-height: 18px; text-align: center; font-family: inherit;
 }
 .tabbar__badge[hidden] { display: none; }
+
+/* ---- الهيكل الإداري ---- */
+.struct { display: flex; flex-direction: column; gap: 8px; height: calc(100dvh - var(--tabbar-h) - env(safe-area-inset-bottom) - 58px - 32px - env(safe-area-inset-top)); }
+.struct-seg, .staff .struct-seg { display: flex; margin: 0 0 4px; }
+.struct-seg > * { flex: 1; text-align: center; text-decoration: none; color: inherit; }
+.struct-legend { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: .78rem; color: var(--muted); }
+.struct-legend span { display: inline-flex; align-items: center; gap: 5px; }
+.sdot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; flex: none; }
+.struct-stage { position: relative; flex: 1; min-height: 200px; border-radius: 14px; overflow: hidden; background: #0b0f14; border: 1px solid var(--border); }
+.struct-stage canvas { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; display: block; }
+.struct-zoom { position: absolute; inset-inline-start: 8px; bottom: 8px; display: flex; flex-direction: column; gap: 6px; }
+.struct-zoom button { width: 36px; height: 36px; border-radius: 10px; border: 1px solid rgba(255,255,255,.12); background: rgba(20,26,34,.85); color: #d6dde6; font-size: 1.05rem; cursor: pointer; }
+.struct-panel { flex: none; height: 190px; overflow-y: auto; padding: 2px 2px 4px; }
+.struct-hint, .struct-free { margin: 2px 0 6px; font-size: .88rem; color: var(--muted); }
+.struct-free b { color: var(--text); font-weight: 500; }
+.struct-title { display: flex; align-items: center; gap: 10px; }
+.struct-title .sdot { width: 14px; height: 14px; }
+.struct-title b { display: block; font-size: 1.05rem; }
+.struct-title small { color: var(--muted); font-size: .8rem; }
+.struct-meta { margin: 6px 0 8px; font-size: .85rem; color: var(--muted); }
+.struct-meta b { color: var(--text); font-weight: 500; }
+.struct-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.struct-actions > * {
+  padding: 8px 12px; border-radius: 18px; border: 1px solid var(--border); background: var(--surface-2);
+  color: var(--text); font: inherit; font-size: .88rem; cursor: pointer; text-decoration: none;
+}
+.struct-actions .is-danger { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 40%, transparent); background: none; }
+.struct-form { display: flex; gap: 6px; flex-wrap: wrap; }
+.struct-form input { flex: 1; min-width: 160px; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--border); background: var(--surface-2); color: var(--text); font: inherit; }
+.struct-sub { margin: 0 0 6px; font-size: .88rem; }
+.struct-pick { display: flex; flex-direction: column; gap: 4px; margin-bottom: 8px; }
+.struct-pick button {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap; text-align: start; padding: 8px 10px; border-radius: 10px;
+  border: 1px solid var(--border); background: var(--surface-2); color: var(--text); font: inherit; cursor: pointer;
+}
+.struct-pick small { color: var(--muted); font-size: .78rem; width: 100%; }
+.seg a { display: grid; place-items: center; min-height: 40px; padding: 8px; border-radius: 10px; font-weight: 700; color: var(--muted); }

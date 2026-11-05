@@ -6,13 +6,14 @@ import * as settings from './screens/settings.js';
 import * as org from './screens/org.js';
 import * as staff from './screens/staff.js';
 import * as group from './screens/group.js';
+import * as structure from './screens/structure.js';
 import { startGroupSync, groupEvents, unreadCount } from './group.js';
 import { autoSnapshot } from './backup.js';
 import { createFloater } from './floater.js';
 import { getSetting } from './storage.js';
 import { loadCategories } from './categories.js';
 
-const routes = { home, mind, folder, settings, org, join: org, staff, group };
+const routes = { home, mind, folder, settings, org, join: org, staff, group, structure };
 const app = document.getElementById('app');
 const titleEl = document.getElementById('screen-title');
 
@@ -35,7 +36,8 @@ async function navigate() {
   document.title = `${screen.title} · عقلي الثاني`;
 
   document.querySelectorAll('.tabbar__item').forEach((a) => {
-    const active = a.dataset.route === (name === 'join' ? 'org' : routes[name] ? name : 'home');
+    const tabOf = { join: 'org', structure: 'staff' };
+    const active = a.dataset.route === (tabOf[name] || (routes[name] ? name : 'home'));
     a.classList.toggle('is-active', active);
     if (active) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
   });
@@ -62,7 +64,7 @@ let floaterOn = true;
 let floaterRoute = 'home';
 let noCompanion = false;
 // لا تطفو فوق شاشات المحادثة (الرئيسية والمجموعة)
-const syncFloater = () => floater?.setVisible(floaterOn && !noCompanion && floaterRoute !== 'home' && floaterRoute !== 'group');
+const syncFloater = () => floater?.setVisible(floaterOn && !noCompanion && !['home', 'group', 'structure'].includes(floaterRoute));
 // بلا رفيقة: تبويب "المحادثة"، والشاشة الرئيسية بلا شريط عنوان (رأس المحادثة يكفي)
 // تبويب "الموظفين" يظهر للمدير فقط (الصلاحية الفعلية تفرضها قاعدة البيانات)
 function applyRole(role) {

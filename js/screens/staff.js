@@ -31,6 +31,10 @@ export async function mount(root) {
 
   root.innerHTML = `
     <div class="staff">
+      <div class="seg struct-seg" role="tablist">
+        <button type="button" class="is-active" role="tab" aria-selected="true">الأسماء</button>
+        <a href="#/structure" role="tab">الهيكل</a>
+      </div>
       <p class="muted staff__org">${esc(s.org?.name)}</p>
       <ul class="staff-list" id="list" aria-label="الموظفون"></ul>
       <button type="button" class="staff-add" id="add-btn"><span class="staff-add__plus" aria-hidden="true">＋</span> إضافة موظف</button>
