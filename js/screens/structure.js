@@ -73,6 +73,11 @@ export async function mount(root) {
 
   root.innerHTML = `
     <div class="struct">
+      <div class="seg struct-seg" role="tablist">
+        <a href="#/staff" role="tab">الأسماء</a>
+        <button type="button" class="is-active" role="tab" aria-selected="true">عقل المؤسسة</button>
+        <a href="#/points" role="tab">النقاط</a>
+      </div>
       <div class="struct-legend">
         <span>${dot(TYPES.dept.color)}القسم</span><span>${dot(TYPES.division.color)}شعبة</span>
         <span>${dot(TYPES.unit.color)}وحدة</span><span>${dot(TYPES.section.color)}قسم وحدة</span>

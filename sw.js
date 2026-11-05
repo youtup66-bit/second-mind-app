@@ -1,7 +1,7 @@
 // عامل الخدمة: يجعل التطبيق يعمل دون اتصال.
 // ملفات التطبيق: الشبكة أولاً (لتصلك آخر نسخة فوراً)، والمخزّن عند انقطاع الاتصال.
 // الخطوط: المخزّن أولاً. طلبات Gemini لا تمر عبر المخزّن أبداً.
-const CACHE = 'second-mind-v63';
+const CACHE = 'second-mind-v64';
 const ASSETS = [
   './',
   './index.html',
@@ -13,23 +13,41 @@ const ASSETS = [
   './icons/apple-touch-icon.png',
   './js/app.js',
   './js/storage.js',
+  './js/categories.js',
+  './js/mind-graph.js',
+  './js/companion.js',
+  './js/floater.js',
+  './js/pip.js',
+  './js/skins.js',
   './js/gemini.js',
   './js/voice.js',
+  './js/piper.js',
+  './js/local-ai.js',
+  './js/ai.js',
+  './js/actions.js',
+  './js/actions-spec.js',
+  './js/classifier.js',
   './js/zip.js',
-  './js/backup.js',
   './js/cloud.js',
   './js/group.js',
   './js/hold-mic.js',
+  './js/screens/group.js',
+  './js/screens/structure.js',
+  './js/screens/points.js',
   './js/points.js',
   './js/org-structure.js',
   './js/org-graph.js',
   './js/screens/org.js',
   './js/screens/staff.js',
-  './js/screens/group.js',
-  './js/screens/structure.js',
-  './js/screens/points.js',
+  './js/backup.js',
+  './js/notes-view.js',
+  './js/summaries.js',
+  './js/recall.js',
+  './js/suggest.js',
+  './js/screens/home.js',
+  './js/screens/mind.js',
+  './js/screens/folder.js',
   './js/screens/settings.js',
-  './firebase/firestore.rules',
 ];
 
 self.addEventListener('install', (e) => {

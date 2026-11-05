@@ -203,7 +203,7 @@ export async function importData(data, mode = 'merge') {
     tx.onerror = () => reject(tx.error);
     tx.onabort = () => reject(tx.error);
   });
-  return { entries: entries.length, messages: messages.length, posts: group.length, points: points.length };
+  return { entries: entries.length, messages: messages.length };
 }
 
 // ---- الملخصات ----
@@ -223,7 +223,7 @@ export const deleteSummary = (id) => run('summaries', 'readwrite', (s) => s.dele
 // ---- لقطات داخلية (نسخ احتياطية تلقائية على الجهاز نفسه) ----
 export async function saveSnapshot(reason = 'auto') {
   const data = await exportData({ withGroup: false });
-  const snap = { id: crypto.randomUUID(), createdAt: Date.now(), reason, count: (data.points || []).length, data };
+  const snap = { id: crypto.randomUUID(), createdAt: Date.now(), reason, count: data.entries.length, data };
   await run('snapshots', 'readwrite', (s) => s.put(snap));
   return snap;
 }

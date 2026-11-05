@@ -1,6 +1,7 @@
 // الموجّه البسيط بين الشاشات
-// المدير: عقل المؤسسة، والمنشورات، والموظفون (مع النقاط)، والإعدادات
-// الموظف: المنشورات والإعدادات فقط
+import * as home from './screens/home.js';
+import * as mind from './screens/mind.js';
+import * as folder from './screens/folder.js';
 import * as settings from './screens/settings.js';
 import * as org from './screens/org.js';
 import * as staff from './screens/staff.js';
@@ -10,32 +11,29 @@ import * as points from './screens/points.js';
 import { scanSoon } from './points.js';
 import { startGroupSync, groupEvents, unreadCount } from './group.js';
 import { autoSnapshot } from './backup.js';
+import { createFloater } from './floater.js';
 import { getSetting } from './storage.js';
+import { loadCategories } from './categories.js';
 
-const routes = { settings, org, join: org, staff, group, structure, points };
-// الشاشات المسموحة لكل دور (والصلاحية الفعلية تفرضها قواعد Firebase)
-const ALLOWED = {
-  manager: new Set(['structure', 'group', 'staff', 'points', 'settings', 'org', 'join']),
-  employee: new Set(['group', 'settings', 'org', 'join']),
-  none: new Set(['org', 'join', 'settings']),
-};
-const HOME = { manager: 'structure', employee: 'group', none: 'org' };
+const routes = { home, mind, folder, settings, org, join: org, staff, group, structure, points };
 const app = document.getElementById('app');
 const titleEl = document.getElementById('screen-title');
 
-let role = null;
 let current = null;
 let navId = 0;
 
+// الموظف: منشورات الأعمال والإعدادات فقط (لا عقل ولا رفيقة ولا ذكاء)
+const EMPLOYEE_ROUTES = new Set(['group', 'settings', 'org', 'join']);
+let role = null;
+
 async function navigate() {
   const myNav = ++navId;
-  const r = role || 'none';
-  let name = location.hash.replace(/^#\//, '').split('?')[0];
-  if (!routes[name] || !ALLOWED[r].has(name)) {
-    name = HOME[r];
-    if (location.hash !== `#/${name}`) { history.replaceState(null, '', `#/${name}`); }
+  let name = location.hash.replace(/^#\//, '').split('?')[0] || (role === 'employee' ? 'group' : 'home');
+  if (role === 'employee' && !EMPLOYEE_ROUTES.has(name)) {
+    name = 'group';
+    history.replaceState(null, '', '#/group');
   }
-  const screen = routes[name];
+  const screen = routes[name] || home;
 
   current?.unmount?.();
   // كل شاشة تحصل على حاوية خاصة، فلا تتداخل شاشة بطيئة مع التالية
@@ -43,18 +41,22 @@ async function navigate() {
   view.className = 'view';
   app.replaceChildren(view);
   titleEl.textContent = screen.title;
+  document.body.classList.toggle('on-home', screen === home);
   document.body.classList.toggle('on-group', screen === group);
   document.title = `${screen.title} · عقلي الثاني`;
 
-  const tabOf = { join: 'org', points: 'staff' };
   document.querySelectorAll('.tabbar__item').forEach((a) => {
-    const active = a.dataset.route === (tabOf[name] || name);
+    const tabOf = { join: 'org', structure: 'staff', points: 'staff' };
+    const active = a.dataset.route === (tabOf[name] || (routes[name] ? name : 'home'));
     a.classList.toggle('is-active', active);
     if (active) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
   });
 
   current = screen;
+  floaterRoute = routes[name] ? name : 'home';
+  syncFloater();
   await screen.mount(view);
+  // إن انتقل المستخدم لشاشة أخرى أثناء التحميل نُنهي هذه
   if (myNav !== navId && current !== screen) screen.unmount?.();
 }
 
@@ -66,18 +68,35 @@ window.addEventListener('beforeinstallprompt', (e) => {
 });
 window.addEventListener('appinstalled', () => { window.__installPrompt = null; });
 
-// ---- الدور: يحدد التبويبات الظاهرة ----
-function applyRole(next, { renavigate = true } = {}) {
-  const changed = next !== role;
+// ---- الرفيقة الطافية داخل التطبيق ----
+let floater = null;
+let floaterOn = true;
+let floaterRoute = 'home';
+let noCompanion = false;
+// لا تطفو فوق شاشات المحادثة (الرئيسية والمجموعة)
+const syncFloater = () => floater?.setVisible(floaterOn && !noCompanion && role !== 'employee' && !['home', 'group', 'structure'].includes(floaterRoute));
+// بلا رفيقة: تبويب "المحادثة"، والشاشة الرئيسية بلا شريط عنوان (رأس المحادثة يكفي)
+// تبويب "الموظفين" يظهر للمدير فقط (الصلاحية الفعلية تفرضها قاعدة البيانات)
+function applyRole(next) {
+  const changed = (next || null) !== role;
   role = next || null;
-  const show = { structure: role === 'manager', group: !!role, staff: role === 'manager', settings: true };
-  document.querySelectorAll('.tabbar__item').forEach((a) => { a.hidden = !show[a.dataset.route]; });
-  // عضو في المؤسسة: نستلم المنشورات ما دام التطبيق مفتوحاً، في أي شاشة
+  const tab = document.querySelector('.tabbar__item[data-route="staff"]');
+  if (tab) tab.hidden = role !== 'manager';
+  const g = document.querySelector('.tabbar__item[data-route="group"]');
+  if (g) g.hidden = !role;
+  // الموظف لا يرى الرفيقة ولا العقل ولا المجلد
+  for (const r of ['home', 'mind', 'folder']) {
+    const t = document.querySelector(`.tabbar__item[data-route="${r}"]`);
+    if (t) t.hidden = role === 'employee';
+  }
+  document.body.classList.toggle('is-employee', role === 'employee');
+  syncFloater();
+  if (changed && current) navigate();
+  // عضو في المؤسسة: نستلم رسائل المجموعة ما دام التطبيق مفتوحاً، في أي شاشة
   if (role) startGroupSync().then(() => { refreshBadge(); if (role === 'manager') scanSoon(); }).catch(() => {});
-  if (changed && renavigate && current) navigate();
 }
 
-// عدد المنشورات غير المقروءة على التبويب
+// عدد رسائل المجموعة غير المقروءة على التبويب
 async function refreshBadge() {
   const badge = document.querySelector('.tabbar__item[data-route="group"] .tabbar__badge');
   if (!badge) return;
@@ -88,19 +107,50 @@ async function refreshBadge() {
 groupEvents.addEventListener('message', refreshBadge);
 groupEvents.addEventListener('seen', refreshBadge);
 
+// المظهر: auto = واتساب حين تُخفى الرفيقة، وإلا البنفسجي
+let appTheme = 'auto';
+function applyTheme() {
+  const wa = appTheme === 'whatsapp' || (appTheme === 'auto' && noCompanion);
+  document.body.classList.toggle('theme-wa', wa);
+  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', wa ? '#202c33' : '#140f2e');
+}
+function applyNoCompanion() {
+  document.body.classList.toggle('no-companion', noCompanion);
+  applyTheme();
+  const tab = document.querySelector('.tabbar__item[data-route="home"]');
+  if (tab) {
+    tab.querySelector('.tabbar__icon').textContent = noCompanion ? '💬' : '✦';
+    tab.querySelector('span:last-child').textContent = noCompanion ? 'المحادثة' : 'الرفيقة';
+  }
+}
+
+(async () => {
+  floaterOn = await getSetting('floaterOn', true);
+  noCompanion = await getSetting('hideCompanion', false);
+  applyRole(await getSetting('orgRole', null));
+  appTheme = await getSetting('appTheme', 'auto');
+  applyNoCompanion();
+  floater = createFloater({
+    skin: await getSetting('companionSkin', 'star'),
+    size: await getSetting('floaterSize', 'medium'),
+    onTap: () => { location.hash = '#/home'; },
+  });
+  syncFloater();
+})();
+
+// الإعدادات تُعلن عن تغييراتها فنحدّث الرفيقة الطافية فوراً
 window.addEventListener('sm:setting', (e) => {
-  if (e.detail.key === 'orgRole') applyRole(e.detail.value);
+  const { key, value } = e.detail;
+  if (key === 'floaterOn') { floaterOn = value; syncFloater(); }
+  if (key === 'orgRole') applyRole(value);
+  if (key === 'appTheme') { appTheme = value; applyTheme(); }
+  if (key === 'hideCompanion') { noCompanion = value; syncFloater(); applyNoCompanion(); }
+  if (key === 'floaterSize') floater?.setSize(value);
+  if (key === 'companionSkin') floater?.setSkin(value);
 });
 
-// ألوان واتساب دائماً
-document.body.classList.add('theme-wa', 'no-companion');
-document.querySelector('meta[name="theme-color"]')?.setAttribute('content', '#202c33');
-
 window.addEventListener('hashchange', navigate);
-(async () => {
-  applyRole(await getSetting('orgRole', null), { renavigate: false });
-  await navigate();
-})().finally(() => { window.__appReady = true; });
+loadCategories().catch(() => {}).then(navigate).finally(() => { window.__appReady = true; });
 
 // أي خطأ غير متوقع يظهر كشريط صغير بدل أن يتعطل التطبيق بصمت
 function toast(msg) {
@@ -112,10 +162,31 @@ function toast(msg) {
   }
   el.textContent = `حدث خطأ: ${msg} (المس للإغلاق)`;
 }
-window.addEventListener('error', (e) => { if (e.message) toast(e.message); });
-window.addEventListener('unhandledrejection', (e) => toast(e.reason?.message || String(e.reason)));
+window.addEventListener('error', (e) => { if (e.message && !gpuLost(e.message)) toast(e.message); });
+// فقدان اتصال كرت الشاشة (WebGPU) يتعافى منه الذكاء على الجهاز بنفسه، فلا نزعج المستخدم به
+const gpuLost = (m) => /external Instance reference|Instance reference no longer|device (was |is )?lost/i.test(m || '');
+window.addEventListener('unhandledrejection', (e) => {
+  const msg = e.reason?.message || String(e.reason);
+  if (gpuLost(msg)) { e.preventDefault(); console.warn('WebGPU:', msg); return; }
+  toast(msg);
+});
 
-// لقطة يومية للهيكل والنقاط على الجهاز (لا شيء يغادره)
+// إن كان صوت Piper مختاراً نحمّله في الذاكرة بهدوء، فلا يتأخر أول رد
+setTimeout(async () => {
+  if (role === 'employee' || await getSetting('voiceEngine', 'device') !== 'piper') return;
+  const { warmUpPiper, isPiperReady } = await import('./piper.js');
+  if (await isPiperReady()) warmUpPiper();
+}, 4000);
+
+// الذكاء على الجهاز: نحفظ مكتبته مسبقاً وأنت متصل (ليعمل دون إنترنت)، ونجهّزه إن كان هو المستخدم دائماً
+setTimeout(async () => {
+  if (role === 'employee' || !(await getSetting('localModel', ''))) return;
+  const { warmUpLocal, prefetchRuntime } = await import('./local-ai.js');
+  await prefetchRuntime();
+  if (await getSetting('aiMode', 'auto') === 'local' || !navigator.onLine) warmUpLocal();
+}, 6000);
+
+// لقطة يومية على الجهاز (لا شيء يغادره)
 autoSnapshot().catch((err) => console.warn('snapshot:', err));
 
 if ('serviceWorker' in navigator) {

@@ -35,6 +35,7 @@ export async function mount(root) {
     <div class="staff">
       <div class="seg struct-seg" role="tablist">
         <button type="button" class="is-active" role="tab" aria-selected="true">الأسماء</button>
+        <a href="#/structure" role="tab">عقل المؤسسة</a>
         <a href="#/points" role="tab">النقاط</a>
       </div>
       <p class="muted staff__org">${esc(s.org?.name)}</p>
