@@ -40,7 +40,6 @@ export async function mount(root) {
     <div class="pts">
       <div class="seg struct-seg" role="tablist">
         <a href="#/staff" role="tab">الأسماء</a>
-        <a href="#/structure" role="tab">الهيكل</a>
         <button type="button" class="is-active" role="tab" aria-selected="true">النقاط</button>
       </div>
       <p class="muted pts-private">🔒 النقاط على جهازك فقط، ولا يراها أي موظف.</p>

@@ -3,7 +3,7 @@ import {
   session, listMembers, listInvites, createInvite, deleteInvite, inviteLink, removeMember,
 } from '../cloud.js';
 import { totals, PERIODS } from '../points.js';
-import { getSetting } from '../storage.js';
+import { getSetting, getGroupMessages } from '../storage.js';
 
 export const title = 'الموظفين';
 
@@ -35,7 +35,6 @@ export async function mount(root) {
     <div class="staff">
       <div class="seg struct-seg" role="tablist">
         <button type="button" class="is-active" role="tab" aria-selected="true">الأسماء</button>
-        <a href="#/structure" role="tab">الهيكل</a>
         <a href="#/points" role="tab">النقاط</a>
       </div>
       <p class="muted staff__org">${esc(s.org?.name)}</p>
@@ -167,10 +166,7 @@ async function renderEmployee(root, id) {
         <p class="muted"><span dir="ltr">@${esc(m.username)}</span> · انضم ${new Date(m.created_at).toLocaleDateString('ar')}</p>
       </div>
       <section class="card" id="emp-points"></section>
-      <section class="card">
-        <h3>العقل الثاني والمهارات</h3>
-        <p class="muted">هنا ستظهر كرات عقل ${esc(m.display_name)} ومهاراته وملخص سيرته، كما يستخرجها الذكاء من جواله. ملاحظاته نفسها تبقى خاصة ولا تظهر لك. (المرحلة القادمة)</p>
-      </section>
+      <section class="card" id="emp-posts"></section>
       <button type="button" class="btn btn--danger org-wide" id="remove">إزالة ${esc(m.display_name)} من المؤسسة</button>
       <p class="status" id="rm-msg" role="status"></p>
     </div>`;
@@ -189,6 +185,14 @@ async function renderEmployee(root, id) {
       </div>
       ${recent.length ? `<ul class="pts-log">${recent.map((p) => `<li><span>${esc(p.workName)}${p.count > 1 ? ` ×${p.count}` : ''} <span class="pts-plus">+${p.points}</span><small>${fmt.format(p.at)}</small></span></li>`).join('')}</ul>` : '<p class="muted">لا نقاط بعد.</p>'}
       <a class="link-btn" href="#/points">كل النقاط ←</a>`;
+  }
+  // آخر منشوراته (من أرشيف جهازك)
+  const posts = (await getGroupMessages()).filter((x) => x.from === id).slice(-10).reverse();
+  const pbox = root.querySelector('#emp-posts');
+  if (pbox) {
+    pbox.innerHTML = `<h3>آخر منشوراته</h3>${posts.length
+      ? `<ul class="pts-log">${posts.map((x) => `<li><span>${x.image ? '📷 ' : ''}${esc((x.text || 'صورة').slice(0, 160))}<small>${fmt.format(x.sentAt)}</small></span></li>`).join('')}</ul>`
+      : '<p class="muted">لا منشورات بعد.</p>'}`;
   }
   root.querySelector('#remove').addEventListener('click', async () => {
     if (!confirm(`إزالة ${m.display_name} من المؤسسة؟ لن يستطيع الدخول إليها بعد ذلك.`)) return;

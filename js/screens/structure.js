@@ -5,8 +5,11 @@ import {
   addNode, renameNode, removeNode, placePerson, unplacePerson, assistantOf, pathOf, toGraph,
 } from '../org-structure.js';
 import { createOrgGraph } from '../org-graph.js';
+import { totals, pointsEvents } from '../points.js';
+import { getGroupMessages } from '../storage.js';
+import { groupEvents, groupMembers } from '../group.js';
 
-export const title = 'الهيكل';
+export const title = 'عقل المؤسسة';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 // العدّ بالعربية: واحد، مثنى، جمع
@@ -25,6 +28,7 @@ const dot = (c) => `<i class="sdot" style="background:${c}"></i>`;
 
 let graph = null;
 let alive = false;
+let offStats = null;
 
 export async function mount(root) {
   alive = true;
@@ -47,13 +51,28 @@ export async function mount(root) {
   const st = await loadStructure(s.org?.name || 'القسم');
   const nameOf = (u) => members.find((m) => m.user_id === u)?.display_name || '—';
 
+  // الفرز: نقاط الشهر ومنشورات كل موظف، تُجمع لكل فرع من الهيكل
+  let month = new Map(), posts = [];
+  const loadStats = async () => {
+    [month, posts] = await Promise.all([totals('month'), getGroupMessages()]);
+  };
+  await loadStats();
+  const weekAgo = () => Date.now() - 7 * 86400000;
+  const peopleUnder = (nodeId) => {
+    const ids = new Set([nodeId]);
+    let grew = true;
+    while (grew) { grew = false; for (const x of st.nodes) if (!ids.has(x.id) && ids.has(x.parent)) { ids.add(x.id); grew = true; } }
+    return Object.entries(st.people).filter(([, p]) => ids.has(p.node)).map(([u]) => u);
+  };
+  const statsLine = (users) => {
+    const pts = users.reduce((a, u) => a + (month.get(u)?.points || 0), 0);
+    const set = new Set(users);
+    const n = posts.filter((m) => set.has(m.from) && m.sentAt >= weekAgo()).length;
+    return `<p class="struct-stats">⭐ <b>${pts}</b> نقطة هذا الشهر · 📝 <b>${n}</b> منشور هذا الأسبوع</p>`;
+  };
+
   root.innerHTML = `
     <div class="struct">
-      <div class="seg struct-seg" role="tablist">
-        <a href="#/staff" role="tab">الأسماء</a>
-        <button type="button" class="is-active" role="tab" aria-selected="true">الهيكل</button>
-        <a href="#/points" role="tab">النقاط</a>
-      </div>
       <div class="struct-legend">
         <span>${dot(TYPES.dept.color)}القسم</span><span>${dot(TYPES.division.color)}شعبة</span>
         <span>${dot(TYPES.unit.color)}وحدة</span><span>${dot(TYPES.section.color)}قسم وحدة</span>
@@ -128,6 +147,7 @@ export async function mount(root) {
 
     panel.innerHTML = `
       <div class="struct-title">${dot(t.color)}<div><b>${esc(n.name)}</b><small>${t.label}${n.parent ? ` · ${esc(pathOf(st, n.parent))}` : ' · رئيس القسم: أنت'}</small></div></div>
+      ${statsLine(n.parent ? peopleUnder(n.id) : members.map((m) => m.user_id))}
       <p class="struct-meta">
         ${canHaveAssistant(n.type) ? `المعاون: <b>${asst ? esc(nameOf(asst)) : 'لا يوجد'}</b> · ` : ''}
         ${t.child ? `${count(kids.length, t.child)} · ` : ''}${count(here.length, 'person')}
@@ -167,6 +187,13 @@ export async function mount(root) {
     }));
   }
 
+  // آخر منشورات الموظف (من أرشيف جهاز المدير)
+  const fmtDay = new Intl.DateTimeFormat('ar', { day: 'numeric', month: 'short' });
+  const recentPosts = (u) => {
+    const mine = posts.filter((m) => m.from === u && m.text).slice(-3).reverse();
+    return mine.length ? `<ul class="struct-posts">${mine.map((m) => `<li><small>${fmtDay.format(m.sentAt)}</small> ${esc(m.text.slice(0, 120))}</li>`).join('')}</ul>` : '';
+  };
+
   function renderPersonPanel(u) {
     const p = st.people[u];
     const n = p && nodeById(st, p.node);
@@ -179,6 +206,8 @@ export async function mount(root) {
     }
     panel.innerHTML = `
       <div class="struct-title">${dot(p.assistant ? ASSISTANT.color : PERSON.color)}<div><b>${esc(nameOf(u))}</b><small>${p.assistant ? 'معاون' : 'موظف'} · ${esc(pathOf(st, p.node))}</small></div></div>
+      ${sub ? '' : statsLine([u])}
+      ${sub ? '' : recentPosts(u)}
       ${sub || `<div class="struct-actions">
         <button type="button" data-a="move">نقل إلى…</button>
         ${canHaveAssistant(n.type) ? `<button type="button" data-a="toggle">${p.assistant ? 'إلغاء المعاون' : 'اجعله معاون ' + esc(n.name)}</button>` : ''}
@@ -200,11 +229,33 @@ export async function mount(root) {
   }
 
   graph.setData(toGraph(st, members), { keepView: false });
+  // منشور جديد أو نقاط جديدة: نحدّث الأرقام في اللوحة
+  const refreshStats = async () => { await loadStats(); if (!mode) renderPanel(); };
+  pointsEvents.addEventListener('change', refreshStats);
+  groupEvents.addEventListener('message', refreshStats);
+  // موظف انضم أو أُزيل: نحدّث الكرات دون مغادرة الشاشة
+  const onMembers = () => {
+    const live = [...groupMembers()].filter(([, m]) => m.role === 'employee')
+      .map(([user_id, m]) => ({ user_id, display_name: m.name, role: 'employee' }));
+    const sig = (l) => l.map((m) => m.user_id + m.display_name).sort().join('|');
+    if (sig(live) === sig(members)) return;
+    members = live;
+    graph.setData(toGraph(st, members));
+    if (!mode) renderPanel();
+  };
+  groupEvents.addEventListener('members', onMembers);
+  offStats = () => {
+    pointsEvents.removeEventListener('change', refreshStats);
+    groupEvents.removeEventListener('message', refreshStats);
+    groupEvents.removeEventListener('members', onMembers);
+  };
   renderPanel();
 }
 
 export function unmount() {
   alive = false;
+  offStats?.();
+  offStats = null;
   graph?.destroy();
   graph = null;
 }

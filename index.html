@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#140f2e">
-  <meta name="description" content="عقلي الثاني: رفيقة تسجّل أفكارك وتصنّفها">
+  <meta name="theme-color" content="#202c33">
+  <meta name="description" content="عقلي الثاني: منشورات أعمال المؤسسة، وعقل المؤسسة ونقاط الموظفين للمدير">
   <title>عقلي الثاني</title>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
@@ -17,7 +17,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/style.css">
 </head>
-<body>
+<body class="theme-wa no-companion">
   <header class="topbar">
     <h1 class="topbar__title" id="screen-title">عقلي الثاني</h1>
   </header>
@@ -25,20 +25,14 @@
   <main id="app" class="screen" aria-live="polite"></main>
 
   <nav class="tabbar" aria-label="التنقل">
-    <a href="#/home" class="tabbar__item" data-route="home">
-      <span class="tabbar__icon" aria-hidden="true">✦</span><span>الرفيقة</span>
-    </a>
-    <a href="#/mind" class="tabbar__item" data-route="mind">
-      <span class="tabbar__icon" aria-hidden="true">◉</span><span>العقل</span>
-    </a>
-    <a href="#/folder" class="tabbar__item" data-route="folder">
-      <span class="tabbar__icon" aria-hidden="true">▤</span><span>المجلد</span>
+    <a href="#/structure" class="tabbar__item" data-route="structure" hidden>
+      <span class="tabbar__icon" aria-hidden="true">◉</span><span>عقل المؤسسة</span>
     </a>
     <a href="#/group" class="tabbar__item" data-route="group" hidden>
-      <span class="tabbar__icon" aria-hidden="true">👥<span class="tabbar__badge" hidden></span></span><span>المجموعة</span>
+      <span class="tabbar__icon" aria-hidden="true">💬<span class="tabbar__badge" hidden></span></span><span>المنشورات</span>
     </a>
     <a href="#/staff" class="tabbar__item" data-route="staff" hidden>
-      <span class="tabbar__icon" aria-hidden="true">🧑‍💼</span><span>الموظفين</span>
+      <span class="tabbar__icon" aria-hidden="true">👥</span><span>الموظفين</span>
     </a>
     <a href="#/settings" class="tabbar__item" data-route="settings">
       <span class="tabbar__icon" aria-hidden="true">⚙</span><span>الإعدادات</span>

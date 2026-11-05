@@ -5,9 +5,9 @@ import {
 import { getGroupMessages } from '../storage.js';
 import { session } from '../cloud.js';
 import { attachHoldMic } from '../hold-mic.js';
-import { canListen } from '../voice.js';
+import { canListen, canBrowserListen } from '../voice.js';
 
-export const title = 'المجموعة';
+export const title = 'منشورات الأعمال';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const fmtTime = new Intl.DateTimeFormat('ar', { hour: 'numeric', minute: '2-digit' });
@@ -31,11 +31,14 @@ export async function mount(root) {
   if (!root.isConnected) return;
   if (!s?.member) {
     root.innerHTML = `<div class="org"><div class="org-hero"><div class="org-hero__icon" aria-hidden="true">💬</div>
-      <h2>مجموعة المؤسسة</h2><p class="muted">ادخل إلى المؤسسة أولاً.</p></div>
+      <h2>منشورات الأعمال</h2><p class="muted">ادخل إلى المؤسسة أولاً.</p></div>
       <a class="btn org-wide" href="#/org">الدخول إلى المؤسسة</a></div>`;
     return;
   }
 
+  const manager = s.member.role === 'manager';
+  // الموظف بلا ذكاء: الميكروفون بخدمة المتصفح فقط
+  const micOk = manager ? canListen : canBrowserListen;
   root.innerHTML = `
     <section class="chat chat--wa chat--plain chat--group">
       <header class="wa-head">
@@ -47,8 +50,8 @@ export async function mount(root) {
       <p class="wa-note" id="g-note" hidden role="status"></p>
       <ol class="chat__log" id="g-log" aria-label="رسائل المجموعة"></ol>
       <form class="composer" id="g-form" autocomplete="off">
-        <button type="button" class="composer__mic" id="g-mic" aria-label="اضغط مطولاً للتسجيل" ${canListen ? '' : 'hidden'}>🎙</button>
-        <textarea id="g-input" rows="1" placeholder="اكتب رسالة" aria-label="رسالتك"></textarea>
+        <button type="button" class="composer__mic" id="g-mic" aria-label="اضغط مطولاً للتسجيل" ${micOk ? '' : 'hidden'}>🎙</button>
+        <textarea id="g-input" rows="1" placeholder="اكتب منشور عمل" aria-label="منشورك"></textarea>
         <button type="button" class="composer__attach" id="g-attach" aria-label="أرسل صورة">📷</button>
         <input type="file" id="g-file" accept="image/*" hidden>
         <button type="submit" class="composer__send" id="g-send" aria-label="إرسال">➤</button>
@@ -121,7 +124,7 @@ export async function mount(root) {
     const all = await getGroupMessages();
     log.innerHTML = '';
     lastDay = '';
-    if (!all.length) log.innerHTML = '<li class="wa-day">لا رسائل بعد. اكتب أول رسالة للمجموعة 👋</li>';
+    if (!all.length) log.innerHTML = '<li class="wa-day">لا منشورات بعد. اكتب ما أنجزته من أعمال 👋</li>';
     for (const m of all) {
       addDay(m.sentAt);
       const li = bubble(m);
@@ -164,8 +167,8 @@ export async function mount(root) {
   });
 
   const mic = root.querySelector('#g-mic');
-  const holdMic = canListen ? attachHoldMic({
-    mic, form, input, say,
+  const holdMic = micOk ? attachHoldMic({
+    mic, form, input, say, gemini: manager,
     onBusy: (on) => { if (on) say('أحوّل كلامك إلى نص…'); else note.hidden = true; },
     onText: async (text) => {
       if (log.querySelector('.wa-day') && !log.querySelector('.msg')) log.innerHTML = '';

@@ -7,8 +7,9 @@ import { getSetting } from './storage.js';
 const fmtDur = (ms) => { const t = Math.floor(ms / 1000); return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`; };
 const MIN_HOLD = 600;
 
-// opts: { mic, form, input, say(text), onText(text), onBusy(on) }
-export function attachHoldMic({ mic, form, input, say, onText, onBusy }) {
+// opts: { mic, form, input, say(text), onText(text), onBusy(on), gemini }
+// gemini=false: خدمة الكلام في المتصفح فقط (الموظف: لا ذكاء)
+export function attachHoldMic({ mic, form, input, say, onText, onBusy, gemini = true }) {
   const bar = document.createElement('div');
   bar.className = 'rec-bar';
   bar.hidden = true;
@@ -44,6 +45,11 @@ export function attachHoldMic({ mic, form, input, say, onText, onBusy }) {
   }
 
   async function pickEngine() {
+    if (!gemini) {
+      if (canBrowserListen) return 'browser';
+      say('تحويل الكلام إلى نص غير متاح في متصفحك. اكتب منشورك.');
+      return null;
+    }
     const hasKey = !!(await getSetting('geminiApiKey', ''));
     let engine = await getSetting('sttEngine', canRecord ? 'gemini' : 'browser');
     if (engine === 'gemini' && (!canRecord || !hasKey)) engine = canBrowserListen ? 'browser' : 'none';

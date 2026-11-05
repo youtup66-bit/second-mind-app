@@ -1,6 +1,5 @@
-// النسخ الاحتياطي: ملف ZIP يحوي بياناتك كاملة (data.json) ونسخة مقروءة بأقسامها (Markdown).
-// كل شيء يُبنى على الجهاز؛ لا يُرفع إلى أي خادم.
-import { CATEGORIES, NONE, categoryById } from './categories.js';
+// النسخ الاحتياطي (للمدير): ملف ZIP فيه أرشيف منشورات الأعمال والهيكل والنقاط (data.json)،
+// ونسخة مقروءة من المنشورات. كل شيء يُبنى على الجهاز؛ لا يُرفع إلى أي خادم.
 import {
   exportData, importData, saveSnapshot, listSnapshots, getSnapshot, deleteSnapshot,
   getSetting, setSetting,
@@ -14,55 +13,39 @@ export const REMIND_AFTER = 7 * 24 * 60 * 60 * 1000;
 const fmt = new Intl.DateTimeFormat('ar', { dateStyle: 'long', timeStyle: 'short' });
 const day = (t) => new Date(t).toISOString().slice(0, 10);
 
-function categoryMarkdown(cat, entries) {
-  const lines = [`# ${cat.label}`, '', `${entries.length} ملاحظة`, ''];
-  for (const e of entries) {
-    lines.push(`## ${e.meta?.title || e.text.slice(0, 40)}`);
-    lines.push(`_${fmt.format(e.createdAt)}${e.source === 'voice' ? ' · صوتية' : ''}_`, '');
-    lines.push(e.text, '');
-  }
-  return lines.join('\n');
-}
-
-function chatMarkdown(messages) {
-  const lines = ['# المحادثة مع الرفيقة', ''];
+// أرشيف المنشورات مقروءاً، يوماً بيوم
+function postsMarkdown(posts) {
+  const lines = ['# منشورات الأعمال', ''];
   let lastDay = '';
-  for (const m of [...messages].sort((a, b) => a.createdAt - b.createdAt)) {
-    const d = day(m.createdAt);
+  for (const m of [...posts].sort((a, b) => a.sentAt - b.sentAt)) {
+    const d = day(m.sentAt);
     if (d !== lastDay) { lines.push(`## ${d}`, ''); lastDay = d; }
-    lines.push(`**${m.role === 'user' ? 'أنا' : 'الرفيقة'}:** ${m.text}`, '');
+    lines.push(`**${m.fromName}** (${fmt.format(m.sentAt)}): ${m.text || ''}${m.image ? ' [صورة]' : ''}`, '');
   }
   return lines.join('\n');
 }
 
 export async function buildBackupZip() {
   const data = await exportData();
+  const posts = data.group || [];
   const files = [
     { name: 'data.json', data: JSON.stringify(data, null, 2) },
     {
       name: 'اقرأني.txt',
       data: [
-        'نسخة احتياطية من تطبيق "عقلي الثاني".',
+        'نسخة احتياطية من تطبيق "عقلي الثاني" (المؤسسة).',
         `التاريخ: ${fmt.format(data.exportedAt)}`,
-        `عدد الملاحظات: ${data.entries.length}`,
+        `عدد المنشورات: ${posts.length}`,
         '',
         'لاستعادتها: الإعدادات ← النسخ الاحتياطي ← استيراد، واختر هذا الملف.',
-        'مجلد "الأقسام" يحوي ملاحظاتك مقروءة لأي برنامج، و data.json هو ما يستخدمه التطبيق.',
-        'مفتاح Gemini غير موجود في هذه النسخة حفاظاً على خصوصيتك.',
+        'المنشورات.md نسخة مقروءة لأي برنامج، و data.json هو ما يستخدمه التطبيق (ومعه الهيكل والنقاط).',
+        'مفتاح Gemini وكلمات المرور غير موجودة في هذه النسخة.',
       ].join('\n'),
     },
   ];
-  const sorted = [...data.entries].sort((a, b) => b.createdAt - a.createdAt);
-  for (const cat of [...CATEGORIES, NONE]) {
-    const list = sorted.filter((e) => e.category === cat.id);
-    if (list.length) files.push({ name: `الأقسام/${cat.label}.md`, data: categoryMarkdown(cat, list) });
-  }
-  const unsorted = sorted.filter((e) => !categoryById(e.category));
-  if (unsorted.length) files.push({ name: 'الأقسام/لم تُصنّف بعد.md', data: categoryMarkdown({ label: 'لم تُصنّف بعد' }, unsorted) });
-  if (data.messages.length) files.push({ name: 'المحادثة.md', data: chatMarkdown(data.messages) });
-
+  if (posts.length) files.push({ name: 'المنشورات.md', data: postsMarkdown(posts) });
   const blob = await createZip(files);
-  return { blob, filename: `second-mind-${day(Date.now())}.zip`, count: data.entries.length };
+  return { blob, filename: `second-mind-${day(Date.now())}.zip`, count: posts.length };
 }
 
 const markExported = () => setSetting('lastExportAt', Date.now());
@@ -124,7 +107,8 @@ export async function autoSnapshot() {
   const last = snaps.find((s) => s.reason === 'auto');
   if (last && Date.now() - last.createdAt < SNAPSHOT_EVERY) return null;
   const data = await exportData({ withGroup: false });
-  if (!data.entries.length) return null;
+  // لقطة الهيكل والنقاط (الأرشيف الكامل في ملف النسخة الاحتياطية)
+  if (!data.points?.length && !data.settings?.orgStructure) return null;
   const snap = await saveSnapshot('auto');
   await pruneSnapshots();
   return snap;

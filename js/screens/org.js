@@ -151,7 +151,7 @@ async function renderLogin(root, err) {
   root.querySelector('#login-form').addEventListener('submit', busyButton(liBtn, async () => {
     try {
       const s = await signIn(root.querySelector('#li-user').value, root.querySelector('#li-pass').value);
-      if (s?.member?.role === 'manager') location.hash = '#/staff'; else reload();
+      location.hash = s?.member?.role === 'manager' ? '#/structure' : '#/group';
     } catch (e) { setMsg(root.querySelector('#li-msg'), e.message); }
   }));
 
@@ -167,7 +167,7 @@ async function renderLogin(root, err) {
         username: root.querySelector('#no-user').value,
         password: pass,
       });
-      location.hash = '#/staff';
+      location.hash = '#/structure';
     } catch (e) { setMsg(msg, e.message); }
   }));
 
