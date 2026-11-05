@@ -799,3 +799,27 @@ body.theme-wa textarea, body.theme-wa select { background: #2a3942; border-color
 .org-rules .btn { width: 100%; justify-content: center; }
 .org-rules__text { width: 100%; height: 160px; margin-top: 8px; font: .72rem ui-monospace, monospace; background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 8px; }
 .org-rules__text[hidden] { display: none; }
+
+/* ---- مجموعة المؤسسة ---- */
+body.on-group .topbar { display: none; }
+body.on-group .chat--group { height: calc(100dvh - var(--tabbar-h) - env(safe-area-inset-bottom)); }
+body.on-group .chat--group .wa-head { padding-top: calc(env(safe-area-inset-top) + 8px); }
+.chat--group { display: flex; flex-direction: column; }
+.chat--group .chat__log { flex: 1; overflow-y: auto; list-style: none; margin: 0; display: flex; flex-direction: column; }
+.wa-avatar--group { display: grid; place-items: center; background: #00a884; color: #fff; font-weight: 700; font-size: 1.15rem; }
+.msg__from { display: block; font-size: .8rem; font-weight: 700; margin-bottom: 2px; }
+.msg__img { display: block; max-width: 100%; max-height: 320px; border-radius: 6px; margin: 2px 0 4px; cursor: zoom-in; object-fit: cover; }
+.msg__retry { display: block; margin-top: 4px; background: none; border: 0; color: var(--danger); font: inherit; font-size: .78rem; cursor: pointer; padding: 0; }
+.tick { font-size: .7rem; }
+.tick--sent { color: #53bdeb; }
+.composer__attach { background: none; border: 0; font-size: 1.3rem; width: 40px; height: 46px; cursor: pointer; flex: none; color: var(--muted); }
+.chat--wa .composer.has-text .composer__attach, .composer.is-recording .composer__attach { display: none; }
+.img-view { position: fixed; inset: 0; z-index: 60; background: rgba(0,0,0,.92); display: grid; place-items: center; cursor: zoom-out; }
+.img-view[hidden] { display: none; }
+.img-view img { max-width: 100%; max-height: 100%; object-fit: contain; }
+.tabbar__icon { position: relative; }
+.tabbar__badge {
+  position: absolute; top: -6px; inset-inline-end: -12px; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px;
+  background: #00a884; color: #fff; font-size: .68rem; font-weight: 700; line-height: 18px; text-align: center; font-family: inherit;
+}
+.tabbar__badge[hidden] { display: none; }

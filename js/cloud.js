@@ -41,7 +41,7 @@ export async function clearCloudConfig() {
 // ---- تحميل Firebase عند الحاجة فقط ----
 let fb = null; // { auth, db, A (دوال الدخول), F (دوال القاعدة) }
 let loading = null;
-async function api() {
+export async function api() {
   if (fb) return fb;
   loading ||= (async () => {
     const cfg = await cloudConfig();
@@ -55,7 +55,11 @@ async function api() {
     const name = `org-${cfg.projectId}`;
     const app = appMod.getApps().find((a) => a.name === name) || appMod.initializeApp(cfg, name);
     const auth = A.getAuth(app);
-    const db = F.getFirestore(app);
+    // ذاكرة على الجهاز: ما يُرسل دون إنترنت ينتظر ويُرسل عند عودة الاتصال
+    let db;
+    try {
+      db = F.initializeFirestore(app, { localCache: F.persistentLocalCache({ tabManager: F.persistentMultipleTabManager() }) });
+    } catch { db = F.getFirestore(app); }
     return { auth, db, A, F };
   })();
   try { fb = await loading; return fb; } finally { loading = null; }
@@ -133,6 +137,7 @@ export async function signIn(username, password) {
 }
 
 export async function signOut() {
+  window.dispatchEvent(new Event('sm:signout'));
   if (fb) await fb.A.signOut(fb.auth).catch(() => {});
   cacheRole(null);
 }

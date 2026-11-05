@@ -91,6 +91,54 @@ service cloud.firestore {
             && getAfter(me()).data.invite == code);
     }
 
+    // ---- مجموعة المؤسسة: نقل فقط، لا تخزين ----
+    // كل رسالة تحمل قائمة من لم يستلمها بعد (pending). كل جهاز يحذف نفسه منها عند الاستلام،
+    // وآخر مستلم يحذف الرسالة من السحابة. الأرشيف الدائم على جوال المدير، وكل موظف يحتفظ بما وصله.
+    match /relay/{id} {
+      function validMsg(d) {
+        return d.keys().hasOnly(['mid', 'from', 'fromName', 'text', 'image', 'sentAt', 'createdAt', 'pending', 'history'])
+          && d.mid is string && d.mid.size() <= 64
+          && d.from is string && text(d.fromName, 60)
+          && (!('text' in d) || (d.text is string && d.text.size() <= 4000))
+          && (!('image' in d) || (d.image is string && d.image.size() <= 900000))
+          && ('text' in d || 'image' in d)
+          && d.pending is list && d.pending.size() >= 1 && d.pending.size() <= 300
+          && d.sentAt is int
+          && d.createdAt == request.time;
+      }
+      // يقرؤها من لم يستلمها بعد، والمدير (لتنظيف رسائل من أُزيلوا)
+      allow get, list: if isMember() && (request.auth.uid in resource.data.pending || isManager());
+      // رسالة جديدة: باسم مرسلها الحقيقي، ولا يرسلها لنفسه
+      allow create: if isMember() && validMsg(request.resource.data)
+        && !('history' in request.resource.data)
+        && request.resource.data.mid == id
+        && request.resource.data.from == request.auth.uid
+        && request.resource.data.fromName == get(me()).data.displayName
+        && !(request.auth.uid in request.resource.data.pending);
+      // أرشيف المجموعة القديم: يرسله المدير لموظف جديد (يحفظ اسم المرسل الأصلي)
+      allow create: if isManager() && validMsg(request.resource.data)
+        && request.resource.data.history == true
+        && request.resource.data.pending.size() == 1;
+      // الاستلام: المستلم يحذف نفسه من القائمة فقط؛ والمدير يحذف من القائمة من أُزيلوا
+      allow update: if isMember()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['pending'])
+        && (request.resource.data.pending.toSet() == resource.data.pending.toSet().difference([request.auth.uid].toSet())
+            || (isManager() && resource.data.pending.toSet().hasAll(request.resource.data.pending.toSet())));
+      // آخر مستلم يحذفها، والمدير ينظف
+      allow delete: if isMember()
+        && (resource.data.pending.toSet().difference([request.auth.uid].toSet()).size() == 0 || isManager());
+    }
+
+    // علامة: أرسل المدير أرشيف المجموعة لهذا الموظف
+    match /handoffs/{uid} {
+      allow get: if signedIn() && (uid == request.auth.uid || isManager());
+      allow list: if isManager();
+      allow create, update: if isManager()
+        && request.resource.data.keys().hasOnly(['count', 'at'])
+        && request.resource.data.count is int && request.resource.data.at == request.time;
+      allow delete: if isManager();
+    }
+
     // كل ما عدا ذلك مغلق
     match /{document=**} {
       allow read, write: if false;

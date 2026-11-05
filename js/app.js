@@ -5,12 +5,14 @@ import * as folder from './screens/folder.js';
 import * as settings from './screens/settings.js';
 import * as org from './screens/org.js';
 import * as staff from './screens/staff.js';
+import * as group from './screens/group.js';
+import { startGroupSync, groupEvents, unreadCount } from './group.js';
 import { autoSnapshot } from './backup.js';
 import { createFloater } from './floater.js';
 import { getSetting } from './storage.js';
 import { loadCategories } from './categories.js';
 
-const routes = { home, mind, folder, settings, org, join: org, staff };
+const routes = { home, mind, folder, settings, org, join: org, staff, group };
 const app = document.getElementById('app');
 const titleEl = document.getElementById('screen-title');
 
@@ -29,6 +31,7 @@ async function navigate() {
   app.replaceChildren(view);
   titleEl.textContent = screen.title;
   document.body.classList.toggle('on-home', screen === home);
+  document.body.classList.toggle('on-group', screen === group);
   document.title = `${screen.title} · عقلي الثاني`;
 
   document.querySelectorAll('.tabbar__item').forEach((a) => {
@@ -58,13 +61,29 @@ let floater = null;
 let floaterOn = true;
 let floaterRoute = 'home';
 let noCompanion = false;
-const syncFloater = () => floater?.setVisible(floaterOn && !noCompanion && floaterRoute !== 'home');
+// لا تطفو فوق شاشات المحادثة (الرئيسية والمجموعة)
+const syncFloater = () => floater?.setVisible(floaterOn && !noCompanion && floaterRoute !== 'home' && floaterRoute !== 'group');
 // بلا رفيقة: تبويب "المحادثة"، والشاشة الرئيسية بلا شريط عنوان (رأس المحادثة يكفي)
 // تبويب "الموظفين" يظهر للمدير فقط (الصلاحية الفعلية تفرضها قاعدة البيانات)
 function applyRole(role) {
   const tab = document.querySelector('.tabbar__item[data-route="staff"]');
   if (tab) tab.hidden = role !== 'manager';
+  const g = document.querySelector('.tabbar__item[data-route="group"]');
+  if (g) g.hidden = !role;
+  // عضو في المؤسسة: نستلم رسائل المجموعة ما دام التطبيق مفتوحاً، في أي شاشة
+  if (role) startGroupSync().then(refreshBadge).catch(() => {});
 }
+
+// عدد رسائل المجموعة غير المقروءة على التبويب
+async function refreshBadge() {
+  const badge = document.querySelector('.tabbar__item[data-route="group"] .tabbar__badge');
+  if (!badge) return;
+  const n = await unreadCount().catch(() => 0);
+  badge.textContent = n > 99 ? '99+' : String(n);
+  badge.hidden = !n;
+}
+groupEvents.addEventListener('message', refreshBadge);
+groupEvents.addEventListener('seen', refreshBadge);
 
 // المظهر: auto = واتساب حين تُخفى الرفيقة، وإلا البنفسجي
 let appTheme = 'auto';

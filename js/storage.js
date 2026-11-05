@@ -1,6 +1,6 @@
 // خدمة التخزين المحلي (IndexedDB). لا شيء هنا يغادر الجهاز.
 const DB_NAME = 'second-mind';
-const DB_VERSION = 4;
+const DB_VERSION = 5;
 
 let dbPromise;
 
@@ -26,6 +26,10 @@ function openDB() {
       }
       if (!db.objectStoreNames.contains('summaries')) {
         db.createObjectStore('summaries', { keyPath: 'id' });
+      }
+      // رسائل مجموعة المؤسسة: الأرشيف على هذا الجهاز (السحابة تنقلها فقط)
+      if (!db.objectStoreNames.contains('group')) {
+        db.createObjectStore('group', { keyPath: 'id' }).createIndex('sentAt', 'sentAt');
       }
     };
     req.onsuccess = () => {
@@ -113,9 +117,19 @@ export const deleteMessage = (id) => run('messages', 'readwrite', (s) => s.delet
 export const clearMessages = () =>
   run('messages', 'readwrite', (s) => s.clear());
 
+// ---- مجموعة المؤسسة ----
+// { id, from, fromName, text?, image?, sentAt, mine, status: 'queued'|'sent'|'received' }
+export const putGroupMessage = (m) => run('group', 'readwrite', (s) => s.put(m));
+export const getGroupMessage = (id) => run('group', 'readonly', (s) => s.get(id));
+export async function getGroupMessages() {
+  const all = await run('group', 'readonly', (s) => s.getAll());
+  return all.sort((a, b) => a.sentAt - b.sentAt);
+}
+export const clearGroup = () => run('group', 'readwrite', (s) => s.clear());
+
 // ---- التصدير والاستيراد ----
 // المفتاح لا يُصدَّر أبداً حتى لا يتسرب مع ملف النسخة، وتاريخ آخر نسخة خاص بهذا الجهاز
-const PRIVATE_SETTINGS = new Set(['geminiApiKey', 'lastExportAt', 'usage', 'ttsCooldownUntil', 'liteCooldownUntil']);
+const PRIVATE_SETTINGS = new Set(['geminiApiKey', 'lastExportAt', 'usage', 'ttsCooldownUntil', 'liteCooldownUntil', 'cloud', 'orgRole', 'groupSeenAt']);
 export const BACKUP_FORMAT = 1;
 
 async function getAllSettings() {
@@ -206,6 +220,7 @@ export const deleteSnapshot = (id) => run('snapshots', 'readwrite', (s) => s.del
 
 export async function clearAll() {
   await run('summaries', 'readwrite', (s) => s.clear());
+  await run('group', 'readwrite', (s) => s.clear());
   await run('snapshots', 'readwrite', (s) => s.clear());
   await run('messages', 'readwrite', (s) => s.clear());
   await run('entries', 'readwrite', (s) => s.clear());

@@ -49,39 +49,15 @@ function busyButton(btn, fn) {
 const setMsg = (el, text, ok = false) => { el.textContent = text; el.className = `status ${ok ? 'status--ok' : 'status--err'}`; };
 const reload = () => window.dispatchEvent(new HashChangeEvent('hashchange'));
 
-// ---- أول مرة: لا مؤسسة على هذا الجهاز ----
-function renderSetup(root) {
-  root.innerHTML = `
-    <div class="org">
-      <div class="org-hero">
-        <div class="org-hero__icon" aria-hidden="true">🏢</div>
-        <h2>عقل المؤسسة</h2>
-        <p class="muted">حساب للمدير يضيف منه الموظفين، ومحادثة مشتركة، ونقاط وتقارير. ملاحظاتك الشخصية تبقى على جهازك ولا يراها أحد.</p>
-      </div>
-      <section class="card">
-        <h3>أنا موظف</h3>
-        <p class="muted">افتح رابط الدعوة الذي أرسله لك المدير، وسيُجهَّز حسابك تلقائياً.</p>
-      </section>
-      <section class="card">
-        <h3>أنا المدير</h3>
-        <p class="muted">اربط مشروع Firebase الخاص بمؤسستك: من إعدادات المشروع في Firebase انسخ لصقة <bdi dir="ltr">firebaseConfig</bdi> كاملة والصقها هنا. الخطوات كاملة في ملف <bdi dir="ltr">firebase/SETUP.md</bdi>.</p>
-        <div class="org-rules">
-          <p><b>قواعد الحماية:</b> انسخها والصقها في Firebase ← Firestore Database ← Rules، ثم اضغط Publish.</p>
-          <button type="button" class="btn btn--ghost" id="copy-rules">📋 نسخ قواعد الحماية</button>
-          <p class="status" id="rules-msg" role="status"></p>
-          <textarea id="rules-text" class="org-rules__text" dir="ltr" readonly hidden></textarea>
-        </div>
-        <form id="cfg-form" class="org-form">
-          <label class="org-field"><span>لصقة firebaseConfig</span>
-            <textarea id="cfg-text" dir="ltr" rows="7" spellcheck="false" autocomplete="off" required placeholder="const firebaseConfig = {&#10;  apiKey: &quot;AIza...&quot;,&#10;  authDomain: &quot;...&quot;,&#10;  projectId: &quot;...&quot;,&#10;  appId: &quot;...&quot;&#10;};"></textarea>
-          </label>
-          <button class="btn" id="cfg-save" type="submit">ربط المؤسسة</button>
-          <p class="status" id="cfg-msg" role="status"></p>
-        </form>
-      </section>
-    </div>`;
-  const btn = root.querySelector('#cfg-save');
-  // ينسخ ملف القواعد من التطبيق نفسه (أسهل من نسخه من GitHub على الجوال)
+// ---- قواعد الحماية: نسخها من التطبيق نفسه (أسهل من GitHub على الجوال) ----
+const rulesBox = (lead = '') => `
+  <div class="org-rules">
+    <p>${lead}<b>قواعد الحماية:</b> انسخها والصقها في Firebase ← Firestore Database ← Rules، ثم اضغط Publish.</p>
+    <button type="button" class="btn btn--ghost" id="copy-rules">📋 نسخ قواعد الحماية</button>
+    <p class="status" id="rules-msg" role="status"></p>
+    <textarea id="rules-text" class="org-rules__text" dir="ltr" readonly hidden></textarea>
+  </div>`;
+function bindRulesBox(root) {
   root.querySelector('#copy-rules').addEventListener('click', async () => {
     const msg = root.querySelector('#rules-msg');
     const box = root.querySelector('#rules-text');
@@ -100,6 +76,36 @@ function renderSetup(root) {
       }
     } catch { setMsg(msg, 'تعذّر جلب القواعد. تحقق من الإنترنت.'); }
   });
+}
+
+// ---- أول مرة: لا مؤسسة على هذا الجهاز ----
+function renderSetup(root) {
+  root.innerHTML = `
+    <div class="org">
+      <div class="org-hero">
+        <div class="org-hero__icon" aria-hidden="true">🏢</div>
+        <h2>عقل المؤسسة</h2>
+        <p class="muted">حساب للمدير يضيف منه الموظفين، ومحادثة مشتركة، ونقاط وتقارير. ملاحظاتك الشخصية تبقى على جهازك ولا يراها أحد.</p>
+      </div>
+      <section class="card">
+        <h3>أنا موظف</h3>
+        <p class="muted">افتح رابط الدعوة الذي أرسله لك المدير، وسيُجهَّز حسابك تلقائياً.</p>
+      </section>
+      <section class="card">
+        <h3>أنا المدير</h3>
+        <p class="muted">اربط مشروع Firebase الخاص بمؤسستك: من إعدادات المشروع في Firebase انسخ لصقة <bdi dir="ltr">firebaseConfig</bdi> كاملة والصقها هنا. الخطوات كاملة في ملف <bdi dir="ltr">firebase/SETUP.md</bdi>.</p>
+        ${rulesBox()}
+        <form id="cfg-form" class="org-form">
+          <label class="org-field"><span>لصقة firebaseConfig</span>
+            <textarea id="cfg-text" dir="ltr" rows="7" spellcheck="false" autocomplete="off" required placeholder="const firebaseConfig = {&#10;  apiKey: &quot;AIza...&quot;,&#10;  authDomain: &quot;...&quot;,&#10;  projectId: &quot;...&quot;,&#10;  appId: &quot;...&quot;&#10;};"></textarea>
+          </label>
+          <button class="btn" id="cfg-save" type="submit">ربط المؤسسة</button>
+          <p class="status" id="cfg-msg" role="status"></p>
+        </form>
+      </section>
+    </div>`;
+  const btn = root.querySelector('#cfg-save');
+  bindRulesBox(root);
   root.querySelector('#cfg-form').addEventListener('submit', busyButton(btn, async () => {
     const msg = root.querySelector('#cfg-msg');
     try {
@@ -182,9 +188,11 @@ function renderAccount(root, s) {
         <h2>${esc(s.member.display_name)}</h2>
         <p class="muted">${manager ? 'مدير' : 'موظف'} في <b>${esc(s.org?.name)}</b> · <span dir="ltr">@${esc(s.member.username)}</span></p>
       </div>
-      ${manager ? '<a class="btn org-wide" href="#/staff">الموظفين</a>' : '<p class="muted org-center">المحادثة المشتركة ونقاطك تظهر هنا في المراحل القادمة.</p>'}
+      <a class="btn org-wide" href="#/group">💬 مجموعة المؤسسة</a>
+      ${manager ? `<a class="btn btn--ghost org-wide" href="#/staff">الموظفين</a>${rulesBox('عند كل تحديث للتطبيق يذكر قواعد جديدة: ')}` : ''}
       <button type="button" class="btn btn--ghost org-wide" id="logout">تسجيل الخروج</button>
     </div>`;
+  if (manager) bindRulesBox(root);
   root.querySelector('#logout').addEventListener('click', async () => {
     await signOut();
     reload();
