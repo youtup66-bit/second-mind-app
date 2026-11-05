@@ -51,9 +51,9 @@ export function createOrgGraph(canvas, { onSelect } = {}) {
         b.vx -= (dx / d) * f; b.vy -= (dy / d) * f;
       }
     }
-    for (const [ia, ib] of edges) {
+    for (const [ia, ib, len] of edges) {
       const a = byId.get(ia), b = byId.get(ib);
-      const rest = b.rest || 60;
+      const rest = len || b.rest || 60;
       const dx = b.x - a.x, dy = b.y - a.y;
       const d = Math.sqrt(dx * dx + dy * dy) || 1;
       const f = (d - rest) * 0.04;

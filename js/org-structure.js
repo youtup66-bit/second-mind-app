@@ -1,4 +1,5 @@
-// الهيكل الإداري للمؤسسة: القسم ← الشعب ← الوحدات ← أقسام الوحدات، ومكان كل موظف فيه.
+// عقل المؤسسة: القسم ← الشعب ← الوحدات ← أقسام الوحدات، وكرات مخصصة (مشاريع مثلاً) يسمّيها المدير
+// ويلوّنها ويربطها بأكثر من فرع، ومكان كل موظف (قد يكون في أكثر من كرة).
 // للمدير فقط، ويُحفظ على جهازه (لا يُرفع إلى السحابة).
 import { getSetting, setSetting } from './storage.js';
 
@@ -10,19 +11,28 @@ export const TYPES = {
   division: { label: 'شعبة', color: '#5aa7ff', child: 'unit', r: 7, rest: 125 },
   unit: { label: 'وحدة', color: '#ff9a3d', child: 'section', r: 6, rest: 95 },
   section: { label: 'قسم وحدة', color: '#ffd23f', child: null, r: 5, rest: 75 },
+  custom: { label: 'كرة مخصصة', color: '#c084fc', child: null, r: 6.5, rest: 110 },
 };
 export const PERSON = { label: 'موظف', color: '#3ddc84', r: 4.5, rest: 48 };
 export const ASSISTANT = { label: 'معاون', color: '#2dd4bf', r: 5.5, rest: 42 };
-// المعاون في القسم والشعب والوحدات (لا في أقسام الوحدات)
-export const canHaveAssistant = (type) => type !== 'section';
+// ألوان مقترحة للكرات المخصصة (والمدير يختار أي لون)
+export const PALETTE = ['#c084fc', '#f472b6', '#22d3ee', '#f87171', '#a3e635', '#e879f9', '#38bdf8', '#fb7185', '#facc15', '#94a3b8'];
+// المعاون في القسم والشعب والوحدات
+export const canHaveAssistant = (type) => type === 'dept' || type === 'division' || type === 'unit';
+export const colorOf = (n) => (n?.type === 'custom' && n.color) || TYPES[n?.type]?.color || '#ffffff';
 
 const uid = () => Math.random().toString(36).slice(2, 10);
 
-// { nodes: [{ id, type, name, parent }], people: { userId: { node, assistant } } }
+// { nodes: [{ id, type, name, parent, color?, links? }], people: { userId: { places: [{ node, assistant }] } } }
 export async function loadStructure(orgName = 'القسم') {
   const s = await getSetting(KEY, null);
-  if (s?.nodes?.length) return s;
-  return { nodes: [{ id: 'root', type: 'dept', name: orgName, parent: null }], people: {} };
+  if (!s?.nodes?.length) return { nodes: [{ id: 'root', type: 'dept', name: orgName, parent: null }], people: {} };
+  // النسخة الأولى: لكل موظف مكان واحد { node, assistant }
+  for (const [u, p] of Object.entries(s.people || {})) {
+    if (!Array.isArray(p.places)) s.people[u] = { places: p.node ? [{ node: p.node, assistant: !!p.assistant }] : [] };
+  }
+  s.people ||= {};
+  return s;
 }
 export const saveStructure = (s) => setSetting(KEY, s);
 
@@ -38,12 +48,30 @@ export function addNode(s, parentId, name) {
   return n;
 }
 
+// كرة مخصصة (مشروع، لجنة...): اسمها ولونها يختارهما المدير، وترتبط بفرع أو أكثر
+export function addCustom(s, linkTo, name, color) {
+  const n = { id: uid(), type: 'custom', name: String(name).trim() || 'كرة مخصصة', parent: null, color: color || PALETTE[0], links: linkTo ? [linkTo] : ['root'] };
+  s.nodes.push(n);
+  return n;
+}
+export function setColor(s, id, color) {
+  const n = nodeById(s, id);
+  if (n?.type === 'custom' && /^#[0-9a-f]{6}$/i.test(color)) n.color = color;
+}
+// ربط كرة مخصصة بفرع آخر أو فكّه (يبقى رابط واحد على الأقل)
+export function toggleLink(s, id, other) {
+  const n = nodeById(s, id);
+  if (!n || n.type !== 'custom' || id === other) return;
+  n.links ||= [];
+  if (n.links.includes(other)) { if (n.links.length > 1) n.links = n.links.filter((x) => x !== other); } else n.links.push(other);
+}
+
 export function renameNode(s, id, name) {
   const n = nodeById(s, id);
   if (n && String(name).trim()) n.name = String(name).trim();
 }
 
-// يحذف الفرع وما تحته؛ موظفوه يصبحون "غير موزعين"
+// يحذف الفرع وما تحته؛ موظفوه يُزالون من هذه الأماكن فقط
 export function removeNode(s, id) {
   if (id === 'root') return;
   const gone = new Set([id]);
@@ -53,21 +81,39 @@ export function removeNode(s, id) {
     for (const n of s.nodes) if (!gone.has(n.id) && gone.has(n.parent)) { gone.add(n.id); grew = true; }
   }
   s.nodes = s.nodes.filter((n) => !gone.has(n.id));
-  for (const [u, p] of Object.entries(s.people)) if (gone.has(p.node)) delete s.people[u];
+  for (const n of s.nodes) {
+    if (n.links) {
+      n.links = n.links.filter((x) => !gone.has(x));
+      if (!n.links.length) n.links = ['root']; // كرة مخصصة فقدت روابطها تعود إلى القسم
+    }
+  }
+  for (const p of Object.values(s.people)) p.places = p.places.filter((pl) => !gone.has(pl.node));
 }
 
-// يضع موظفاً في مكان (assistant: معاون ذلك المكان؛ لكل مكان معاون واحد)
+// ---- الموظفون: قد يكون الموظف في أكثر من كرة ----
+export const placesOf = (s, userId) => (s.people[userId]?.places || []).filter((pl) => nodeById(s, pl.node));
+
+// يضيف مكاناً للموظف (أو يحدّث كونه معاوناً فيه). لكل مكان معاون واحد
 export function placePerson(s, userId, nodeId, assistant = false) {
   const n = nodeById(s, nodeId);
   if (!n) return;
   const asAssistant = assistant && canHaveAssistant(n.type);
   if (asAssistant) {
-    for (const p of Object.values(s.people)) if (p.node === nodeId && p.assistant) p.assistant = false;
+    for (const p of Object.values(s.people)) for (const pl of p.places) if (pl.node === nodeId) pl.assistant = false;
   }
-  s.people[userId] = { node: nodeId, assistant: asAssistant };
+  const p = (s.people[userId] ||= { places: [] });
+  const cur = p.places.find((pl) => pl.node === nodeId);
+  if (cur) cur.assistant = asAssistant; else p.places.push({ node: nodeId, assistant: asAssistant });
+}
+export function removePlace(s, userId, nodeId) {
+  const p = s.people[userId];
+  if (p) p.places = p.places.filter((pl) => pl.node !== nodeId);
 }
 export const unplacePerson = (s, userId) => { delete s.people[userId]; };
-export const assistantOf = (s, nodeId) => Object.entries(s.people).find(([, p]) => p.node === nodeId && p.assistant)?.[0] || null;
+export const assistantOf = (s, nodeId) =>
+  Object.entries(s.people).find(([, p]) => p.places.some((pl) => pl.node === nodeId && pl.assistant))?.[0] || null;
+export const peopleAt = (s, nodeId, { assistants = true } = {}) =>
+  Object.entries(s.people).filter(([, p]) => p.places.some((pl) => pl.node === nodeId && (assistants || !pl.assistant))).map(([u]) => u);
 
 // المسار للعرض: "شعبة الصيانة ← وحدة الكاميرات"
 export function pathOf(s, nodeId) {
@@ -77,16 +123,23 @@ export function pathOf(s, nodeId) {
   return out.join(' ← ');
 }
 
-// يحوّل الهيكل إلى كرات وخطوط للرسم
+// يحوّل الهيكل إلى كرات وخطوط للرسم: [من، إلى، طول الخط]
 export function toGraph(s, members) {
   const names = new Map(members.map((m) => [m.user_id, m.display_name]));
-  const nodes = s.nodes.map((n) => ({ ...TYPES[n.type], id: n.id, kind: n.type, label: n.name, parent: n.parent }));
-  const edges = s.nodes.filter((n) => n.parent).map((n) => [n.parent, n.id]);
+  const nodes = s.nodes.map((n) => ({ ...TYPES[n.type], id: n.id, kind: n.type, label: n.name, parent: n.parent, color: colorOf(n) }));
+  const edges = [];
+  for (const n of s.nodes) {
+    if (n.parent) edges.push([n.parent, n.id, TYPES[n.type].rest]);
+    for (const l of n.links || []) edges.push([l, n.id, TYPES.custom.rest]);
+  }
   for (const [u, p] of Object.entries(s.people)) {
-    if (!names.has(u) || !nodeById(s, p.node)) continue; // أُزيل من المؤسسة
-    const look = p.assistant ? ASSISTANT : PERSON;
-    nodes.push({ ...look, id: `p:${u}`, kind: p.assistant ? 'assistant' : 'person', user: u, label: p.assistant ? `معاون: ${names.get(u)}` : names.get(u), parent: p.node });
-    edges.push([p.node, `p:${u}`]);
+    const places = p.places.filter((pl) => nodeById(s, pl.node));
+    if (!names.has(u) || !places.length) continue; // أُزيل من المؤسسة أو غير موزع
+    const asst = places.some((pl) => pl.assistant);
+    const look = asst ? ASSISTANT : PERSON;
+    nodes.push({ ...look, id: `p:${u}`, kind: asst ? 'assistant' : 'person', user: u, label: asst ? `معاون: ${names.get(u)}` : names.get(u) });
+    // خط من الموظف إلى كل كرة فيها اسمه
+    for (const pl of places) edges.push([pl.node, `p:${u}`, places.length > 1 ? 70 : look.rest]);
   }
   return { nodes, edges };
 }
