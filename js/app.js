@@ -58,8 +58,16 @@ let floaterRoute = 'home';
 let noCompanion = false;
 const syncFloater = () => floater?.setVisible(floaterOn && !noCompanion && floaterRoute !== 'home');
 // بلا رفيقة: تبويب "المحادثة"، والشاشة الرئيسية بلا شريط عنوان (رأس المحادثة يكفي)
+// المظهر: auto = واتساب حين تُخفى الرفيقة، وإلا البنفسجي
+let appTheme = 'auto';
+function applyTheme() {
+  const wa = appTheme === 'whatsapp' || (appTheme === 'auto' && noCompanion);
+  document.body.classList.toggle('theme-wa', wa);
+  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', wa ? '#202c33' : '#140f2e');
+}
 function applyNoCompanion() {
   document.body.classList.toggle('no-companion', noCompanion);
+  applyTheme();
   const tab = document.querySelector('.tabbar__item[data-route="home"]');
   if (tab) {
     tab.querySelector('.tabbar__icon').textContent = noCompanion ? '💬' : '✦';
@@ -70,6 +78,7 @@ function applyNoCompanion() {
 (async () => {
   floaterOn = await getSetting('floaterOn', true);
   noCompanion = await getSetting('hideCompanion', false);
+  appTheme = await getSetting('appTheme', 'auto');
   applyNoCompanion();
   floater = createFloater({
     skin: await getSetting('companionSkin', 'star'),
@@ -83,6 +92,7 @@ function applyNoCompanion() {
 window.addEventListener('sm:setting', (e) => {
   const { key, value } = e.detail;
   if (key === 'floaterOn') { floaterOn = value; syncFloater(); }
+  if (key === 'appTheme') { appTheme = value; applyTheme(); }
   if (key === 'hideCompanion') { noCompanion = value; syncFloater(); applyNoCompanion(); }
   if (key === 'floaterSize') floater?.setSize(value);
   if (key === 'companionSkin') floater?.setSkin(value);

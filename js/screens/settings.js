@@ -17,6 +17,7 @@ import { aiMode } from '../ai.js';
 // يحفظ إعداداً ويُعلم بقية التطبيق (مثل الرفيقة الطافية)
 // وصف مختصر تحت اسم كل قسم (مثل إعدادات واتساب)
 const GROUP_HINTS = {
+  'المظهر': 'ألوان التطبيق: واتساب أو البنفسجي',
   'شكل الرفيقة': 'اختر شخصية الرفيقة',
   'تثبيت التطبيق': 'أضفه إلى الشاشة الرئيسية ليعمل كتطبيق',
   'الرفيقة الطافية': 'الظهور فوق الشاشات والتطبيقات، والحجم',
@@ -91,6 +92,7 @@ export async function mount(root) {
   const stt = await getSetting('sttEngine', canRecord ? 'gemini' : 'browser');
   const textOnly = await getSetting('textOnly', false);
   const noCompanion = await getSetting('hideCompanion', false);
+  const appTheme = await getSetting('appTheme', 'auto');
   const voiceReview = await getSetting('voiceReview', true);
   let skin = await getSetting('companionSkin', DEFAULT_SKIN);
   const floaterOn = await getSetting('floaterOn', true);
@@ -101,6 +103,15 @@ export async function mount(root) {
   const rateScale = Number(await getSetting('voiceRateScale', 1));
 
   root.innerHTML = `
+    <section class="card" id="look">
+      <h2>المظهر</h2>
+      <div class="radio-col" role="radiogroup" aria-label="ألوان التطبيق">
+        <label class="switch"><input type="radio" name="theme" value="auto" ${appTheme === 'auto' ? 'checked' : ''}><span>تلقائي (ألوان واتساب حين تُخفى الرفيقة)</span></label>
+        <label class="switch"><input type="radio" name="theme" value="whatsapp" ${appTheme === 'whatsapp' ? 'checked' : ''}><span>ألوان واتساب دائماً</span></label>
+        <label class="switch"><input type="radio" name="theme" value="purple" ${appTheme === 'purple' ? 'checked' : ''}><span>البنفسجي الأصلي</span></label>
+      </div>
+    </section>
+
     <section class="card">
       <h2>شكل الرفيقة</h2>
       <div class="skins" role="radiogroup" aria-label="شكل الرفيقة">
@@ -771,6 +782,7 @@ export async function mount(root) {
     });
   });
 
+  root.querySelectorAll('input[name="theme"]').forEach((r) => r.addEventListener('change', () => saveAndAnnounce('appTheme', r.value)));
   root.querySelector('#hide-companion').addEventListener('change', (e) => saveAndAnnounce('hideCompanion', e.target.checked));
   root.querySelector('#speak').addEventListener('change', (e) => setSetting('speakReplies', e.target.checked));
   root.querySelector('#memory').addEventListener('change', (e) => setSetting('useMemory', e.target.checked));
