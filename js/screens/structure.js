@@ -10,6 +10,7 @@ import { createOrgGraph } from '../org-graph.js';
 import { totals, pointsEvents } from '../points.js';
 import { getGroupMessages } from '../storage.js';
 import { groupEvents, groupMembers } from '../group.js';
+import { staffTabs } from '../staff-nav.js';
 
 export const title = 'عقل المؤسسة';
 
@@ -86,11 +87,7 @@ export async function mount(root) {
         <canvas id="sg" aria-label="عقل المؤسسة"></canvas>
         <button type="button" class="struct-handle" id="handle" aria-label="القائمة" aria-expanded="false"><span></span></button>
         <div class="struct-menu" id="menu" hidden>
-          <nav class="struct-tabs" aria-label="الموظفين">
-            <a href="#/staff">الأسماء</a>
-            <b aria-current="page">عقل المؤسسة</b>
-            <a href="#/points">النقاط</a>
-          </nav>
+          ${staffTabs('structure')}
           <div class="struct-legend" id="legend"></div>
           <p class="struct-free" id="free" hidden></p>
           <button type="button" class="struct-fit" id="fit">عرض الكل</button>

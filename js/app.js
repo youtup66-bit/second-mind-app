@@ -44,6 +44,7 @@ async function navigate() {
   document.body.classList.toggle('on-home', screen === home);
   document.body.classList.toggle('on-group', screen === group);
   document.body.classList.toggle('on-structure', screen === structure);
+  document.body.classList.toggle('on-staffnav', screen === staff || screen === points);
   document.title = `${screen.title} · عقلي الثاني`;
 
   document.querySelectorAll('.tabbar__item').forEach((a) => {

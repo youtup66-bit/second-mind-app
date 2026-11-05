@@ -5,6 +5,7 @@ import {
   approve, reject, remove, totals, suggestions, scan, pointsEvents,
 } from '../points.js';
 import { getSetting, setSetting } from '../storage.js';
+import { staffTabs } from '../staff-nav.js';
 
 export const title = 'النقاط';
 
@@ -38,33 +39,27 @@ export async function mount(root) {
 
   root.innerHTML = `
     <div class="pts">
-      <div class="seg struct-seg" role="tablist">
-        <a href="#/staff" role="tab">الأسماء</a>
-        <a href="#/structure" role="tab">عقل المؤسسة</a>
-        <button type="button" class="is-active" role="tab" aria-selected="true">النقاط</button>
-      </div>
-      <p class="muted pts-private">🔒 النقاط على جهازك فقط، ولا يراها أي موظف.</p>
+      ${staffTabs('points')}
+      <p class="muted pts-private">النقاط على جهازك فقط، ولا يراها أي موظف.</p>
       <div class="pts-periods" role="radiogroup" aria-label="الفترة">
         ${Object.entries(PERIODS).map(([k, l]) => `<button type="button" data-p="${k}" role="radio">${l}</button>`).join('')}
       </div>
       <section id="sugg"></section>
       <ul class="staff-list" id="totals" aria-label="نقاط الموظفين"></ul>
-      <div class="pts-tools">
-        <button type="button" class="btn" id="open-add">＋ إضافة</button>
-        <label class="switch pts-auto"><input type="checkbox" id="auto"><span>احتساب تلقائي دون موافقتي</span></label>
-      </div>
+      <button type="button" class="text-row text-row--accent" id="open-add">الأعمال ونقاطها، وتسجيل نقاط</button>
+      <label class="switch pts-auto"><input type="checkbox" id="auto"><span>احتساب تلقائي دون موافقتي</span></label>
       <p class="muted" id="hint"></p>
       <h3 class="subhead">السجل</h3>
       <ul class="pts-log" id="log"></ul>
     </div>
     <div class="sheet" id="sheet" hidden>
       <div class="sheet__panel sheet__panel--tall" role="dialog" aria-label="إضافة">
-        <div class="seg" role="tablist">
+        <div class="struct-tabs pts-sheet-tabs" role="tablist">
           <button type="button" data-tab="works" class="is-active">الأعمال ونقاطها</button>
           <button type="button" data-tab="manual">تسجيل لموظف</button>
         </div>
         <div class="pts-sheet-body" id="sheet-body"></div>
-        <button type="button" class="btn btn--ghost org-wide" id="close-sheet">إغلاق</button>
+        <button type="button" class="text-btn text-btn--muted pts-close" id="close-sheet">إغلاق</button>
       </div>
     </div>`;
 
@@ -82,15 +77,15 @@ export async function mount(root) {
     $('#auto').checked = auto;
 
     $('#sugg').innerHTML = sug.length ? `
-      <div class="card pts-sugg">
+      <div class="pts-sugg">
         <h3>اقتراحات الذكاء <span class="pts-count">${sug.length}</span></h3>
         ${sug.map((p) => `
           <div class="pts-sugg__item">
             <div><b>${esc(nameOf(p.user))}</b> · ${esc(p.workName)}${p.count > 1 ? ` ×${p.count}` : ''} <span class="pts-plus">+${p.points}</span>
               ${p.quote ? `<q>${esc(p.quote)}</q>` : ''}<small>${fmtDate.format(p.at)}</small></div>
             <div class="pts-sugg__btns">
-              <button type="button" class="btn" data-ok="${esc(p.id)}" aria-label="موافقة">✓</button>
-              <button type="button" class="btn btn--ghost" data-no="${esc(p.id)}" aria-label="رفض">✕</button>
+              <button type="button" class="text-btn" data-ok="${esc(p.id)}">قبول</button>
+              <button type="button" class="text-btn text-btn--muted" data-no="${esc(p.id)}">رفض</button>
             </div>
           </div>`).join('')}
       </div>` : '';
@@ -125,7 +120,7 @@ export async function mount(root) {
           <form class="struct-form pts-form" id="wf">
             <input id="wf-name" placeholder="العمل (مثل: تسليك كاميرا)" maxlength="60" required>
             <input id="wf-pts" type="number" inputmode="numeric" min="1" max="1000" value="5" aria-label="النقاط" required>
-            <button class="btn" type="submit">إضافة</button>
+            <button class="text-btn" type="submit">إضافة</button>
           </form>
           <p class="status" id="wf-msg" role="status"></p>
           <ul class="pts-works">${works.map((w) => `
@@ -158,7 +153,7 @@ export async function mount(root) {
             <label class="org-field"><span>العمل</span><select id="mf-work">${works.map((w) => `<option value="${esc(w.id)}">${esc(w.name)} (${w.points})</option>`).join('')}</select></label>
             <label class="org-field"><span>العدد</span><input id="mf-count" type="number" inputmode="numeric" min="1" max="50" value="1"></label>
             <label class="org-field"><span>ملاحظة (اختياري)</span><input id="mf-note" maxlength="200"></label>
-            <button class="btn" type="submit">تسجيل</button>
+            <button class="text-btn pts-submit" type="submit">تسجيل</button>
             <p class="status" id="mf-msg" role="status"></p>
           </form>` : `<p class="muted">${works.length ? 'لا موظفين بعد.' : 'أضف الأعمال أولاً من تبويب "الأعمال ونقاطها".'}</p>`;
         body.querySelector('#mf')?.addEventListener('submit', async (e) => {

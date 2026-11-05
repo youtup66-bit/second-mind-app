@@ -975,3 +975,38 @@ body.on-structure .topbar { display: none; }
 .struct-sheet .struct-places button { background: none; border: 0; color: var(--accent); padding: 4px 6px; }
 .struct-sheet .struct-places button.is-danger { color: var(--danger); }
 .struct-color--any { font-size: 0; }
+
+/* ---- شاشات المدير: كلمات بدل الأزرار والمربعات ---- */
+body.on-staffnav .topbar { display: none; }
+.page-tabs { padding-top: calc(env(safe-area-inset-top) + 8px); margin: 0 0 14px; }
+.struct-tabs button { background: none; border: 0; padding: 0 0 2px; color: #8a96a3; font: inherit; font-size: 1rem; cursor: pointer; }
+.struct-tabs button.is-active { color: var(--text); font-weight: 700; border-bottom: 2px solid var(--accent); }
+.text-row {
+  display: block; width: 100%; text-align: start; padding: 14px 4px; background: none; border: 0;
+  border-bottom: 1px solid var(--border); color: var(--text); font: inherit; font-size: 1rem; cursor: pointer;
+}
+.text-row--accent { color: var(--accent); }
+.text-row--danger { color: var(--danger); }
+.text-btns { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 6px; }
+.text-btn { background: none; border: 0; padding: 6px 2px; color: var(--accent); font: inherit; font-size: .95rem; font-weight: 500; cursor: pointer; }
+.text-btn--muted { color: var(--muted); }
+.text-btn--danger { color: var(--danger); }
+.text-btn:disabled { opacity: .5; }
+.staff-form { padding: 10px 0 6px; border-bottom: 1px solid var(--border); }
+.invite-out { padding: 12px 0; border-bottom: 1px solid var(--border); }
+.invite-out p { margin: 0 0 8px; }
+.pts-periods { gap: 20px; }
+.pts-periods button { border: 0; border-radius: 0; padding: 4px 0; background: none; color: var(--muted); }
+.pts-periods button.is-active { background: none; color: var(--text); font-weight: 700; border-bottom: 2px solid var(--accent); }
+.pts-total { background: none; padding: 0; min-width: 0; font-size: 1.05rem; }
+.pts-sugg { border-bottom: 1px solid var(--border); padding-bottom: 4px; }
+.pts-count { background: none; color: var(--accent); padding: 0; font-size: .95rem; }
+.pts-sugg__btns .text-btn { min-width: 0; }
+.pts-sheet-tabs { justify-content: flex-start; gap: 22px; margin: 4px 0 12px; }
+.pts-close { align-self: center; }
+.pts-submit { align-self: flex-start; }
+
+.emp-sec { padding: 12px 0; border-bottom: 1px solid var(--border); }
+.emp-sec h3 { margin: 0 0 8px; font-size: 1rem; }
+.emp-sec .pts-stats div { background: none; padding: 4px; }
+.emp-sec .text-btn { text-decoration: none; display: inline-block; }

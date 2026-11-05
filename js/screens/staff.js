@@ -4,6 +4,7 @@ import {
 } from '../cloud.js';
 import { totals, PERIODS } from '../points.js';
 import { getSetting, getGroupMessages } from '../storage.js';
+import { staffTabs } from '../staff-nav.js';
 
 export const title = 'الموظفين';
 
@@ -33,24 +34,20 @@ export async function mount(root) {
 
   root.innerHTML = `
     <div class="staff">
-      <div class="seg struct-seg" role="tablist">
-        <button type="button" class="is-active" role="tab" aria-selected="true">الأسماء</button>
-        <a href="#/structure" role="tab">عقل المؤسسة</a>
-        <a href="#/points" role="tab">النقاط</a>
-      </div>
+      ${staffTabs('staff')}
       <p class="muted staff__org">${esc(s.org?.name)}</p>
       <ul class="staff-list" id="list" aria-label="الموظفون"></ul>
-      <button type="button" class="staff-add" id="add-btn"><span class="staff-add__plus" aria-hidden="true">＋</span> إضافة موظف</button>
-      <form class="card org-form" id="add-form" hidden>
+      <button type="button" class="text-row text-row--accent" id="add-btn">إضافة موظف</button>
+      <form class="org-form staff-form" id="add-form" hidden>
         <label class="org-field"><span>اسم الموظف</span><input id="ad-name" type="text" required maxlength="60" placeholder="مثال: أحمد علي"></label>
         <label class="org-field"><span>اسم المستخدم (بالإنجليزية، للدخول)</span><input id="ad-user" type="text" dir="ltr" autocapitalize="none" spellcheck="false" required placeholder="ahmed"></label>
-        <div class="row">
-          <button class="btn" id="ad-go" type="submit">إنشاء دعوة</button>
-          <button class="btn btn--ghost" id="ad-cancel" type="button">إلغاء</button>
+        <div class="text-btns">
+          <button class="text-btn" id="ad-go" type="submit">إنشاء دعوة</button>
+          <button class="text-btn text-btn--muted" id="ad-cancel" type="button">إلغاء</button>
         </div>
         <p class="status" id="ad-msg" role="status"></p>
       </form>
-      <div class="card invite-out" id="invite-out" hidden></div>
+      <div class="invite-out" id="invite-out" hidden></div>
     </div>`;
 
   const list = root.querySelector('#list');
@@ -91,10 +88,10 @@ export async function mount(root) {
       <p><b>دعوة ${esc(name)}</b></p>
       <p class="muted">أرسل هذا الرابط إلى ${esc(name)} (واتساب مثلاً). يفتحه، ويختار كلمة مروره، فيصبح حسابه جاهزاً. الرابط يُستخدم مرة واحدة.</p>
       <input class="invite-out__link" dir="ltr" readonly value="${esc(link)}">
-      <div class="row">
-        ${navigator.share ? '<button class="btn" type="button" id="inv-share">مشاركة</button>' : ''}
-        <button class="btn ${navigator.share ? 'btn--ghost' : ''}" type="button" id="inv-copy">نسخ الرابط</button>
-        <button class="btn btn--danger" type="button" id="inv-del">إلغاء الدعوة</button>
+      <div class="text-btns">
+        ${navigator.share ? '<button class="text-btn" type="button" id="inv-share">مشاركة</button>' : ''}
+        <button class="text-btn" type="button" id="inv-copy">نسخ الرابط</button>
+        <button class="text-btn text-btn--danger" type="button" id="inv-del">إلغاء الدعوة</button>
       </div>
       <p class="status" id="inv-msg" role="status"></p>`;
     const msg = out.querySelector('#inv-msg');
@@ -166,9 +163,9 @@ async function renderEmployee(root, id) {
         <h2>${esc(m.display_name)}</h2>
         <p class="muted"><span dir="ltr">@${esc(m.username)}</span> · انضم ${new Date(m.created_at).toLocaleDateString('ar')}</p>
       </div>
-      <section class="card" id="emp-points"></section>
-      <section class="card" id="emp-posts"></section>
-      <button type="button" class="btn btn--danger org-wide" id="remove">إزالة ${esc(m.display_name)} من المؤسسة</button>
+      <section class="emp-sec" id="emp-points"></section>
+      <section class="emp-sec" id="emp-posts"></section>
+      <button type="button" class="text-row text-row--danger" id="remove">إزالة ${esc(m.display_name)} من المؤسسة</button>
       <p class="status" id="rm-msg" role="status"></p>
     </div>`;
   // نقاطه (للمدير فقط)
@@ -178,14 +175,14 @@ async function renderEmployee(root, id) {
   const box = root.querySelector('#emp-points');
   if (box) {
     box.innerHTML = `
-      <h3>النقاط <small class="muted">🔒 لا يراها الموظف</small></h3>
+      <h3>النقاط <small class="muted">لا يراها الموظف</small></h3>
       <div class="pts-stats">
         <div><b>${w?.points || 0}</b><small>هذا الأسبوع</small></div>
         <div><b>${mo?.points || 0}</b><small>هذا الشهر</small></div>
         <div><b>${all?.points || 0}</b><small>الكل</small></div>
       </div>
       ${recent.length ? `<ul class="pts-log">${recent.map((p) => `<li><span>${esc(p.workName)}${p.count > 1 ? ` ×${p.count}` : ''} <span class="pts-plus">+${p.points}</span><small>${fmt.format(p.at)}</small></span></li>`).join('')}</ul>` : '<p class="muted">لا نقاط بعد.</p>'}
-      <a class="link-btn" href="#/points">كل النقاط ←</a>`;
+      <a class="text-btn" href="#/points">كل النقاط</a>`;
   }
   // آخر منشوراته (من أرشيف جهازك)
   const posts = (await getGroupMessages()).filter((x) => x.from === id).slice(-10).reverse();
