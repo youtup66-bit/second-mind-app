@@ -1086,3 +1086,15 @@ body.on-mind .topbar { display: none; }
 .folder-words .sum-ask .row { gap: 18px; }
 .folder-words .sum { background: none; border: 0; border-radius: 0; padding: 14px 2px; border-bottom: 1px solid var(--border); margin: 0; }
 .folder-words .sum .tag { background: none; border: 0; padding: 0; margin-inline-end: 10px; color: var(--accent); }
+
+/* ---- التحديث ونسخة التجربة ---- */
+.update-bar {
+  position: fixed; inset-inline: 10px; bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom) + 10px); z-index: 40;
+  display: flex; align-items: center; gap: 14px; padding: 10px 14px; border-radius: 14px;
+  background: #1f2c34; border: 1px solid #00a884; color: #e9edef; font-size: .92rem; box-shadow: 0 6px 20px rgba(0,0,0,.4);
+}
+.update-bar span { flex: 1; }
+.dev-tag {
+  position: fixed; top: calc(env(safe-area-inset-top) + 4px); inset-inline-start: 6px; z-index: 50; pointer-events: none;
+  padding: 2px 8px; border-radius: 8px; background: #b45309; color: #fff; font-size: .7rem; font-weight: 700; opacity: .9;
+}

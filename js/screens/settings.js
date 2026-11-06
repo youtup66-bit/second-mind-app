@@ -18,7 +18,7 @@ import { aiMode } from '../ai.js';
 const GROUP_HINTS = {
   'المؤسسة': 'الدخول، وحساب المدير، والموظفون',
   'المظهر': 'ألوان التطبيق: واتساب أو البنفسجي',
-  'تثبيت التطبيق': 'أضفه إلى الشاشة الرئيسية ليعمل كتطبيق',
+  'تثبيت التطبيق': 'التثبيت، والإصدار، والتحقق من التحديثات',
   'صوت الردود': 'نوع الصوت وطبقته وسرعته',
   'استهلاك Gemini اليوم': 'عدد الطلبات والحصة',
   'الذكاء على الجهاز': 'نماذج تعمل دون إنترنت',
@@ -117,6 +117,9 @@ export async function mount(root) {
       <h2>تثبيت التطبيق</h2>
       <p class="muted" id="install-state"></p>
       <div class="row"><button class="btn" id="install-btn" hidden>📲 ثبّت التطبيق على الشاشة الرئيسية</button></div>
+      <p class="muted" id="app-version"></p>
+      <button type="button" class="text-btn" id="check-update">تحقق من التحديثات</button>
+      <p class="status" id="update-status" role="status"></p>
       <div class="install-help" id="install-help" hidden>
         <p><b>أندرويد (Chrome):</b> القائمة ⋮ أعلى المتصفح ← <b>"تثبيت التطبيق"</b> أو <b>"إضافة إلى الشاشة الرئيسية"</b>.</p>
         <p><b>آيفون (Safari):</b> زر المشاركة ⬆️ أسفل الشاشة ← <b>"إضافة إلى الشاشة الرئيسية"</b>.</p>
@@ -353,6 +356,22 @@ export async function mount(root) {
     const v = e.target.value.trim();
     if (v) await setSetting('geminiModel', v); else { await deleteSetting('geminiModel'); e.target.value = DEFAULT_MODEL; }
     show(keyStatus, 'تم حفظ النموذج.');
+  });
+
+  // ---- الإصدار والتحديث ----
+  const verEl = root.querySelector('#app-version');
+  navigator.serviceWorker?.controller?.postMessage('VERSION');
+  const onVer = (e) => { if (e.data?.type === 'VERSION') verEl.textContent = `الإصدار ${e.data.version}${e.data.dev ? ' (نسخة تجريبية)' : ''}`; };
+  navigator.serviceWorker?.addEventListener('message', onVer);
+  cleanup.push(() => navigator.serviceWorker?.removeEventListener('message', onVer));
+  root.querySelector('#check-update').addEventListener('click', async (e) => {
+    const st = root.querySelector('#update-status');
+    e.currentTarget.disabled = true;
+    st.className = 'status';
+    st.textContent = 'أتحقق…';
+    const r = await window.__checkUpdate?.().catch(() => 'none');
+    st.textContent = { found: 'يتوفر تحديث: اضغط "تحديث الآن" في الأسفل.', installing: 'يُنزَّل تحديث الآن… سيظهر زر التحديث بعد لحظات.', latest: 'لديك أحدث إصدار ✓', none: 'تعذّر التحقق الآن.' }[r] || '';
+    root.querySelector('#check-update').disabled = false;
   });
 
   // ---- تثبيت التطبيق ----

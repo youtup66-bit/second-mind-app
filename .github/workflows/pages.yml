@@ -1,0 +1,43 @@
+# نشر التطبيق على GitHub Pages:
+#   فرع main  ← النسخة الحقيقية (الرابط الأساسي)
+#   فرع dev   ← نسخة التجربة تحت ‎/dev/‎ (معزولة: بياناتها ومخازنها ومشروع Firebase الخاص بها)
+name: Deploy Pages
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+concurrency:
+  group: pages
+  cancel-in-progress: true
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+        with: { ref: main, path: site }
+      - uses: actions/checkout@v4
+        with: { ref: dev, path: devsrc }
+        continue-on-error: true
+      - name: Assemble live + dev
+        run: |
+          rm -rf site/.git site/.github
+          if [ -f devsrc/index.html ]; then
+            rm -rf devsrc/.git devsrc/.github
+            mkdir -p site/dev
+            cp -r devsrc/. site/dev/
+            # اسم مختلف لنسخة التجربة عند تثبيتها على الهاتف
+            sed -i 's/"name": *"[^"]*"/"name": "عقلي الثاني (تجربة)"/; s/"short_name": *"[^"]*"/"short_name": "تجربة"/' site/dev/manifest.webmanifest
+          fi
+          touch site/.nojekyll
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with: { path: site }
+      - id: deploy
+        uses: actions/deploy-pages@v4

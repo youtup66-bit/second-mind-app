@@ -65,7 +65,8 @@
         // ولا نلغي عامل الخدمة حتى لا يُلغى أي تنزيل جارٍ في الخلفية
         var done = function () { location.reload(); };
         var clearShell = window.caches ? caches.keys().then(function (k) {
-          return Promise.all(k.filter(function (n) { return /^second-mind-v\d+$/.test(n); }).map(function (n) { return caches.delete(n); }));
+          var pre = /\/dev\//.test(location.pathname) ? 'second-mind-dev' : 'second-mind';
+          return Promise.all(k.filter(function (n) { return new RegExp('^' + pre + '-v\\d+$').test(n); }).map(function (n) { return caches.delete(n); }));
         }) : Promise.resolve();
         var update = navigator.serviceWorker ? navigator.serviceWorker.getRegistration().then(function (r) { return r && r.update(); }) : 0;
         Promise.all([clearShell, update]).then(done, done);

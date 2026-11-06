@@ -14,6 +14,7 @@ import { scanSoon } from './points.js';
 import { startGroupSync, groupEvents, unreadCount } from './group.js';
 import { autoSnapshot } from './backup.js';
 import { getSetting } from './storage.js';
+import { IS_DEV } from './env.js';
 import { loadCategories } from './categories.js';
 
 const routes = { home, mind, folder, settings, org, join: org, staff, group, structure, points, reports };
@@ -192,8 +193,57 @@ setTimeout(async () => {
 // لقطة يومية على الجهاز (لا شيء يغادره)
 autoSnapshot().catch((err) => console.warn('snapshot:', err));
 
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('./sw.js').catch((err) => console.warn('SW:', err));
+// ---- التحديث: يظهر "تحديث متاح"، والمستخدم يضغط فيتحدث فوراً ----
+function showUpdate(worker) {
+  if (document.getElementById('update-bar')) return;
+  const bar = Object.assign(document.createElement('div'), { id: 'update-bar', className: 'update-bar', role: 'status' });
+  bar.innerHTML = '<span>يتوفر تحديث جديد للتطبيق</span><button type="button" class="text-btn" id="update-now">تحديث الآن</button><button type="button" class="text-btn text-btn--muted" id="update-later">لاحقاً</button>';
+  document.body.append(bar);
+  bar.querySelector('#update-now').addEventListener('click', () => {
+    bar.querySelector('#update-now').textContent = 'جارٍ التحديث…';
+    worker.postMessage('SKIP_WAITING');
   });
+  bar.querySelector('#update-later').addEventListener('click', () => bar.remove());
+}
+// للإعدادات: فحص يدوي للتحديث
+window.__checkUpdate = async () => {
+  const reg = await navigator.serviceWorker?.getRegistration();
+  if (!reg) return 'none';
+  await reg.update();
+  if (reg.waiting) { showUpdate(reg.waiting); return 'found'; }
+  if (reg.installing) return 'installing';
+  return 'latest';
+};
+
+if ('serviceWorker' in navigator) {
+  let reloading = false;
+  // حين تتسلم النسخة الجديدة نعيد التحميل مرة واحدة
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (reloading) return;
+    reloading = true;
+    location.reload();
+  });
+  window.addEventListener('load', async () => {
+    try {
+      const reg = await navigator.serviceWorker.register('./sw.js');
+      const watch = (w) => w?.addEventListener('statechange', () => {
+        if (w.state === 'installed' && navigator.serviceWorker.controller) showUpdate(w);
+      });
+      if (reg.waiting && navigator.serviceWorker.controller) showUpdate(reg.waiting);
+      watch(reg.installing);
+      reg.addEventListener('updatefound', () => watch(reg.installing));
+      // نفحص عند العودة إلى التطبيق، وكل نصف ساعة
+      const check = () => reg.update().catch(() => {});
+      document.addEventListener('visibilitychange', () => { if (!document.hidden) check(); });
+      setInterval(check, 30 * 60 * 1000);
+    } catch (err) { console.warn('SW:', err); }
+  });
+}
+
+// نسخة التجربة: علامة واضحة حتى لا تُخلط بالنسخة الحقيقية
+if (IS_DEV) {
+  document.body.classList.add('is-dev');
+  document.title = `🧪 ${document.title}`;
+  const tag = Object.assign(document.createElement('div'), { className: 'dev-tag', textContent: 'نسخة تجريبية' });
+  document.body.append(tag);
 }

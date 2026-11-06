@@ -1,7 +1,10 @@
 // عامل الخدمة: يجعل التطبيق يعمل دون اتصال.
 // ملفات التطبيق: الشبكة أولاً (لتصلك آخر نسخة فوراً)، والمخزّن عند انقطاع الاتصال.
 // الخطوط: المخزّن أولاً. طلبات Gemini لا تمر عبر المخزّن أبداً.
-const CACHE = 'second-mind-v74';
+// نسخة التجربة (‎/dev/‎) لها مخازنها، فلا تمس النسخة الحقيقية
+const PREFIX = /\/dev\/$/.test(new URL(self.registration.scope).pathname) ? 'second-mind-dev' : 'second-mind';
+const VERSION = 75;
+const CACHE = `${PREFIX}-v${VERSION}`;
 const ASSETS = [
   './',
   './index.html',
@@ -13,6 +16,7 @@ const ASSETS = [
   './icons/apple-touch-icon.png',
   './js/app.js',
   './js/storage.js',
+  './js/env.js',
   './js/categories.js',
   './js/mind-graph.js',
   './js/skins.js',
@@ -52,14 +56,19 @@ const ASSETS = [
 ];
 
 self.addEventListener('install', (e) => {
+  // لا ننتقل للنسخة الجديدة وحدنا: التطبيق يعرض "تحديث متاح"، ويطلب الانتقال حين يضغط المستخدم
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(ASSETS)));
-  self.skipWaiting();
+});
+
+self.addEventListener('message', (e) => {
+  if (e.data === 'SKIP_WAITING') self.skipWaiting();
+  if (e.data === 'VERSION') e.source?.postMessage({ type: 'VERSION', version: VERSION, dev: PREFIX !== 'second-mind' });
 });
 
 self.addEventListener('activate', (e) => {
   e.waitUntil(
     // نحذف نسخ واجهة التطبيق القديمة فقط؛ مخازن النماذج والأصوات (webllm/*، second-mind-piper، ...) تبقى
-    caches.keys().then((keys) => Promise.all(keys.filter((k) => /^second-mind-v\d+$/.test(k) && k !== CACHE).map((k) => caches.delete(k))))
+    caches.keys().then((keys) => Promise.all(keys.filter((k) => new RegExp(`^${PREFIX}-v\\d+$`).test(k) && k !== CACHE).map((k) => caches.delete(k))))
   );
   self.clients.claim();
 });

@@ -1,5 +1,5 @@
 // خدمة التخزين المحلي (IndexedDB). لا شيء هنا يغادر الجهاز.
-const DB_NAME = 'second-mind';
+import { DB_NAME } from './env.js';
 const DB_VERSION = 6;
 
 let dbPromise;
