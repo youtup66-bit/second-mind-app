@@ -11,7 +11,6 @@ import * as points from './screens/points.js';
 import { scanSoon } from './points.js';
 import { startGroupSync, groupEvents, unreadCount } from './group.js';
 import { autoSnapshot } from './backup.js';
-import { createFloater } from './floater.js';
 import { getSetting } from './storage.js';
 import { loadCategories } from './categories.js';
 
@@ -71,12 +70,11 @@ window.addEventListener('beforeinstallprompt', (e) => {
 window.addEventListener('appinstalled', () => { window.__installPrompt = null; });
 
 // ---- الرفيقة الطافية داخل التطبيق ----
-let floater = null;
-let floaterOn = true;
 let floaterRoute = 'home';
-let noCompanion = false;
+// تطبيق مؤسسة: لا رفيقة مرسومة ولا رفيقة طافية
+const noCompanion = true;
 // لا تطفو فوق شاشات المحادثة (الرئيسية والمجموعة)
-const syncFloater = () => floater?.setVisible(floaterOn && !noCompanion && role !== 'employee' && !['home', 'group', 'structure'].includes(floaterRoute));
+const syncFloater = () => {};
 // بلا رفيقة: تبويب "المحادثة"، والشاشة الرئيسية بلا شريط عنوان (رأس المحادثة يكفي)
 // تبويب "الموظفين" يظهر للمدير فقط (الصلاحية الفعلية تفرضها قاعدة البيانات)
 function applyRole(next) {
@@ -127,28 +125,16 @@ function applyNoCompanion() {
 }
 
 (async () => {
-  floaterOn = await getSetting('floaterOn', true);
-  noCompanion = await getSetting('hideCompanion', false);
   applyRole(await getSetting('orgRole', null));
   appTheme = await getSetting('appTheme', 'auto');
   applyNoCompanion();
-  floater = createFloater({
-    skin: await getSetting('companionSkin', 'star'),
-    size: await getSetting('floaterSize', 'medium'),
-    onTap: () => { location.hash = '#/home'; },
-  });
-  syncFloater();
 })();
 
 // الإعدادات تُعلن عن تغييراتها فنحدّث الرفيقة الطافية فوراً
 window.addEventListener('sm:setting', (e) => {
   const { key, value } = e.detail;
-  if (key === 'floaterOn') { floaterOn = value; syncFloater(); }
   if (key === 'orgRole') applyRole(value);
   if (key === 'appTheme') { appTheme = value; applyTheme(); }
-  if (key === 'hideCompanion') { noCompanion = value; syncFloater(); applyNoCompanion(); }
-  if (key === 'floaterSize') floater?.setSize(value);
-  if (key === 'companionSkin') floater?.setSkin(value);
 });
 
 window.addEventListener('hashchange', navigate);

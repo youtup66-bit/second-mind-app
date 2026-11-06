@@ -2,9 +2,8 @@
 import { getSetting, setSetting, deleteSetting, clearAll, clearMessages } from '../storage.js';
 import { DEFAULT_MODEL, DEFAULT_LITE_MODEL, testKey, getUsage, ttsCooldownUntil, clearTtsCooldown, economyMode } from '../gemini.js';
 import { canSpeak, canListen, canRecord, canBrowserListen, speak, stopSpeaking, unlockAudio, voicesReady } from '../voice.js';
-import { SKINS, DEFAULT_SKIN, skinSVG } from '../skins.js';
+import { DEFAULT_SKIN } from '../skins.js';
 import { loadCategories } from '../categories.js';
-import { canPip, pipAction, isFloating } from '../pip.js';
 import { canPiper, isPiperReady, downloadPiper, removePiper, piperVoice } from '../piper.js';
 import {
   LOCAL_MODELS, webgpuSupported, shaderF16Supported, blockedReason, isModelReady, removeModel, localChat, retryGpu, explainError,
@@ -19,14 +18,12 @@ import { aiMode } from '../ai.js';
 const GROUP_HINTS = {
   'المؤسسة': 'الدخول، وحساب المدير، والموظفون',
   'المظهر': 'ألوان التطبيق: واتساب أو البنفسجي',
-  'شكل الرفيقة': 'اختر شخصية الرفيقة',
   'تثبيت التطبيق': 'أضفه إلى الشاشة الرئيسية ليعمل كتطبيق',
-  'الرفيقة الطافية': 'الظهور فوق الشاشات والتطبيقات، والحجم',
-  'صوت الرفيقة': 'نوع الصوت وطبقته وسرعته',
+  'صوت الردود': 'نوع الصوت وطبقته وسرعته',
   'استهلاك Gemini اليوم': 'عدد الطلبات والحصة',
   'الذكاء على الجهاز': 'نماذج تعمل دون إنترنت',
   'مفتاح Gemini API': 'المفتاح ووضع التوفير',
-  'المحادثة': 'الكتابة والصوت وإخفاء الرفيقة والتعرف على الكلام',
+  'المحادثة': 'الكتابة والصوت والتعرف على الكلام',
   'النسخ الاحتياطي': 'تصدير واستيراد ونسخ تلقائية',
   'الخصوصية': 'ما يُرسل خارج جهازك، ومسح البيانات',
 };
@@ -93,12 +90,9 @@ export async function mount(root) {
   const stt = await getSetting('sttEngine', canRecord ? 'gemini' : 'browser');
   const textOnly = await getSetting('textOnly', false);
   const micOn = await getSetting('micOn', true);
-  const noCompanion = await getSetting('hideCompanion', false);
   const appTheme = await getSetting('appTheme', 'auto');
   const voiceReview = await getSetting('reviewVoice', false);
   let skin = await getSetting('companionSkin', DEFAULT_SKIN);
-  const floaterOn = await getSetting('floaterOn', true);
-  const floaterSize = await getSetting('floaterSize', 'medium');
   const engine = await getSetting('voiceEngine', 'device');
   const deviceVoice = await getSetting('deviceVoice', '');
   const pitchShift = Number(await getSetting('voicePitchShift', 0));
@@ -114,21 +108,8 @@ export async function mount(root) {
     <section class="card" id="look">
       <h2>المظهر</h2>
       <div class="radio-col" role="radiogroup" aria-label="ألوان التطبيق">
-        <label class="switch"><input type="radio" name="theme" value="auto" ${appTheme === 'auto' ? 'checked' : ''}><span>تلقائي (ألوان واتساب حين تُخفى الرفيقة)</span></label>
-        <label class="switch"><input type="radio" name="theme" value="whatsapp" ${appTheme === 'whatsapp' ? 'checked' : ''}><span>ألوان واتساب دائماً</span></label>
+        <label class="switch"><input type="radio" name="theme" value="auto" ${appTheme === 'auto' ? 'checked' : ''}><span>ألوان واتساب (الافتراضي)</span></label>
         <label class="switch"><input type="radio" name="theme" value="purple" ${appTheme === 'purple' ? 'checked' : ''}><span>البنفسجي الأصلي</span></label>
-      </div>
-    </section>
-
-    <section class="card">
-      <h2>شكل الرفيقة</h2>
-      <div class="skins" role="radiogroup" aria-label="شكل الرفيقة">
-        ${Object.entries(SKINS).map(([id, k]) => `
-          <button class="skin ${id === skin ? 'is-active' : ''}" role="radio" aria-checked="${id === skin}" data-skin="${id}">
-            <div class="companion is-idle">${skinSVG(id)}</div>
-            <span class="skin__name">${k.label}</span>
-            <span class="skin__note">${k.note}</span>
-          </button>`).join('')}
       </div>
     </section>
 
@@ -143,29 +124,9 @@ export async function mount(root) {
       </div>
     </section>
 
-    <section class="card" id="floating">
-      <h2>الرفيقة الطافية</h2>
-      <label class="switch">
-        <input type="checkbox" id="floater-on" ${floaterOn ? 'checked' : ''}>
-        <span>تطفو صغيرة في كل شاشات التطبيق (اسحبها لأي مكان، والمسها لتفتح المحادثة)</span>
-      </label>
-      <h3 class="subhead">حجمها</h3>
-      <div class="radio-row" role="radiogroup" aria-label="حجم الرفيقة الطافية">
-        <label class="switch"><input type="radio" name="fsize" value="small" ${floaterSize === 'small' ? 'checked' : ''}><span>صغيرة جداً</span></label>
-        <label class="switch"><input type="radio" name="fsize" value="medium" ${floaterSize === 'medium' ? 'checked' : ''}><span>صغيرة (~١ سم)</span></label>
-        <label class="switch"><input type="radio" name="fsize" value="large" ${floaterSize === 'large' ? 'checked' : ''}><span>متوسطة</span></label>
-      </div>
-      <h3 class="subhead">فوق التطبيقات الأخرى 🪟 (تجريبي)</h3>
-      <p class="muted">تفتح الرفيقة في نافذة عائمة صغيرة تبقى فوق أي تطبيق، مثل فيديو YouTube العائم. للعرض فقط، ولمسها يعيدك إلى التطبيق. حجم النافذة يحدده الجوال، ويمكنك تصغيرها بإصبعين.</p>
-      <div class="row">
-        <button class="btn" id="pip-btn" ${canPip ? '' : 'disabled'}>🪟 اجعلها تطفو فوق التطبيقات</button>
-      </div>
-      <p class="status" id="pip-status" role="status">${canPip ? '' : 'متصفحك لا يدعم النوافذ العائمة. جرّب Chrome على أندرويد.'}</p>
-    </section>
-
     <section class="card" id="voice">
-      <h2>صوت الرفيقة</h2>
-      <p class="muted">لكل شخصية صوت يناسبها تلقائياً. البنات أعلى وأسرع قليلاً، ولهب صوت ولد شاب.</p>
+      <h2>صوت الردود</h2>
+      <p class="muted">صوت قراءة ردود الذكاء.</p>
       <div class="radio-col" role="radiogroup" aria-label="محرك الصوت">
         <label class="switch"><input type="radio" name="engine" value="device" ${engine === 'device' ? 'checked' : ''}><span>صوت الجهاز</span></label>
         <label class="switch"><input type="radio" name="engine" value="piper" ${engine === 'piper' ? 'checked' : ''} ${canPiper ? '' : 'disabled'}><span>صوت Piper العربي (داخل التطبيق، دون إنترنت)</span></label>
@@ -258,11 +219,6 @@ export async function mount(root) {
 
     <section class="card" id="talk">
       <h2>المحادثة</h2>
-      <label class="switch">
-        <input type="checkbox" id="hide-companion" ${noCompanion ? 'checked' : ''}>
-        <span>إخفاء الرفيقة نهائياً (محادثة عادية مثل واتساب)</span>
-      </label>
-      <p class="muted">تختفي الرفيقة من الشاشة الرئيسية ومن فوق الشاشات الأخرى، وتبقى المحادثة والتصنيف والصوت كما هي.</p>
       <h3 class="subhead">الإدخال الصوتي</h3>
       <label class="switch">
         <input type="checkbox" id="mic-on" ${micOn ? 'checked' : ''} ${canListen ? '' : 'disabled'}>
@@ -777,32 +733,7 @@ export async function mount(root) {
     setTimeout(() => { btn.disabled = false; }, 15000);
   });
 
-  // ---- الرفيقة الطافية ----
-  root.querySelector('#floater-on').addEventListener('change', (e) => saveAndAnnounce('floaterOn', e.target.checked));
-  root.querySelectorAll('input[name="fsize"]').forEach((r) => r.addEventListener('change', () => saveAndAnnounce('floaterSize', r.value)));
-  const pipStatus = root.querySelector('#pip-status');
-  const pipBtn = root.querySelector('#pip-btn');
-  const pipLabel = () => { pipBtn.textContent = isFloating() ? '↩️ أعِدها إلى التطبيق' : '🪟 اجعلها تطفو فوق التطبيقات'; };
-  pipBtn.addEventListener('click', async () => {
-    pipBtn.disabled = true;
-    await pipAction(skin, (t) => { pipStatus.className = 'status'; pipStatus.textContent = t; });
-    pipBtn.disabled = false;
-    pipLabel();
-  });
-
-  root.querySelector('.skins').addEventListener('click', async (e) => {
-    const b = e.target.closest('[data-skin]');
-    if (!b) return;
-    skin = b.dataset.skin;
-    await saveAndAnnounce('companionSkin', b.dataset.skin);
-    root.querySelectorAll('.skin').forEach((x) => {
-      x.classList.toggle('is-active', x === b);
-      x.setAttribute('aria-checked', x === b);
-    });
-  });
-
   root.querySelectorAll('input[name="theme"]').forEach((r) => r.addEventListener('change', () => saveAndAnnounce('appTheme', r.value)));
-  root.querySelector('#hide-companion').addEventListener('change', (e) => saveAndAnnounce('hideCompanion', e.target.checked));
   root.querySelector('#mic-on').addEventListener('change', (e) => setSetting('micOn', e.target.checked));
   root.querySelector('#speak').addEventListener('change', (e) => setSetting('speakReplies', e.target.checked));
   root.querySelector('#memory').addEventListener('change', (e) => setSetting('useMemory', e.target.checked));

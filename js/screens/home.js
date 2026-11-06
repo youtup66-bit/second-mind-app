@@ -1,5 +1,4 @@
 // شاشة الرفيقة: الشخصية الطافية + المحادثة صوتاً أو كتابة + تصنيف كل ملاحظة
-import { createCompanion } from '../companion.js';
 import {
   addEntry, addMessage, getEntries, getEntry, getMessage, getMessages, getSetting, getSummaries,
   setSetting, updateEntry, updateMessage, deleteMessage, deleteEntry,
@@ -11,8 +10,6 @@ import { CATEGORIES, NONE, categoryById } from '../categories.js';
 import { classifyEntry, classifyPending, setCategory } from '../classifier.js';
 import { recall } from '../recall.js';
 import { canListen, canRecord, canBrowserListen, listen, record, speak, stopSpeaking, unlockAudio } from '../voice.js';
-import { canPip, pipAction, isFloating } from '../pip.js';
-import { SKINS, skinSVG } from '../skins.js';
 
 export const title = 'الرفيقة';
 
@@ -58,7 +55,8 @@ export async function mount(root) {
   // الميكروفون مستقل عن "نص فقط" (الذي يوقف نطق الردود فقط)
   const showMic = canListen && await getSetting('micOn', true);
   // بلا رفيقة: محادثة عادية مثل واتساب، دون شخصية ولا انسدال
-  const plain = await getSetting('hideCompanion', false);
+  // تطبيق مؤسسة: محادثة عادية مثل واتساب دائماً، بلا شخصية مرسومة (الذكاء كما هو)
+  const plain = true;
 
   root.innerHTML = `
     <section class="chat${plain ? ' chat--wa chat--plain' : ''}">
@@ -75,7 +73,6 @@ export async function mount(root) {
           <button type="button" class="tool" id="wa-on" title="واجهة محادثة بلا رفيقة">💬 واجهة المحادثة</button>
           <button type="button" class="tool" id="voice-toggle" ${textOnly ? 'hidden' : ''}></button>
           <button type="button" class="tool tool--stop" id="stop-voice" hidden aria-label="أوقف الصوت">⏹ أوقف الصوت</button>
-          ${canPip ? '<button type="button" class="tool" id="pip">🪟 فوق التطبيقات</button>' : ''}
           ${textOnly ? '<a class="tool" href="#/settings?talk" title="غيّره من الإعدادات">🔇 ردود بلا صوت</a>' : ''}
         </div>
         <p class="bubble" id="bubble" role="status">${greeting()}</p>
@@ -124,14 +121,9 @@ export async function mount(root) {
 
   const skin = await getSetting('companionSkin', 'star');
   if (!root.isConnected) return;
-  companion = createCompanion(root.querySelector('#stage'), {
-    skin,
-    onTap: () => {
-      // لمس الرفيقة وهي تتكلم يوقف صوتها
-      if (companion?.state === 'talking') return stopVoice();
-      if (!busy) say(TAP_LINES[tapIdx++ % TAP_LINES.length]);
-    },
-  });
+  // حالة المحادثة فقط (تكتب، تستمع، تتكلم) تظهر في رأس المحادثة؛ لا شخصية مرسومة
+  companion = { state: 'idle', destroy() {} };
+  companion.setState = (st) => { companion.state = st; };
 
   let noteTimer = 0;
   function say(text) {
@@ -161,9 +153,6 @@ export async function mount(root) {
     root.querySelector('#wa-who').setAttribute('aria-label', 'عقلي الثاني');
     // أزرار الصوت تنتقل إلى الرأس كأيقونات
     root.querySelector('#wa-tools').append(root.querySelector('#stop-voice'), root.querySelector('#voice-toggle'));
-  } else {
-    root.querySelector('#wa-name').textContent = SKINS[skin]?.label || 'رفيقتي';
-    root.querySelector('#wa-avatar').innerHTML = skinSVG(skin).replace('viewBox="0 0 200 250"', 'viewBox="38 18 124 124"');
   }
   function setWaMode(on) {
     if (plain) on = true; // الرفيقة مخفية نهائياً من الإعدادات
@@ -266,14 +255,6 @@ export async function mount(root) {
   }
   stopVoiceBtn.addEventListener('click', stopVoice);
 
-  // ---- الطفو فوق التطبيقات ----
-  const pipBtn = root.querySelector('#pip');
-  pipBtn?.addEventListener('click', async () => {
-    pipBtn.disabled = true;
-    await pipAction(skin, (t) => say(t));
-    pipBtn.disabled = false;
-    pipBtn.textContent = isFloating() ? '↩️ أعِدها' : '🪟 فوق التطبيقات';
-  });
 
   // ---- عرض الرسائل ----
   const fmtTime = new Intl.DateTimeFormat('ar', { hour: 'numeric', minute: '2-digit' });
