@@ -514,6 +514,51 @@ ${text}` }] }],
   }
 }
 
+// ---- تقرير المؤسسة (أسبوعي أو شهري) ----
+// data: { period, org, people: [{ name, places, points, works, posts }], works, posts: [نصوص] }
+export async function writeOrgReport(data) {
+  const STR_LIST = { type: 'ARRAY', items: { type: 'STRING' } };
+  const raw = await generate({
+    systemInstruction: { parts: [{ text: `أنت تكتب تقرير عمل لمدير مؤسسة بالعربية الفصحى البسيطة، من منشورات موظفيه ونقاطهم.
+كن دقيقاً: لا تذكر إلا ما في البيانات، ولا تخترع أعمالاً أو أرقاماً. اذكر الأسماء والأرقام كما هي.
+- headline: عنوان التقرير في سطر.
+- overview: فقرة من ٣ إلى ٥ جمل عن سير العمل في الفترة.
+- highlights: أبرز الأعمال المنجزة (حتى ٨).
+- people: سطر لكل موظف: ما أنجزه ونقاطه، ومن لم ينشر شيئاً.
+- problems: مشاكل أو أعطال أو طلبات متكررة أو أمور معلقة تحتاج متابعة (حتى ٦).
+- suggestions: اقتراحات عملية للمدير للفترة القادمة (حتى ٤).` }] },
+    contents: [{ role: 'user', parts: [{ text: JSON.stringify(data) }] }],
+    generationConfig: {
+      temperature: 0.3,
+      maxOutputTokens: 4096,
+      responseMimeType: 'application/json',
+      responseSchema: {
+        type: 'OBJECT',
+        properties: {
+          headline: { type: 'STRING' },
+          overview: { type: 'STRING' },
+          highlights: STR_LIST,
+          people: { type: 'ARRAY', items: { type: 'OBJECT', properties: { name: { type: 'STRING' }, summary: { type: 'STRING' } }, required: ['name', 'summary'] } },
+          problems: STR_LIST,
+          suggestions: STR_LIST,
+        },
+        required: ['headline', 'overview', 'highlights', 'people', 'problems', 'suggestions'],
+      },
+    },
+  }, 'summary');
+  try {
+    const out = JSON.parse(raw.replace(/^```(?:json)?\s*|\s*```$/g, ''));
+    const arr = (x, n) => (Array.isArray(x) ? x.map(String).filter(Boolean).slice(0, n) : []);
+    return {
+      headline: String(out.headline || 'تقرير العمل'), overview: String(out.overview || ''),
+      highlights: arr(out.highlights, 8), problems: arr(out.problems, 6), suggestions: arr(out.suggestions, 4),
+      people: (Array.isArray(out.people) ? out.people : []).slice(0, 60).map((p) => ({ name: String(p.name || ''), summary: String(p.summary || '') })),
+    };
+  } catch {
+    throw new GeminiError('رد التقرير غير مفهوم، جرّب مرة أخرى.', 'PARSE');
+  }
+}
+
 // ---- تفريغ الكلام إلى نص ----
 // يُرسل التسجيل الصوتي إلى Gemini (بديل خدمة الكلام في المتصفح التي لا تعمل على بعض الجوالات).
 const TRANSCRIBER = `فرّغ هذا التسجيل الصوتي إلى نص عربي حرفياً كما قيل، فصحى كان أو عامية، مع علامات ترقيم بسيطة.

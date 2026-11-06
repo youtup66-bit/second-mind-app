@@ -1010,3 +1010,37 @@ body.on-staffnav .topbar { display: none; }
 .emp-sec h3 { margin: 0 0 8px; font-size: 1rem; }
 .emp-sec .pts-stats div { background: none; padding: 4px; }
 .emp-sec .text-btn { text-decoration: none; display: inline-block; }
+.act-undo { display: block; margin-top: 4px; background: none; border: 0; padding: 2px 0; color: var(--accent); font: inherit; font-size: .82rem; cursor: pointer; }
+
+/* ---- التقارير والمهام والتذكيرات ---- */
+.rep { display: flex; flex-direction: column; }
+.rep-sec { padding: 12px 0; border-bottom: 1px solid var(--border); }
+.rep-sec h3 { margin: 0 0 8px; font-size: 1.02rem; }
+.rep-list { list-style: none; margin: 0; padding: 0; }
+.rep-list li { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: .92rem; }
+.rep-list li:last-child { border-bottom: 0; }
+.rep-list li > span { flex: 1; }
+.rep-list small { display: block; color: var(--muted); font-size: .76rem; }
+.rep-list a { color: var(--text); text-decoration: none; }
+.rep-list li.is-done { opacity: .6; }
+.rep-item { border-bottom: 1px solid var(--border); padding: 10px 0; }
+.rep-item summary { cursor: pointer; list-style: none; }
+.rep-item summary::-webkit-details-marker { display: none; }
+.rep-item summary b { display: block; }
+.rep-item summary small { color: var(--muted); font-size: .78rem; }
+.rep-item h4 { margin: 10px 0 4px; font-size: .92rem; color: var(--accent); }
+.rep-item ul { margin: 0; padding-inline-start: 18px; font-size: .9rem; }
+.rep-item p { font-size: .92rem; }
+.rep-form { padding: 8px 0; }
+.rep-form select, .rep-form input { width: 100%; }
+.rep-note { font-size: .78rem; margin: 6px 0 0; }
+.page-tabs { gap: 18px; flex-wrap: wrap; }
+.toast--info { background: #1f2c34; color: #e9edef; border: 1px solid #00a884; }
+
+/* اختيار موضوع المنشور (كرة الموظف) */
+.g-tags { display: flex; gap: 14px; overflow-x: auto; padding: 6px 14px 2px; font-size: .86rem; white-space: nowrap; scrollbar-width: none; }
+.g-tags[hidden] { display: none; }
+.g-tags__lead { color: var(--wa-meta, var(--muted)); }
+.g-tag { background: none; border: 0; padding: 2px 0; color: var(--wa-meta, var(--muted)); font: inherit; cursor: pointer; }
+.g-tag.is-on { color: var(--wa-green, var(--accent)); font-weight: 700; border-bottom: 2px solid currentColor; }
+.msg__tag { display: block; font-size: .72rem; color: var(--wa-meta, var(--muted)); margin-top: 2px; }

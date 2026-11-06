@@ -69,10 +69,12 @@ export async function mount(root) {
     while (grew) { grew = false; for (const x of st.nodes) if (!ids.has(x.id) && ids.has(x.parent)) { ids.add(x.id); grew = true; } }
     return Object.entries(st.people).filter(([, p]) => p.places.some((pl) => ids.has(pl.node))).map(([u]) => u);
   };
-  const statsLine = (users) => {
+  // node: الكرة المعروضة؛ المنشور الذي اختار له الموظف كرة يُحسب لتلك الكرة، وغيره يُحسب لكرات مرسله
+  const statsLine = (users, node = null) => {
     const pts = users.reduce((a, u) => a + (month.get(u)?.points || 0), 0);
     const set = new Set(users);
-    const n = posts.filter((m) => set.has(m.from) && m.sentAt >= weekAgo()).length;
+    const n = posts.filter((m) => m.sentAt >= weekAgo() && (!node ? set.has(m.from)
+      : node.id === 'root' ? true : m.tag ? m.tag === node.name : set.has(m.from))).length;
     return `<p class="struct-stats">نقاط هذا الشهر <b>${pts}</b> · منشورات هذا الأسبوع <b>${n}</b></p>`;
   };
   const fmtDay = new Intl.DateTimeFormat('ar', { day: 'numeric', month: 'short' });
@@ -235,7 +237,7 @@ export async function mount(root) {
       : custom ? ` · مرتبطة بـ ${(n.links || []).map((l) => esc(nodeById(st, l)?.name || '')).join('، ')}` : ' · رئيس القسم: أنت';
     panel.innerHTML = `
       <div class="struct-title">${dot(colorOf(n))}<div><b>${esc(n.name)}</b><small>${t.label}${where}</small></div></div>
-      ${sub ? '' : statsLine(n.parent || custom ? peopleUnder(n.id) : members.map((m) => m.user_id))}
+      ${sub ? '' : statsLine(n.parent || custom ? peopleUnder(n.id) : members.map((m) => m.user_id), n)}
       ${sub ? '' : `<p class="struct-meta">
         ${canHaveAssistant(n.type) ? `المعاون: <b>${asst ? esc(nameOf(asst)) : 'لا يوجد'}</b> · ` : ''}
         ${t.child ? `${count(kids.length, t.child)} · ` : ''}${count(here.length, 'person')}

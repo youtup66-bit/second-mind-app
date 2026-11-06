@@ -10,7 +10,8 @@ export const ACTION_IDS = [
   'org_add_branch', 'org_add_custom', 'org_rename', 'org_delete', 'org_move', 'org_set_color', 'org_link',
   'org_place_employee', 'org_remove_employee', 'org_set_assistant',
   'work_add', 'work_update', 'work_delete', 'points_add', 'points_review', 'points_auto',
-  'post_to_group', 'invite_employee',
+  'post_to_group', 'invite_employee', 'make_org_report', 'assign_task', 'complete_org_task',
+  'set_reminder',
 ];
 
 // ملخص المؤسسة الحالي (يضعه التطبيق قبل كل طلب، للمدير فقط)
@@ -33,6 +34,7 @@ export function actionsPrompt() {
   أو structure (عقل المؤسسة) أو staff (الموظفين) أو points (النقاط) أو group (منشورات المجموعة).
 - delete_note: حذف ملاحظة. target: كلمات من نصها. (سيُطلب منه التأكيد)
 - set_theme: value: whatsapp أو purple (ألوان التطبيق).
+- set_reminder: تذكير في موعد. value: الموعد بصيغة ISO 8601 بتوقيت الجهاز (احسبيه من الوقت الحالي المذكور)، name: نص التذكير.
 - make_summary: value: day أو week أو month.
 - complete_task: تعليم مهمة بأنها أُنجزت. target: كلمات من نص المهمة.
 - set_voice: value: on أو off (نطق الردود بصوت).
@@ -55,6 +57,9 @@ ${orgCtx}
 - points_auto: value: on أو off.
 - post_to_group: value: نص المنشور في مجموعة المؤسسة (سيُطلب التأكيد).
 - invite_employee: name: اسم الموظف، value: اسم دخول بالإنجليزية (حروف وأرقام).
+- make_org_report: value: week أو month (تقرير عمل المؤسسة).
+- assign_task: تكليف موظف بمهمة (تُنشر في المجموعة). employee، value: نص المهمة، target: اسم العمل من قائمة الأعمال إن كانت لها نقاط (اختياري).
+- complete_org_task: تعليم مهمة مكلّفة كمنجزة. target: اسم الموظف أو كلمات من المهمة.
 نفّذي عدة أوامر معاً إن طلب ذلك (حتى ٦)، مثل إنشاء شعبة ثم وحدات تحتها.` : ''}`;
 }
 

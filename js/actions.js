@@ -27,6 +27,10 @@ const say = (ok, text, link) => ({ ok, text, link });
 // ctx: { entryId, setWaMode(on), setVoice(on), remount() }
 export async function executeActions(actions, ctx = {}) {
   const results = [];
+  // لقطة قبل التنفيذ ليتمكن المستخدم من التراجع (المنشورات المرسلة لا يُتراجع عنها)
+  const { takeUndoSnapshot } = await import('./org-insights.js');
+  const changing = (actions || []).some((a) => !['open_screen'].includes(a?.action));
+  const undo = changing ? await takeUndoSnapshot().catch(() => null) : null;
   for (const a of (actions || []).slice(0, 8)) {
     try {
       results.push(await run(a, ctx));
@@ -34,7 +38,9 @@ export async function executeActions(actions, ctx = {}) {
       results.push(say(false, `تعذّر: ${err.message || err}`));
     }
   }
-  return results.filter(Boolean);
+  const out = results.filter(Boolean);
+  if (undo && out.some((r) => r.ok)) out.undo = undo;
+  return out;
 }
 
 async function run(a, ctx) {
@@ -141,6 +147,12 @@ async function run(a, ctx) {
       if (!confirm(`الذكاء يريد حذف هذه الملاحظة:\n\n«${hit.text.slice(0, 200)}»\n\nموافق؟`)) return say(false, 'لم تُحذف (ألغيتَ)');
       await deleteEntry(hit.id);
       return say(true, 'حذفتُ الملاحظة', '#/folder');
+    }
+    case 'set_reminder': {
+      const { addReminder } = await import('./org-insights.js');
+      const r = await addReminder({ at: a.value, text: a.name || a.target || 'تذكير' });
+      const fmt = new Intl.DateTimeFormat('ar', { weekday: 'long', day: 'numeric', month: 'long', hour: 'numeric', minute: '2-digit' });
+      return say(true, `سأذكّرك ${fmt.format(r.at)}: ${r.text}`, '#/reports');
     }
     case 'set_theme': {
       const theme = v.startsWith('p') || v.includes('بنفس') ? 'purple' : 'whatsapp';

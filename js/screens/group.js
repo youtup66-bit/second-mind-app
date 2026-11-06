@@ -1,6 +1,6 @@
 // شاشة مجموعة المؤسسة: محادثة مشتركة مثل مجموعة واتساب (نصوص وصور وكلام يتحول إلى نص)
 import {
-  startGroupSync, groupEvents, groupMe, groupMembers, groupOnline, sendGroup, resend, markSeen, compressImage,
+  startGroupSync, groupEvents, groupMe, groupMembers, groupOnline, groupPlaces, sendGroup, resend, markSeen, compressImage,
 } from '../group.js';
 import { getGroupMessages } from '../storage.js';
 import { session } from '../cloud.js';
@@ -49,6 +49,7 @@ export async function mount(root) {
       </header>
       <p class="wa-note" id="g-note" hidden role="status"></p>
       <ol class="chat__log" id="g-log" aria-label="رسائل المجموعة"></ol>
+      <div class="g-tags" id="g-tags" hidden></div>
       <form class="composer" id="g-form" autocomplete="off">
         <button type="button" class="composer__mic" id="g-mic" aria-label="اضغط مطولاً للتسجيل" ${micOk ? '' : 'hidden'}>🎙</button>
         <textarea id="g-input" rows="1" placeholder="اكتب منشور عمل" aria-label="منشورك"></textarea>
@@ -94,6 +95,7 @@ export async function mount(root) {
       m.mine ? '' : `<span class="msg__from" style="color:${colorFor(m.from)}">${esc(m.fromName)}</span>`,
       m.image ? `<img class="msg__img" src="${m.image}" alt="صورة" loading="lazy">` : '',
       m.text ? `<span class="msg__text">${esc(m.text)}</span>` : '',
+      m.tag ? `<span class="msg__tag">عن: ${esc(m.tag)}</span>` : '',
       `<span class="msg__time">${fmtTime.format(m.sentAt)}${m.mine ? ` <span class="tick tick--${m.status}">${TICKS[m.status] || ''}</span>` : ''}</span>`,
       m.mine && m.status === 'failed' ? '<button type="button" class="msg__retry">لم تُرسل · أعد المحاولة</button>' : '',
     ].join('');
@@ -135,6 +137,25 @@ export async function mount(root) {
   }
 
   // ---- الإرسال ----
+  // الموظف يختار عمّا يكون منشوره (من كراته في عقل المؤسسة)؛ يبقى الاختيار للمنشورات التالية
+  let tag = '';
+  try { tag = sessionStorage.getItem('sm-post-tag') || ''; } catch { /* لا شيء */ }
+  const tagsEl = root.querySelector('#g-tags');
+  function renderTags() {
+    const places = groupPlaces();
+    if (!places.includes(tag)) tag = '';
+    tagsEl.hidden = !places.length;
+    tagsEl.innerHTML = places.length ? `<span class="g-tags__lead">عن:</span>${['', ...places].map((p) => `<button type="button" class="g-tag${p === tag ? ' is-on' : ''}" data-tag="${esc(p)}">${p ? esc(p) : 'عام'}</button>`).join('')}` : '';
+  }
+  tagsEl.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-tag]');
+    if (!b) return;
+    tag = b.dataset.tag;
+    try { sessionStorage.setItem('sm-post-tag', tag); } catch { /* لا شيء */ }
+    renderTags();
+  });
+  renderTags();
+
   const syncComposer = () => form.classList.toggle('has-text', !!input.value.trim());
   const autosize = () => { input.style.height = 'auto'; input.style.height = `${Math.min(140, input.scrollHeight)}px`; };
   input.addEventListener('input', () => { autosize(); syncComposer(); });
@@ -147,7 +168,7 @@ export async function mount(root) {
     if (!text) return;
     input.value = ''; autosize(); syncComposer();
     if (log.querySelector('.wa-day') && !log.querySelector('.msg')) log.innerHTML = '';
-    try { await sendGroup({ text }); } catch (err) { say(esc(err.message)); input.value = text; syncComposer(); }
+    try { await sendGroup({ text, tag }); } catch (err) { say(esc(err.message)); input.value = text; syncComposer(); }
   });
 
   const file = root.querySelector('#g-file');
@@ -160,7 +181,7 @@ export async function mount(root) {
     try {
       const image = await compressImage(f);
       if (log.querySelector('.wa-day') && !log.querySelector('.msg')) log.innerHTML = '';
-      await sendGroup({ image, text: input.value.trim() });
+      await sendGroup({ image, text: input.value.trim(), tag });
       input.value = ''; autosize(); syncComposer();
       note.hidden = true;
     } catch (err) { say(`تعذّر إرسال الصورة: ${esc(err.message)}`); }
@@ -172,7 +193,7 @@ export async function mount(root) {
     onBusy: (on) => { if (on) say('أحوّل كلامك إلى نص…'); else note.hidden = true; },
     onText: async (text) => {
       if (log.querySelector('.wa-day') && !log.querySelector('.msg')) log.innerHTML = '';
-      try { await sendGroup({ text }); } catch (err) { say(esc(err.message)); }
+      try { await sendGroup({ text, tag }); } catch (err) { say(esc(err.message)); }
     },
   }) : null;
 
@@ -200,11 +221,13 @@ export async function mount(root) {
   groupEvents.addEventListener('message', onMsg);
   groupEvents.addEventListener('update', onUpdate);
   groupEvents.addEventListener('members', renderStatus);
+  groupEvents.addEventListener('places', renderTags);
   groupEvents.addEventListener('status', renderStatus);
   cleanup.push(() => {
     groupEvents.removeEventListener('message', onMsg);
     groupEvents.removeEventListener('update', onUpdate);
     groupEvents.removeEventListener('members', renderStatus);
+    groupEvents.removeEventListener('places', renderTags);
     groupEvents.removeEventListener('status', renderStatus);
     holdMic?.stop();
   });

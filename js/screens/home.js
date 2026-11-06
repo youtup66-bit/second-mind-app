@@ -571,8 +571,8 @@ export async function mount(root) {
           setVoice: (on) => { speakOn = on; renderVoiceToggle(); if (!on) stopVoice(); },
           remount: () => window.dispatchEvent(new HashChangeEvent('hashchange')),
         });
-        renderActions(pending, done);
-        await updateMessage({ ...modelMsg, actions: done });
+        renderActions(pending, done, done.undo);
+        await updateMessage({ ...modelMsg, actions: [...done] }); // اللقطة لا تُحفظ مع الرسالة
       }
       pending.dataset.id = modelMsg.id;
       pending.querySelector('.msg__text').textContent = reply;
@@ -604,13 +604,26 @@ export async function mount(root) {
   }
 
   // نتائج أوامر الرفيقة: سطر لكل أمر، مع رابط "عرض" إن وُجد
-  function renderActions(li, done) {
+  function renderActions(li, done, undo) {
     li.querySelector('.msg__acts')?.remove();
     if (!done?.length) return;
     const box = document.createElement('div');
     box.className = 'msg__acts';
-    box.innerHTML = done.map((d) => `<span class="act ${d.ok ? '' : 'act--fail'}">${d.ok ? '⚙️' : '⚠️'} ${escapeHtml(d.text)}${d.link ? ` <a href="${d.link}">عرض</a>` : ''}</span>`).join('');
+    box.innerHTML = done.map((d) => `<span class="act ${d.ok ? '' : 'act--fail'}">${d.ok ? '⚙️' : '⚠️'} ${escapeHtml(d.text)}${d.link ? ` <a href="${d.link}">عرض</a>` : ''}</span>`).join('')
+      + (undo ? '<button type="button" class="act-undo">تراجع عن كل ما سبق</button>' : '');
     li.querySelector('.msg__text').after(box);
+    // التراجع: يعيد الهيكل والأعمال والنقاط والأقسام والملاحظات إلى ما قبل الأوامر
+    box.querySelector('.act-undo')?.addEventListener('click', async (e) => {
+      const btn = e.currentTarget;
+      btn.disabled = true;
+      try {
+        const { restoreUndoSnapshot } = await import('../org-insights.js');
+        await restoreUndoSnapshot(undo);
+        const { loadCategories } = await import('../categories.js');
+        await loadCategories();
+        btn.replaceWith(Object.assign(document.createElement('span'), { className: 'act', textContent: '↩️ تراجعتُ عن هذه الأوامر' }));
+      } catch (err) { btn.disabled = false; say(`تعذّر التراجع: ${escapeHtml(err.message)}`); }
+    });
   }
 
   // شارة صغيرة على الردود التي جاءت من النموذج على الجهاز

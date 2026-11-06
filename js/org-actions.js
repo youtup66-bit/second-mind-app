@@ -11,6 +11,7 @@ import {
 } from './points.js';
 import { sendGroup, groupMembers, startGroupSync } from './group.js';
 import { createInvite, inviteLink, listMembers, session } from './cloud.js';
+import { makeReport, assignTask, listTasks, completeTask, insightsContext } from './org-insights.js';
 
 const orgName = async () => (await session().catch(() => null))?.org?.name || 'القسم';
 
@@ -19,7 +20,7 @@ export const ORG_ACTIONS = new Set([
   'org_add_branch', 'org_add_custom', 'org_rename', 'org_delete', 'org_move', 'org_set_color', 'org_link',
   'org_place_employee', 'org_remove_employee', 'org_set_assistant',
   'work_add', 'work_update', 'work_delete', 'points_add', 'points_review', 'points_auto',
-  'post_to_group', 'invite_employee',
+  'post_to_group', 'invite_employee', 'make_org_report', 'assign_task', 'complete_org_task',
 ]);
 
 // يطابق الأسماء مع تسامح في الهمزات والتشكيل و"ال" التعريف
@@ -189,6 +190,27 @@ export async function runOrgAction(a) {
       try { await navigator.clipboard.writeText(link); } catch { /* يُنسخ من صفحة الموظفين */ }
       return say(true, `أنشأتُ دعوة ${a.name} (اسم الدخول ${a.value}) ونسختُ رابطها لترسله له`, '#/staff');
     }
+    // ---- التقارير والمهام ----
+    case 'make_org_report': {
+      const period = String(a.value || '').startsWith('m') || /شهر/.test(a.value || '') ? 'month' : 'week';
+      const r = await makeReport(period);
+      return say(true, `جهّزتُ ${period === 'month' ? 'تقرير الشهر' : 'تقرير الأسبوع'}: «${r.headline}»`, '#/reports');
+    }
+    case 'assign_task': {
+      const emp = need(findEmployee(await employees(), a.employee || a.name), `موظفاً باسم «${a.employee || a.name}»`);
+      const text = String(a.value || '').trim();
+      if (!text) return say(false, 'ما المهمة؟');
+      const w = a.target ? best(await getWorks(), a.target, (x) => x.name) : null;
+      if (!confirm(`الذكاء سيكلّف ${emp.display_name} بهذه المهمة وينشرها في المجموعة:\n\n«${text}»${w ? `\n(عند إنجازها: ${w.name} +${w.points})` : ''}\n\nموافق؟`)) return say(false, 'لم تُكلَّف (ألغيتَ)');
+      await assignTask({ user: emp.user_id, name: emp.display_name, text, workId: w?.id || null });
+      return say(true, `كلّفتُ ${emp.display_name}: ${text}`, '#/reports');
+    }
+    case 'complete_org_task': {
+      const open = (await listTasks()).filter((x) => !x.done);
+      const t = need(best(open, a.target, (x) => `${x.name} ${x.text}`) || best(open, a.target, (x) => x.text), 'مهمة مفتوحة بهذا الوصف');
+      await completeTask(t.id);
+      return say(true, `علّمتُ مهمة ${t.name} كمنجزة${t.workId ? ' وسجّلتُ نقاطها' : ''}`, '#/reports');
+    }
     default:
       return null;
   }
@@ -211,5 +233,6 @@ export async function orgContext() {
 ${nodes.slice(0, 80).join('\n')}
 الموظفون: ${people.slice(0, 80).join(' | ') || 'لا أحد بعد'}
 الأعمال ونقاطها: ${works.join('، ') || 'لا شيء بعد'}
-اقتراحات نقاط تنتظر موافقته: ${pending}`;
+اقتراحات نقاط تنتظر موافقته: ${pending}
+${await insightsContext().catch(() => '')}`;
 }

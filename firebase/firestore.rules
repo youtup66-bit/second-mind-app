@@ -96,7 +96,8 @@ service cloud.firestore {
     // وآخر مستلم يحذف الرسالة من السحابة. الأرشيف الدائم على جوال المدير، وكل موظف يحتفظ بما وصله.
     match /relay/{id} {
       function validMsg(d) {
-        return d.keys().hasOnly(['mid', 'from', 'fromName', 'text', 'image', 'sentAt', 'createdAt', 'pending', 'history'])
+        return d.keys().hasOnly(['mid', 'from', 'fromName', 'text', 'image', 'tag', 'sentAt', 'createdAt', 'pending', 'history'])
+          && (!('tag' in d) || text(d.tag, 60))
           && d.mid is string && d.mid.size() <= 64
           && d.from is string && text(d.fromName, 60)
           && (!('text' in d) || (d.text is string && d.text.size() <= 4000))
@@ -136,6 +137,17 @@ service cloud.firestore {
       allow create, update: if isManager()
         && request.resource.data.keys().hasOnly(['count', 'at'])
         && request.resource.data.count is int && request.resource.data.at == request.time;
+      allow delete: if isManager();
+    }
+
+    // أماكن الموظف في عقل المؤسسة (أسماء كراته فقط): ينشرها المدير، ويقرؤها الموظف ليختار منها عند النشر
+    match /places/{uid} {
+      allow get: if signedIn() && (uid == request.auth.uid || isManager());
+      allow list: if isManager();
+      allow create, update: if isManager()
+        && request.resource.data.keys().hasOnly(['places', 'at'])
+        && request.resource.data.places is list && request.resource.data.places.size() <= 30
+        && request.resource.data.at == request.time;
       allow delete: if isManager();
     }
 

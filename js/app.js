@@ -8,13 +8,15 @@ import * as staff from './screens/staff.js';
 import * as group from './screens/group.js';
 import * as structure from './screens/structure.js';
 import * as points from './screens/points.js';
+import * as reports from './screens/reports.js';
+import { checkReminders } from './org-insights.js';
 import { scanSoon } from './points.js';
 import { startGroupSync, groupEvents, unreadCount } from './group.js';
 import { autoSnapshot } from './backup.js';
 import { getSetting } from './storage.js';
 import { loadCategories } from './categories.js';
 
-const routes = { home, mind, folder, settings, org, join: org, staff, group, structure, points };
+const routes = { home, mind, folder, settings, org, join: org, staff, group, structure, points, reports };
 const app = document.getElementById('app');
 const titleEl = document.getElementById('screen-title');
 
@@ -43,11 +45,11 @@ async function navigate() {
   document.body.classList.toggle('on-home', screen === home);
   document.body.classList.toggle('on-group', screen === group);
   document.body.classList.toggle('on-structure', screen === structure);
-  document.body.classList.toggle('on-staffnav', screen === staff || screen === points);
+  document.body.classList.toggle('on-staffnav', screen === staff || screen === points || screen === reports);
   document.title = `${screen.title} · عقلي الثاني`;
 
   document.querySelectorAll('.tabbar__item').forEach((a) => {
-    const tabOf = { join: 'org', structure: 'staff', points: 'staff' };
+    const tabOf = { join: 'org', structure: 'staff', points: 'staff', reports: 'staff' };
     const active = a.dataset.route === (tabOf[name] || (routes[name] ? name : 'home'));
     a.classList.toggle('is-active', active);
     if (active) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
@@ -139,6 +141,18 @@ window.addEventListener('sm:setting', (e) => {
 
 window.addEventListener('hashchange', navigate);
 loadCategories().catch(() => {}).then(navigate).finally(() => { window.__appReady = true; });
+
+// ---- التذكيرات: نفحصها عند الفتح وكل نصف دقيقة ----
+function notice(text) {
+  const el = Object.assign(document.createElement('div'), { className: 'toast toast--info', role: 'status' });
+  el.textContent = `⏰ ${text} (المس للإغلاق)`;
+  el.addEventListener('click', () => el.remove());
+  document.body.append(el);
+}
+const tickReminders = () => checkReminders((r) => notice(r.text)).catch(() => {});
+tickReminders();
+setInterval(tickReminders, 30_000);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) tickReminders(); });
 
 // أي خطأ غير متوقع يظهر كشريط صغير بدل أن يتعطل التطبيق بصمت
 function toast(msg) {

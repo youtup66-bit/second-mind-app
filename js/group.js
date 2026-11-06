@@ -17,7 +17,9 @@ let membersReady = null, resolveMembers = null;
 const resetMembersReady = () => { membersReady = new Promise((r) => { resolveMembers = r; }); };
 resetMembersReady();
 
+let myPlaces = [];
 export const groupMe = () => me;
+export const groupPlaces = () => myPlaces;
 export const groupMembers = () => members;
 export const groupOnline = () => online;
 
@@ -35,8 +37,19 @@ export async function startGroupSync() {
       }]));
       resolveMembers();
       emit('members');
-      if (me?.role === 'manager') managerChores().catch((e) => console.warn('group chores', e));
+      if (me?.role === 'manager') {
+        managerChores().catch((e) => console.warn('group chores', e));
+        publishPlacesSoon();
+      }
     }, (err) => emit('status', { error: err })));
+
+    // الموظف: أسماء كراته في عقل المؤسسة (يختار منها عند النشر)
+    if (me.role === 'employee') {
+      unsubs.push(F.onSnapshot(F.doc(db, 'places', me.uid), (d) => {
+        myPlaces = d.exists() ? (d.data().places || []).map(String) : [];
+        emit('places');
+      }, () => {}));
+    }
 
     unsubs.push(F.onSnapshot(
       F.query(F.collection(db, 'relay'), F.where('pending', 'array-contains', me.uid)),
@@ -59,6 +72,8 @@ export function stopGroupSync() {
   unsubs.forEach((u) => { try { u(); } catch { /* لا شيء */ } });
   unsubs = [];
   me = null;
+  myPlaces = [];
+  published.clear();
   members = new Map();
   resetMembersReady();
 }
@@ -70,7 +85,7 @@ async function receive(d, F) {
   const id = x.mid || d.id;
   if (!(await getGroupMessage(id))) {
     const m = {
-      id, from: x.from, fromName: x.fromName, text: x.text || '', image: x.image || null,
+      id, from: x.from, fromName: x.fromName, text: x.text || '', image: x.image || null, ...(x.tag ? { tag: x.tag } : {}),
       sentAt: x.sentAt, mine: x.from === me.uid, status: 'received', receivedAt: Date.now(),
     };
     await putGroupMessage(m);
@@ -82,13 +97,14 @@ async function receive(d, F) {
 }
 
 // ---- الإرسال ----
-export async function sendGroup({ text = '', image = null }) {
+export async function sendGroup({ text = '', image = null, tag = '' }) {
   if (!me) throw new Error('لم تدخل إلى المؤسسة بعد.');
   text = String(text).trim().slice(0, 4000);
   if (!text && !image) return null;
   const { db, F } = await api();
   const ref = F.doc(F.collection(db, 'relay'));
-  const m = { id: ref.id, from: me.uid, fromName: me.name, text, image, sentAt: Date.now(), mine: true, status: 'queued' };
+  tag = String(tag || '').trim().slice(0, 60);
+  const m = { id: ref.id, from: me.uid, fromName: me.name, text, image, sentAt: Date.now(), mine: true, status: 'queued', ...(tag ? { tag } : {}) };
   await putGroupMessage(m);
   emit('message', { msg: m });
   deliver(m).catch(() => {});
@@ -109,7 +125,7 @@ async function deliver(m) {
   try {
     await F.setDoc(F.doc(db, 'relay', m.id), {
       mid: m.id, from: me.uid, fromName: me.name, sentAt: m.sentAt, createdAt: F.serverTimestamp(), pending,
-      ...(m.text ? { text: m.text } : {}), ...(m.image ? { image: m.image } : {}),
+      ...(m.text ? { text: m.text } : {}), ...(m.image ? { image: m.image } : {}), ...(m.tag ? { tag: m.tag } : {}),
     });
     await done('sent');
   } catch (err) {
@@ -153,7 +169,7 @@ async function managerChores() {
         if (ops >= 400 || bytes + size > 8_000_000) { await batch.commit(); batch = F.writeBatch(db); ops = 0; bytes = 0; }
         batch.set(F.doc(db, 'relay', `h_${uid}_${x.id}`.slice(0, 1400)), {
           mid: x.id, from: x.from, fromName: x.fromName, sentAt: x.sentAt, createdAt: F.serverTimestamp(),
-          pending: [uid], history: true, ...(x.text ? { text: x.text } : {}), ...(x.image ? { image: x.image } : {}),
+          pending: [uid], history: true, ...(x.text ? { text: x.text } : {}), ...(x.image ? { image: x.image } : {}), ...(x.tag ? { tag: x.tag } : {}),
         });
         ops++; bytes += size;
       }
@@ -161,6 +177,26 @@ async function managerChores() {
       await F.setDoc(F.doc(db, 'handoffs', uid), { count: old.length, at: F.serverTimestamp() });
     }
   } finally { choresRunning = false; }
+}
+
+// ---- المدير: نشر أسماء كرات كل موظف له ----
+let placesTimer = 0;
+const published = new Map(); // موظف ← آخر ما نُشر
+function publishPlacesSoon() { clearTimeout(placesTimer); placesTimer = setTimeout(() => publishPlaces().catch((e) => console.warn('places', e)), 1500); }
+window.addEventListener('sm:structure', () => { if (me?.role === 'manager') publishPlacesSoon(); });
+async function publishPlaces() {
+  if (me?.role !== 'manager') return;
+  const { loadStructure, placesOf, nodeById } = await import('./org-structure.js');
+  const st = await loadStructure();
+  const { db, F } = await api();
+  for (const [uid, m] of members) {
+    if (m.role !== 'employee') continue;
+    const names = [...new Set(placesOf(st, uid).map((x) => nodeById(st, x.node)?.name).filter(Boolean))].slice(0, 30);
+    const sig = JSON.stringify(names);
+    if (published.get(uid) === sig) continue;
+    await F.setDoc(F.doc(db, 'places', uid), { places: names, at: F.serverTimestamp() });
+    published.set(uid, sig);
+  }
 }
 
 // ---- غير المقروء ----

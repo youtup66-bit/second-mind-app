@@ -34,7 +34,11 @@ export async function loadStructure(orgName = 'القسم') {
   s.people ||= {};
   return s;
 }
-export const saveStructure = (s) => setSetting(KEY, s);
+export async function saveStructure(s) {
+  await setSetting(KEY, s);
+  // تُنشر أسماء كرات كل موظف له (ليختار منها عند النشر)
+  window.dispatchEvent(new Event('sm:structure'));
+}
 
 export const nodeById = (s, id) => s.nodes.find((n) => n.id === id) || null;
 export const childrenOf = (s, id) => s.nodes.filter((n) => n.parent === id);
