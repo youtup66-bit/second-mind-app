@@ -104,7 +104,8 @@ export function createMindGraph(canvas, nodesIn, linksIn, { onTap, onGroupTap, o
   let touched = false; // إن تحكّم المستخدم بالعرض لا نغيّره عليه تلقائياً
   let fitTimer = 0;
   // عمود أزرار التحكم فوق اللوحة: لا نضع الكرات تحته
-  const guard = { side: getComputedStyle(canvas).direction === 'rtl' ? 'right' : 'left', w: 46 };
+  // لا أزرار جانبية بعد الآن (الخيارات في القائمة المنسدلة)
+  const guard = { side: getComputedStyle(canvas).direction === 'rtl' ? 'right' : 'left', w: 0 };
   setTimeout(() => { if (!touched) animateTo(fitTarget()); }, 1600);
 
   // ---- اللمس: إصبع على كرة يسحبها، على الفراغ يحرّك المشهد، وإصبعان للتكبير والتصغير ----

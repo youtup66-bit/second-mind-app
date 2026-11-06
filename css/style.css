@@ -1044,3 +1044,14 @@ body.on-staffnav .topbar { display: none; }
 .g-tag { background: none; border: 0; padding: 2px 0; color: var(--wa-meta, var(--muted)); font: inherit; cursor: pointer; }
 .g-tag.is-on { color: var(--wa-green, var(--accent)); font-weight: 700; border-bottom: 2px solid currentColor; }
 .msg__tag { display: block; font-size: .72rem; color: var(--wa-meta, var(--muted)); margin-top: 2px; }
+
+/* ---- العقل الشخصي بأسلوب عقل المؤسسة ---- */
+body.on-mind .topbar { display: none; }
+.mind-full { position: fixed; inset: 0 0 calc(var(--tabbar-h) + env(safe-area-inset-bottom)) 0; z-index: 5; background: #0b0f14; }
+.mind-full .mind-canvas { position: absolute; inset: 0; width: 100%; height: 100% !important; border-radius: 0; background: none; }
+.mind-menu .mind-hint { text-align: center; color: #8a96a3; font-size: .88rem; margin: 0 0 10px; }
+.mind-words { position: static; display: flex; flex-direction: row; flex-wrap: wrap; justify-content: center; gap: 6px 18px; }
+.mind-words .text-btn { width: auto; height: auto; border: 0; background: none; border-radius: 0; color: #c9d3dd; font-size: .95rem; }
+.mind-words .text-btn[hidden] { display: none; }
+.mind-menu .space-ctrl { position: static; margin: 12px auto 0; max-width: 360px; background: none; border: 0; padding: 0; }
+.mind-menu .heat-legend { position: static; margin: 10px auto 0; width: max-content; background: none; }

@@ -134,31 +134,31 @@ export async function mount(root) {
   let model = buildModel(entries);
 
   root.innerHTML = `
-    <div class="mind-bar">
-      <p class="mind-hint muted" id="hint"></p>
-      <button class="tool" id="toggle-empty" hidden></button>
-      <button class="tool" id="add-cat">＋ قسم جديد</button>
-    </div>
-    <div class="mind-stage">
+    <div class="mind-full">
       <canvas class="mind-canvas" aria-label="خريطة أقسام عقلك. قرّب إصبعين أو باعدهما للتصغير والتكبير"></canvas>
-      <div class="zoom-ctrl" role="group" aria-label="التكبير">
-        <button type="button" data-zoom="in" aria-label="تكبير">＋</button>
-        <button type="button" data-zoom="out" aria-label="تصغير">－</button>
-        <button type="button" data-zoom="reset" aria-label="ملاءمة الشاشة">⟲</button>
-        <button type="button" data-zoom="style" aria-label="شكل الكرات: نقاط أو كرات" title="نقاط / كرات">◎</button>
-        <button type="button" data-zoom="mode" aria-label="التبديل بين الحرارة والحجم" title="الحرارة / الحجم">🌡</button>
-        <button type="button" data-zoom="space" aria-label="المسافة بين الكرات" title="المسافة بين الكرات">↔</button>
+      <button type="button" class="struct-handle" id="handle" aria-label="القائمة" aria-expanded="false"><span></span></button>
+      <div class="struct-menu mind-menu" id="menu" hidden>
+        <p class="mind-hint" id="hint"></p>
+        <div class="mind-words zoom-ctrl" role="group" aria-label="الخيارات">
+          <button type="button" class="text-btn" id="add-cat">قسم جديد</button>
+          <button type="button" class="text-btn" id="toggle-empty" hidden></button>
+          <button type="button" class="text-btn" data-zoom="reset">عرض الكل</button>
+          <button type="button" class="text-btn" data-zoom="style" id="style-word"></button>
+          <button type="button" class="text-btn" data-zoom="mode" id="mode-word"></button>
+          <button type="button" class="text-btn" data-zoom="space">المسافة</button>
+        </div>
+        <div class="space-ctrl" id="space-ctrl" hidden>
+          <label for="spacing">المسافة بين الكرات</label>
+          <input type="range" id="spacing" min="0.7" max="2.2" step="0.1">
+          <span id="spacing-val"></span>
+        </div>
+        <div class="heat-legend" id="heat-legend" hidden>
+          <span id="heat-min"></span>
+          <i style="background:linear-gradient(90deg, ${HEAT.join(', ')})"></i>
+          <span id="heat-max"></span>
+        </div>
       </div>
-      <div class="space-ctrl" id="space-ctrl" hidden>
-        <label for="spacing">المسافة بين الكرات</label>
-        <input type="range" id="spacing" min="0.7" max="2.2" step="0.1">
-        <span id="spacing-val"></span>
-      </div>
-      <div class="heat-legend" id="heat-legend" hidden>
-        <span id="heat-min"></span>
-        <i style="background:linear-gradient(90deg, ${HEAT.join(', ')})"></i>
-        <span id="heat-max"></span>
-      </div>
+      <button type="button" class="struct-name" id="mind-name" hidden></button>
     </div>
 
     <div class="sheet" id="sheet" hidden>
@@ -223,9 +223,28 @@ export async function mount(root) {
   };
   setHint();
 
-  const top = canvas.getBoundingClientRect().top;
-  const tabbar = document.querySelector('.tabbar').getBoundingClientRect().height;
-  canvas.style.height = `${Math.max(320, innerHeight - top - tabbar - 16)}px`;
+  // ---- بأسلوب عقل المؤسسة: ملء الشاشة، ونقطة متوهجة تُسدل الخيارات، واسم الكرة يفتح ملاحظاتها ----
+  const menu = root.querySelector('#menu');
+  const handle = root.querySelector('#handle');
+  const nameBtn = root.querySelector('#mind-name');
+  let picked = null;
+  const setMenu = (on) => {
+    menu.hidden = !on;
+    handle.setAttribute('aria-expanded', String(on));
+    handle.classList.toggle('is-open', on);
+  };
+  handle.addEventListener('click', () => setMenu(menu.hidden));
+  const showName = (n) => {
+    picked = n;
+    if (!n) { nameBtn.hidden = true; return; }
+    nameBtn.innerHTML = `<i class="sdot" style="background:${n.color}"></i><span>${n.label}</span>`;
+    nameBtn.hidden = false;
+  };
+  nameBtn.addEventListener('click', () => { if (picked && picked.id !== 'me') openSheet(picked.id); });
+  const renderWords = () => {
+    root.querySelector('#style-word').textContent = mindStyle === 'dots' ? 'كرات مضيئة' : 'نقاط';
+    root.querySelector('#mode-word').textContent = colorMode === 'heat' ? 'الحجم' : 'الحرارة';
+  };
 
   // ---- اللوحة ----
   function buildGraph() {
@@ -245,15 +264,11 @@ export async function mount(root) {
       spacing,
       flat: mindStyle === 'dots',
       // النقاط: لمسة أولى تُبرز الكرة وما يرتبط بها، والثانية تفتح ملاحظاتها
-      onSelect: (n) => {
-        if (!n) { setHint(); return; }
-        hint.textContent = n.id === 'me'
-          ? 'هذه أنت: كل الأقسام مرتبطة بك.'
-          : `«${n.label}» وما يرتبط بها. المسها مرة أخرى لعرض ملاحظاتها، أو المس الفراغ للعودة.`;
-      },
+      onSelect: (n) => { showName(n); if (n) setMenu(false); },
       groups: model.groups,
       groupLabels: labelsFor(model),
-      onTap: (n) => { if (n.id !== 'me') openSheet(n.id); },
+      // الكرات المضيئة: اللمس يفتح مباشرة؛ النقاط: لمسة ثانية على المختارة تفتحها أيضاً
+      onTap: (n) => { if (n.id !== 'me') openSheet(n.id); else showName(n); },
       onGroupTap: renameGroup,
     });
   }
@@ -358,7 +373,7 @@ export async function mount(root) {
     const z = e.target.closest('[data-zoom]')?.dataset.zoom;
     if (z === 'in') graph.zoomBy(1.35);
     else if (z === 'out') graph.zoomBy(1 / 1.35);
-    else if (z === 'reset') graph.resetView(); // ⟲ = ملاءمة كل الكرات للشاشة
+    else if (z === 'reset') { graph.resetView(); setMenu(false); } // ملاءمة كل الكرات للشاشة
     else if (z === 'space') spaceCtrl.hidden = !spaceCtrl.hidden;
     else if (z === 'style') {
       mindStyle = mindStyle === 'dots' ? 'balls' : 'dots';
@@ -377,8 +392,12 @@ export async function mount(root) {
         ? 'وضع الحرارة: الكرة بلون قسمها، والنواة في وسطها من الأبرد (ملاحظات أقل) إلى الأسخن (أكثر).'
         : 'وضع الحجم: الكرة تكبر بعدد ملاحظاتها، بلون قسمها.';
     }
+    renderWords();
   });
   renderLegend();
+  renderWords();
+  // أول مرة (لا ملاحظات بعد): نُظهر القائمة ليعرف مكانها
+  if (!model.total) setMenu(true);
 
   async function refresh() {
     entries = await getEntries();
