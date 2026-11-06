@@ -3,13 +3,14 @@
 import {
   CATEGORIES, PALETTE, categoryById, isCustom, addCategory, updateCategory, removeCategory,
 } from './categories.js';
-import { getEntries, getEntry, updateEntry, setSetting } from './storage.js';
+import { getEntries, getEntry, updateEntry, deleteEntry, setSetting } from './storage.js';
 import { setCategory } from './classifier.js';
 import { createSummary } from './summaries.js';
 import { SKINS } from './skins.js';
 import { normalize } from './recall.js';
 
 export { ACTION_IDS, actionsPrompt, actionsSchema } from './actions-spec.js';
+import { runOrgAction, ORG_ACTIONS } from './org-actions.js';
 
 // يجد قسماً باسمه (مع تسامح في الهمزات والتشكيل والتعريف) أو بمعرّفه
 function findCategory(name) {
@@ -26,7 +27,7 @@ const say = (ok, text, link) => ({ ok, text, link });
 // ctx: { entryId, setWaMode(on), setVoice(on), remount() }
 export async function executeActions(actions, ctx = {}) {
   const results = [];
-  for (const a of (actions || []).slice(0, 6)) {
+  for (const a of (actions || []).slice(0, 8)) {
     try {
       results.push(await run(a, ctx));
     } catch (err) {
@@ -71,7 +72,10 @@ async function run(a, ctx) {
       return say(true, `وضعتُ رسالتك في «${c.label}»`);
     }
     case 'open_screen': {
-      const map = { mind: '#/mind', folder: '#/folder', summaries: '#/folder?summaries', settings: '#/settings' };
+      const map = {
+        mind: '#/mind', folder: '#/folder', summaries: '#/folder?summaries', settings: '#/settings',
+        structure: '#/structure', staff: '#/staff', points: '#/points', group: '#/group', org: '#/org',
+      };
       const to = map[String(a.target || v).toLowerCase()];
       if (!to) return say(false, 'شاشة غير معروفة');
       setTimeout(() => { location.hash = to; }, 1200);
@@ -129,7 +133,22 @@ async function run(a, ctx) {
       await setSetting('showEmptyCats', on);
       return say(true, on ? 'أظهرتُ الأقسام الفارغة' : 'أخفيتُ الأقسام الفارغة', '#/mind');
     }
+    case 'delete_note': {
+      const words = normalize(a.target || '').split(/\s+/).filter((w) => w.length > 1);
+      const scored = (await getEntries()).map((e) => ({ e, s: words.filter((w) => normalize(e.text).includes(w)).length })).sort((x, y) => y.s - x.s);
+      const hit = scored[0]?.s ? scored[0].e : null;
+      if (!hit) return say(false, 'لم أجد ملاحظة بهذا الوصف');
+      if (!confirm(`الذكاء يريد حذف هذه الملاحظة:\n\n«${hit.text.slice(0, 200)}»\n\nموافق؟`)) return say(false, 'لم تُحذف (ألغيتَ)');
+      await deleteEntry(hit.id);
+      return say(true, 'حذفتُ الملاحظة', '#/folder');
+    }
+    case 'set_theme': {
+      const theme = v.startsWith('p') || v.includes('بنفس') ? 'purple' : 'whatsapp';
+      await setSetting('appTheme', theme);
+      window.dispatchEvent(new CustomEvent('sm:setting', { detail: { key: 'appTheme', value: theme } }));
+      return say(true, theme === 'purple' ? 'غيّرتُ الألوان إلى البنفسجي' : 'غيّرتُ الألوان إلى ألوان واتساب');
+    }
     default:
-      return null;
+      return ORG_ACTIONS.has(a.action) ? runOrgAction(a) : null;
   }
 }

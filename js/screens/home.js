@@ -6,6 +6,8 @@ import {
 import { transcribe } from '../gemini.js';
 import { smartChat } from '../ai.js';
 import { executeActions } from '../actions.js';
+import { setActionContext } from '../actions-spec.js';
+import { orgContext } from '../org-actions.js';
 import { CATEGORIES, NONE, categoryById } from '../categories.js';
 import { classifyEntry, classifyPending, setCategory } from '../classifier.js';
 import { recall } from '../recall.js';
@@ -550,6 +552,8 @@ export async function mount(root) {
       const recent = await getMessages(HISTORY_LIMIT);
       const { used, memories } = await memoriesFor(text, recent);
       // طلب واحد يعيد الرد وتصنيف رسالتك معاً (توفيراً للحصة)، من Gemini أو من النموذج على الجهاز
+      // المدير: نُطلع الذكاء على عقل المؤسسة الحالي ليديره بالأسماء الصحيحة
+      setActionContext(await orgContext().catch(() => ''));
       const result = await smartChat(recent.map(({ role, text: t }) => ({ role, text: t })), {
         memories,
         onToken: (t) => streamInto(pending, t),
