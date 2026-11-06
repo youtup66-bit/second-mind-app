@@ -33,14 +33,15 @@ export async function mount(root) {
   if (location.hash.includes('summaries')) state.tab = 'summaries';
 
   root.innerHTML = `
-    <div class="seg" role="tablist" aria-label="عرض">
+    <div class="folder-words">
+    <div class="seg struct-tabs folder-tabs" role="tablist" aria-label="عرض">
       <button role="tab" data-tab="notes">الملاحظات</button>
       <button role="tab" data-tab="summaries">الملخصات</button>
     </div>
     <div class="pane" data-pane="notes">
     ${status.needsReminder && entries.length ? `
       <a class="banner" href="#/settings?backup">
-        💾 ${status.lastExportAt ? 'مرّ أسبوع على آخر نسخة احتياطية.' : 'لم تحفظ نسخة احتياطية بعد.'}
+        ${status.lastExportAt ? 'مرّ أسبوع على آخر نسخة احتياطية.' : 'لم تحفظ نسخة احتياطية بعد.'}
         <strong>احفظها الآن</strong>
       </a>` : ''}
     <div class="search">
@@ -50,15 +51,16 @@ export async function mount(root) {
     <div id="list"></div>
     </div>
     <div class="pane" data-pane="summaries">
-      <section class="card">
+      <section class="sum-ask">
         <h2>اطلب ملخصاً</h2>
         <p class="muted">تُرسل ملاحظات الفترة المختارة إلى Gemini ليكتب ملخصها، ويُحفظ الملخص على جهازك.</p>
         <div class="row" id="sum-actions">
-          ${Object.entries(PERIODS).map(([k, v]) => `<button class="btn btn--ghost" data-period="${k}">${v.label}</button>`).join('')}
+          ${Object.entries(PERIODS).map(([k, v]) => `<button class="text-btn" data-period="${k}">${v.label}</button>`).join('')}
         </div>
         <p class="status" id="sum-status" role="status"></p>
       </section>
       <div id="sums"></div>
+    </div>
     </div>
   `;
   const q = root.querySelector('#q');
@@ -88,7 +90,7 @@ export async function mount(root) {
       return !nq || norm(e.text).includes(nq) || norm(e.meta?.title).includes(nq);
     });
     if (!entries.length) {
-      list.innerHTML = `<p class="empty muted">مجلدك فارغ. تحدّث مع <a href="#/home">الرفيقة</a> وستظهر ملاحظاتك هنا.</p>`;
+      list.innerHTML = `<p class="empty muted">مجلدك فارغ. تحدّث في <a href="#/home">المحادثة</a> وستظهر ملاحظاتك هنا.</p>`;
       return;
     }
     if (!shown.length) {
