@@ -1055,3 +1055,15 @@ body.on-mind .topbar { display: none; }
 .mind-words .text-btn[hidden] { display: none; }
 .mind-menu .space-ctrl { position: static; margin: 12px auto 0; max-width: 360px; background: none; border: 0; padding: 0; }
 .mind-menu .heat-legend { position: static; margin: 10px auto 0; width: max-content; background: none; }
+
+/* ---- لوحات العقل: كلمات بلا مربعات ---- */
+.words-sheet .sheet__head { align-items: center; }
+.words-sheet .text-btn[hidden] { display: none; }
+.words-sheet .sheet__sum { width: 100%; text-align: start; margin: 0; }
+.words-sheet .sheet__sum[hidden] { display: none; }
+.words-sheet .notes { gap: 0; }
+.words-sheet .note { background: none; border: 0; border-radius: 0; padding: 12px 2px; border-bottom: 1px solid var(--border); box-shadow: none; }
+.words-sheet .note:last-child { border-bottom: 0; }
+.words-sheet .row { gap: 18px; }
+.words-sheet .chips-wrap { gap: 6px 16px; }
+.words-sheet .chips-wrap .chip { border: 0; background: none; padding: 4px 0; color: var(--c, var(--accent)); box-shadow: none; }

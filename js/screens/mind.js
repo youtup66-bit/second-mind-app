@@ -161,30 +161,30 @@ export async function mount(root) {
       <button type="button" class="struct-name" id="mind-name" hidden></button>
     </div>
 
-    <div class="sheet" id="sheet" hidden>
+    <div class="sheet words-sheet" id="sheet" hidden>
       <div class="sheet__panel sheet__panel--tall" role="dialog" aria-labelledby="sheet-title">
         <div class="sheet__head">
           <span class="sheet__dot" id="sheet-dot"></span>
           <p class="sheet__title" id="sheet-title"></p>
-          <button class="btn btn--ghost sheet__close" id="edit-cat" hidden aria-label="تعديل القسم">✏️</button>
-          <button class="btn btn--ghost sheet__close" id="sheet-close" aria-label="إغلاق">✕</button>
+          <button class="text-btn" id="edit-cat" hidden>تعديل</button>
+          <button class="text-btn text-btn--muted" id="sheet-close">إغلاق</button>
         </div>
         <p class="muted sheet__desc" id="sheet-desc" hidden></p>
         <div class="sheet__body">
-          <button class="btn btn--ghost sheet__sum" id="find-old" hidden>🔎 ابحث في ملاحظاتي القديمة عمّا يناسبه</button>
+          <button class="text-row text-row--accent sheet__sum" id="find-old" hidden>ابحث في ملاحظاتي القديمة عمّا يناسبه</button>
           <div id="find-results"></div>
-          <button class="btn btn--ghost sheet__sum" id="sum-cat">✨ لخّص هذا القسم</button>
+          <button class="text-row text-row--accent sheet__sum" id="sum-cat">لخّص هذا القسم</button>
           <div id="cat-sum"></div>
           <ul class="notes" id="notes"></ul>
         </div>
       </div>
     </div>
 
-    <div class="sheet" id="cat-form" hidden>
+    <div class="sheet words-sheet" id="cat-form" hidden>
       <div class="sheet__panel sheet__panel--tall" role="dialog" aria-labelledby="form-title">
         <div class="sheet__head">
           <p class="sheet__title" id="form-title">قسم جديد</p>
-          <button class="btn btn--ghost sheet__close" data-close aria-label="إغلاق">✕</button>
+          <button class="text-btn text-btn--muted" data-close>إغلاق</button>
         </div>
         <div class="sheet__body cat-form">
           <div id="suggest-box">
@@ -193,14 +193,14 @@ export async function mount(root) {
           </div>
           <label for="cat-name">اسم القسم</label>
           <input id="cat-name" type="text" maxlength="24" placeholder="مثلاً: صحة ورياضة">
-          <label for="cat-desc">ماذا يدخل فيه؟ <span class="muted">(يساعد الرفيقة على التصنيف)</span></label>
+          <label for="cat-desc">ماذا يدخل فيه؟ <span class="muted">(يساعد الذكاء على التصنيف)</span></label>
           <textarea id="cat-desc" rows="2" maxlength="160" placeholder="مثلاً: النوم، الأكل، الرياضة، المواعيد الطبية"></textarea>
           <label>اللون</label>
           <div class="swatches" id="swatches" role="radiogroup" aria-label="لون القسم"></div>
           <p class="status" id="form-status" role="status"></p>
           <div class="row">
-            <button class="btn" id="save-cat">حفظ</button>
-            <button class="btn btn--danger" id="delete-cat" hidden>حذف القسم</button>
+            <button class="text-btn" id="save-cat">حفظ</button>
+            <button class="text-btn text-btn--danger" id="delete-cat" hidden>حذف القسم</button>
           </div>
           <p class="muted" id="delete-note" hidden>عند الحذف تنتقل ملاحظات هذا القسم إلى "تفكير" ولا تضيع.</p>
         </div>
@@ -489,8 +489,8 @@ export async function mount(root) {
           </label></li>`;
         }).join('')}</ul>
         <div class="row">
-          <button class="btn" id="move-picked">انقل المحدد (${list.length})</button>
-          <button class="btn btn--ghost" id="cancel-picked">إلغاء</button>
+          <button class="text-btn" id="move-picked">انقل المحدد (${list.length})</button>
+          <button class="text-btn text-btn--muted" id="cancel-picked">إلغاء</button>
         </div>`;
     } catch (err) {
       findBox.innerHTML = `<p class="status status--err">${esc(err.message)}</p>`;
@@ -612,7 +612,7 @@ export async function mount(root) {
       // قسم جديد: نفتح نافذته ونقترح البحث في الملاحظات القديمة
       if (created && entries.some((e) => e.category && e.category !== 'none')) {
         openSheet(created.id);
-        findBox.innerHTML = '<p class="muted">قسمك جاهز. هل أبحث في ملاحظاتك القديمة عمّا يناسبه؟ اضغط 🔎 بالأعلى.</p>';
+        findBox.innerHTML = '<p class="muted">قسمك جاهز. هل أبحث في ملاحظاتك القديمة عمّا يناسبه؟ اضغط «ابحث في ملاحظاتي القديمة» بالأعلى.</p>';
       }
     } catch (err) {
       formStatus.className = 'status status--err';
