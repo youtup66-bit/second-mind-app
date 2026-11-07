@@ -65,6 +65,24 @@ export async function api() {
   try { fb = await loading; return fb; } finally { loading = null; }
 }
 
+// اتصال ثانٍ منفصل (لأدوات المطوّر في نسخة التجربة فقط): ينشئ حسابات تجريبية ويكتب باسمها
+// دون أن يُخرج المطوّر من حسابه في الاتصال الأساسي
+export async function secondaryApi(tag = 'seed') {
+  const { IS_DEV } = await import('./env.js');
+  if (!IS_DEV) throw new CloudError('أدوات المطوّر في نسخة التجربة فقط.', 'FORBIDDEN');
+  const cfg = await cloudConfig();
+  if (!cfg) throw new CloudError('لم تُربط المؤسسة بعد.', 'NO_CONFIG');
+  const [appMod, A, F] = await Promise.all([
+    import(`${FB}/firebase-app.js`), import(`${FB}/firebase-auth.js`), import(`${FB}/firebase-firestore.js`),
+  ]);
+  const name = `dev-${tag}-${cfg.projectId}`;
+  const app = appMod.getApps().find((a) => a.name === name) || appMod.initializeApp(cfg, name);
+  const auth = A.getAuth(app);
+  await A.setPersistence(auth, A.inMemoryPersistence);
+  return { auth, db: F.getFirestore(app), A, F };
+}
+export const usernameEmail = (u) => toEmail(u);
+
 // ---- أخطاء بالعربية ----
 function explain(err) {
   if (err instanceof CloudError) return err;

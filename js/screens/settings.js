@@ -1,4 +1,5 @@
 // شاشة الإعدادات: مفتاح Gemini يُحفظ على الجهاز فقط
+import { IS_DEV } from '../env.js';
 import { getSetting, setSetting, deleteSetting, clearAll, clearMessages } from '../storage.js';
 import { DEFAULT_MODEL, DEFAULT_LITE_MODEL, testKey, getUsage, ttsCooldownUntil, clearTtsCooldown, economyMode } from '../gemini.js';
 import { canSpeak, canListen, canRecord, canBrowserListen, speak, stopSpeaking, unlockAudio, voicesReady } from '../voice.js';
@@ -16,6 +17,7 @@ import { aiMode } from '../ai.js';
 // يحفظ إعداداً ويُعلم بقية التطبيق (مثل الرفيقة الطافية)
 // وصف مختصر تحت اسم كل قسم (مثل إعدادات واتساب)
 const GROUP_HINTS = {
+  'المطوّر': 'المؤسسة التجريبية، والدخول بأي حساب (نسخة التجربة فقط)',
   'المؤسسة': 'الدخول، وحساب المدير، والموظفون',
   'المظهر': 'ألوان التطبيق: واتساب أو البنفسجي',
   'تثبيت التطبيق': 'التثبيت، والإصدار، والتحقق من التحديثات',
@@ -99,6 +101,11 @@ export async function mount(root) {
   const rateScale = Number(await getSetting('voiceRateScale', 1));
 
   root.innerHTML = `
+    ${IS_DEV ? `<section class="card" id="dev">
+      <h2>المطوّر</h2>
+      <div id="dev-body"><p class="muted">لحظة…</p></div>
+    </section>` : ''}
+
     <section class="card" id="org">
       <h2>المؤسسة</h2>
       <p class="muted">حساب للمدير والموظفين، ومحادثة مشتركة ونقاط وتقارير. ملاحظاتك الشخصية تبقى على جهازك.</p>
@@ -297,10 +304,11 @@ export async function mount(root) {
   `;
   // الموظف: لا رفيقة ولا عقل ولا ذكاء؛ نُبقي الحساب والمظهر والتثبيت والخصوصية فقط
   if (await getSetting('orgRole', null) === 'employee') {
-    const keep = new Set(['org', 'look', 'install', 'privacy']);
+    const keep = new Set(['org', 'look', 'install', 'privacy', 'dev']); // dev: أدوات المطوّر في نسخة التجربة
     root.querySelectorAll(':scope > section.card').forEach((sec) => { if (!keep.has(sec.id)) sec.hidden = true; });
   }
   const openGroup = groupSettings(root);
+  if (IS_DEV) renderDevTools(root.querySelector('#dev-body')).catch((e) => { root.querySelector('#dev-body').textContent = e.message; });
   // رابط مباشر إلى قسم (مثل #/settings?local) يفتحه
   const target = ['backup', 'talk', 'floating', 'local', 'voice', 'install'].find((id) => location.hash.includes(id));
   if (target) openGroup(root.querySelector(`#${target}`));
@@ -864,4 +872,51 @@ export async function mount(root) {
 export function unmount() {
   stopSpeaking();
   cleanup.splice(0).forEach((fn) => fn());
+}
+
+// ---- أدوات المطوّر (نسخة التجربة فقط) ----
+async function renderDevTools(box) {
+  const { devAccounts, seedDemoOrg, switchTo } = await import('../dev-tools.js');
+  const { session } = await import('../cloud.js');
+  const esc = (t) => String(t ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const s = await session().catch(() => null);
+  const acc = await devAccounts();
+  const me = s?.member?.username;
+  const all = acc ? [{ ...acc.manager, role: 'المدير' }, ...acc.people.map((p) => ({ ...p, role: 'موظف' }))] : [];
+  box.innerHTML = `
+    <p class="muted">هذه الأدوات في نسخة التجربة وحدها، وحساباتها وهمية في مشروع Firebase التجريبي.</p>
+    <h3 class="subhead">الدخول كـ</h3>
+    ${all.length ? `<ul class="rep-list">${all.map((a, i) => `<li><span><b>${esc(a.name)}</b><small>${a.role} · ${esc(a.username)}</small></span>
+      ${a.username === me ? '<span class="muted">الحالي</span>' : `<button type="button" class="text-btn" data-as="${i}">ادخل</button>`}</li>`).join('')}</ul>`
+      : '<p class="muted">أنشئ المؤسسة التجريبية أولاً لتظهر الحسابات هنا.</p>'}
+    <p class="muted">قريباً مع الصلاحيات المتدرجة (A13): مسؤول شعبة، مسؤول وحدة، معاون، الذاتية.</p>
+    <h3 class="subhead">المؤسسة التجريبية</h3>
+    ${s?.member?.role === 'manager' ? `
+      <p class="muted">تُنشئ ٥ موظفين وهميين، وهيكلاً بشعبتين ووحداتهما ومشروعاً، وأعمالاً ونقاطاً ومنشورات. يمكن تشغيلها مرة أخرى بأمان.</p>
+      <label class="org-field"><span>كلمة مرور حسابك (المدير) للعودة إليه من "الدخول كـ"</span>
+        <input type="password" id="dev-pass" autocomplete="current-password" dir="ltr"></label>
+      <button type="button" class="text-btn" id="dev-seed">إنشاء المؤسسة التجريبية</button>
+      <p class="status" id="dev-msg" role="status"></p>`
+      : '<p class="muted">ادخل بحساب المدير في نسخة التجربة لإنشائها.</p>'}`;
+  box.querySelectorAll('[data-as]').forEach((b) => b.addEventListener('click', async () => {
+    b.disabled = true;
+    b.textContent = 'لحظة…';
+    try { await switchTo(all[Number(b.dataset.as)]); } catch (err) { b.textContent = err.message; }
+  }));
+  box.querySelector('#dev-seed')?.addEventListener('click', async (e) => {
+    const msg = box.querySelector('#dev-msg');
+    const pass = box.querySelector('#dev-pass').value;
+    if (!pass) { msg.textContent = 'اكتب كلمة مرور حسابك أولاً.'; msg.className = 'status status--err'; return; }
+    e.currentTarget.disabled = true;
+    try {
+      const n = await seedDemoOrg({ managerPassword: pass }, (t) => { msg.className = 'status'; msg.textContent = t; });
+      msg.className = 'status status--ok';
+      msg.textContent = `جاهزة ✓ ${n} موظفين وهيكل وأعمال ومنشورات. افتح عقل المؤسسة والمجموعة لتراها.`;
+      setTimeout(() => renderDevTools(box), 1500);
+    } catch (err) {
+      msg.className = 'status status--err';
+      msg.textContent = err.message;
+      e.currentTarget.disabled = false;
+    }
+  });
 }

@@ -3,7 +3,7 @@
 // الخطوط: المخزّن أولاً. طلبات Gemini لا تمر عبر المخزّن أبداً.
 // نسخة التجربة (‎/dev/‎) لها مخازنها، فلا تمس النسخة الحقيقية
 const PREFIX = /\/dev\/$/.test(new URL(self.registration.scope).pathname) ? 'second-mind-dev' : 'second-mind';
-const VERSION = 75;
+const VERSION = 76;
 const CACHE = `${PREFIX}-v${VERSION}`;
 const ASSETS = [
   './',
@@ -17,6 +17,7 @@ const ASSETS = [
   './js/app.js',
   './js/storage.js',
   './js/env.js',
+  './js/dev-tools.js',
   './js/categories.js',
   './js/mind-graph.js',
   './js/skins.js',
