@@ -232,10 +232,11 @@ export async function mount(root) {
     holdMic?.stop();
   });
 
+  // نبدأ المزامنة أولاً: هي التي تحدد أرشيف أي حساب يُعرض
+  await startGroupSync().catch((err) => say(esc(err.message)));
   await renderAll();
   renderStatus();
   markSeen();
-  startGroupSync().then(renderStatus).catch((err) => say(esc(err.message)));
   if (!groupMe()) renderStatus();
 }
 

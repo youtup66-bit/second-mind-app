@@ -123,11 +123,24 @@ export const clearMessages = () =>
 
 // ---- مجموعة المؤسسة ----
 // { id, from, fromName, text?, image?, sentAt, mine, status: 'queued'|'sent'|'received' }
-export const putGroupMessage = (m) => run('group', 'readwrite', (s) => s.put(m));
-export const getGroupMessage = (id) => run('group', 'readonly', (s) => s.get(id));
+// الأرشيف منفصل لكل حساب على الجهاز نفسه (مثلاً عند تبديل الحسابات في نسخة التجربة):
+// أول حساب استخدم الجهاز يبقى أرشيفه كما هو، ولكل حساب غيره سجلات بمفتاح يبدأ بمعرّفه.
+let groupAcct = null, groupOwner = null;
+export async function setGroupAccount(uid) {
+  groupOwner = await getSetting('groupOwner', null);
+  if (!groupOwner && uid) { groupOwner = uid; await setSetting('groupOwner', uid); }
+  groupAcct = uid || null;
+}
+const isOwner = () => !groupAcct || groupAcct === groupOwner;
+const gKey = (mid) => (isOwner() ? mid : `${groupAcct}|${mid}`);
+const fromRec = (r) => r && ({ ...r, id: r.mid || r.id });
+const mineRec = (r) => (isOwner() ? !r.acct || r.acct === groupOwner : r.acct === groupAcct);
+export const putGroupMessage = (m) =>
+  run('group', 'readwrite', (s) => s.put({ ...m, id: gKey(m.id), mid: m.id, ...(groupAcct ? { acct: groupAcct } : {}) }));
+export const getGroupMessage = (id) => run('group', 'readonly', (s) => s.get(gKey(id))).then(fromRec);
 export async function getGroupMessages() {
   const all = await run('group', 'readonly', (s) => s.getAll());
-  return all.sort((a, b) => a.sentAt - b.sentAt);
+  return all.filter(mineRec).map(fromRec).sort((a, b) => a.sentAt - b.sentAt);
 }
 export const clearGroup = () => run('group', 'readwrite', (s) => s.clear());
 

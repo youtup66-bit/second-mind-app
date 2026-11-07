@@ -2,7 +2,7 @@
 // السحابة تنقل فقط: كل جهاز يحذف نفسه من قائمة المنتظرين عند الاستلام، وآخر مستلم يحذف الرسالة.
 // المدير يحتفظ بالأرشيف كاملاً، ويرسله لكل موظف جديد مرة واحدة.
 import { api, session } from './cloud.js';
-import { putGroupMessage, getGroupMessage, getGroupMessages, getSetting, setSetting } from './storage.js';
+import { putGroupMessage, getGroupMessage, getGroupMessages, getSetting, setSetting, setGroupAccount } from './storage.js';
 
 export const groupEvents = new EventTarget(); // message {msg} · update {msg} · members · status
 const emit = (type, detail) => groupEvents.dispatchEvent(new CustomEvent(type, { detail }));
@@ -29,6 +29,7 @@ export async function startGroupSync() {
     const s = await session().catch(() => null);
     if (!s?.member) return false;
     me = { uid: s.user.id, name: s.member.display_name, role: s.member.role };
+    await setGroupAccount(me.uid); // أرشيف هذا الحساب وحده
     const { db, F } = await api();
 
     unsubs.push(F.onSnapshot(F.collection(db, 'members'), (snap) => {
