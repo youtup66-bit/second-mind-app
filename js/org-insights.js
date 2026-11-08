@@ -119,12 +119,12 @@ export const listTasks = () => getSetting('orgTasks', []);
 async function saveTasks(list) { await setSetting('orgTasks', list); changed(); }
 
 // تُنشر في مجموعة المؤسسة ليراها الموظف، وتُحفظ هنا لمتابعتها
+// تكليف من المساعد: يصير مهمة حقيقية في «المهام» (يرد عليها المكلَّف بتأشيرة العمل)
 export async function assignTask({ user, name, text, workId = null }) {
-  const task = { id: uid(), user, name, text: String(text).trim().slice(0, 400), workId, at: Date.now(), done: false };
-  await saveTasks([task, ...(await listTasks())]);
   await startGroupSync();
-  await sendGroup({ text: `📌 مهمة إلى ${name}: ${task.text}` });
-  return task;
+  const { sendTask } = await import('./tasks.js');
+  const t = await sendTask({ to: user, title: String(text).trim().slice(0, 120) });
+  return { id: t.id, user, name, text: t.title, workId, at: t.createdAt, done: false };
 }
 export async function completeTask(id) {
   const list = await listTasks();

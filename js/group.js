@@ -155,6 +155,13 @@ window.addEventListener('sm:signout', stopGroupSync);
 // ---- الاستلام ----
 async function receive(d, F) {
   const x = d.data();
+  // المهام لا تظهر في المجموعات: لها شاشتها
+  if (x.task) {
+    try { await (await import('./tasks.js')).onTaskMessage(x); } catch (e) { console.warn('task', e); }
+    const rest = (x.pending || []).filter((u) => u !== me.uid);
+    (rest.length ? F.updateDoc(d.ref, { pending: F.arrayRemove(me.uid) }) : F.deleteDoc(d.ref)).catch(() => {});
+    return;
+  }
   if (x.room && x.room !== GENERAL) await roomsReady;
   const id = x.mid || d.id;
   if (!(await getGroupMessage(id))) {
@@ -162,6 +169,7 @@ async function receive(d, F) {
       id, from: x.from, fromName: x.fromName, text: x.text || '', image: x.image || null, ...(x.tag ? { tag: x.tag } : {}),
       // اسم المجموعة يُحفظ مع الرسالة (يبقى ظاهراً لو غادرها أو حُذفت)
       room: x.room || GENERAL, ...(x.room && rooms.get(x.room)?.name ? { roomName: rooms.get(x.room).name } : {}),
+      ...(x.work ? { work: x.work } : {}),
       sentAt: x.sentAt, mine: x.from === me.uid, status: 'received', receivedAt: Date.now(),
     };
     await putGroupMessage(m);
@@ -173,7 +181,8 @@ async function receive(d, F) {
 }
 
 // ---- الإرسال ----
-export async function sendGroup({ text = '', image = null, tag = '', room = GENERAL }) {
+// work: عمل مؤشَّر { id, name, count } (من رد المهمة) يُحسب في النقاط مباشرة
+export async function sendGroup({ text = '', image = null, tag = '', room = GENERAL, work = null }) {
   if (!me) throw new Error('لم تدخل إلى المؤسسة بعد.');
   text = String(text).trim().slice(0, 4000);
   if (!text && !image) return null;
@@ -188,7 +197,7 @@ export async function sendGroup({ text = '', image = null, tag = '', room = GENE
   const roomName = room === GENERAL ? '' : rooms.get(room).name;
   const m = {
     id: ref.id, from: me.uid, fromName: me.name, text, image, sentAt: Date.now(), mine: true, status: 'queued', room,
-    ...(roomName ? { roomName } : {}), ...(tag ? { tag } : {}),
+    ...(roomName ? { roomName } : {}), ...(tag ? { tag } : {}), ...(work ? { work } : {}),
   };
   await putGroupMessage(m);
   emit('message', { msg: m });
@@ -215,7 +224,7 @@ async function deliver(m) {
   try {
     await F.setDoc(F.doc(db, 'relay', m.id), {
       mid: m.id, from: me.uid, fromName: me.name, sentAt: m.sentAt, createdAt: F.serverTimestamp(), pending,
-      ...(room !== GENERAL ? { room } : {}),
+      ...(room !== GENERAL ? { room } : {}), ...(m.work ? { work: m.work } : {}),
       ...(m.text ? { text: m.text } : {}), ...(m.image ? { image: m.image } : {}), ...(m.tag ? { tag: m.tag } : {}),
     });
     await done('sent');
@@ -291,6 +300,7 @@ window.addEventListener('sm:structure', () => { if (me?.role === 'manager') publ
 // صُنّفت منشورات أو تغيّرت النقاط: تتحدث عقول الفروع وتقييماتها
 window.addEventListener('sm:orgmind', () => { if (me?.role === 'manager') publishRoomsSoon(); });
 window.addEventListener('sm:points', () => { if (me?.role === 'manager') publishRoomsSoon(); });
+window.addEventListener('sm:works', () => { if (me?.role === 'manager') publishRoomsSoon(); });
 
 const BALL_KINDS = ['division', 'unit', 'section', 'custom'];
 // من يضيفه الموظف مباشرة: من في كراته وما تحتها (الكرة المخصصة: من فيها)
@@ -380,6 +390,14 @@ async function doPublishRooms() {
     published[`p_${uid}`] = sig;
   }
   await setSetting(ROOMS_KEY, published);
+  // تأشيرات العمل (أسماء الأعمال) للرد على المهام
+  const { getWorks } = await import('./points.js');
+  const works = await getWorks();
+  const wsig = JSON.stringify(works.map((w) => [w.id, w.name]));
+  if (published.catalog !== wsig) {
+    await (await import('./tasks.js')).publishCatalog(works).then(() => { published.catalog = wsig; }).catch((e) => console.warn('catalog', e));
+    await setSetting(ROOMS_KEY, published);
+  }
   // فرع كل مسؤول
   const { publishBranches } = await import('./org-branches.js');
   await publishBranches(st, members).catch((e) => console.warn('branches', e));

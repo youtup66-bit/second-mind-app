@@ -1,7 +1,7 @@
 rules_version = '2';
 
 // عقلي الثاني: قواعد حماية المؤسسة على Firestore
-// إصدار القواعد: 9 (عقل الفروع وتقييماتها)
+// إصدار القواعد: 10 (المهام وتأشيرات العمل)
 // المرحلة ١: الحسابات (المدير، والموظفون، والدعوات)
 //
 // انسخ هذا الملف كاملاً في Firebase ← Firestore Database ← Rules، ثم اضغط Publish.
@@ -112,7 +112,10 @@ service cloud.firestore {
     // وآخر مستلم يحذف الرسالة من السحابة. الأرشيف الدائم على جوال المدير، وكل موظف يحتفظ بما وصله.
     match /relay/{id} {
       function validMsg(d) {
-        return d.keys().hasOnly(['mid', 'from', 'fromName', 'text', 'image', 'tag', 'room', 'sentAt', 'createdAt', 'pending', 'history'])
+        return d.keys().hasOnly(['mid', 'from', 'fromName', 'text', 'image', 'tag', 'room', 'sentAt', 'createdAt', 'pending', 'history', 'task', 'work'])
+          // المهام: new (من مسؤول لمن تحته) أو update (رد المكلَّف)؛ والعمل المؤشَّر في منشور الإنجاز
+          && (!('task' in d) || (d.task is map && d.task.kind in ['new', 'update'] && d.task.id is string && d.task.id.size() <= 64))
+          && (!('work' in d) || (d.work is map && d.work.id is string && d.work.count is int && d.work.count >= 1 && d.work.count <= 50))
           && (!('tag' in d) || text(d.tag, 60))
           && (!('room' in d) || (d.room is string && d.room.size() <= 64))
           && d.mid is string && d.mid.size() <= 64
@@ -133,6 +136,9 @@ service cloud.firestore {
         && request.resource.data.from == request.auth.uid
         && request.resource.data.fromName == get(me()).data.displayName
         && !(request.auth.uid in request.resource.data.pending)
+        // مهمة جديدة: رئيس القسم لأي أحد، والمسؤول لمن في فرعه فقط (team ينشره هاتف رئيس القسم)
+        && (!('task' in request.resource.data) || request.resource.data.task.kind != 'new' || isManager()
+            || (exists(branch(request.auth.uid)) && get(branch(request.auth.uid)).data.team.toSet().hasAll(request.resource.data.pending.toSet())))
         // مجموعة كرة: المرسل من أعضائها، ولا تصل إلا لأعضائها
         && (!('room' in request.resource.data) || request.resource.data.room == 'general'
             || (request.auth.uid in get(room(request.resource.data.room)).data.members
@@ -218,7 +224,7 @@ service cloud.firestore {
       allow get: if signedIn() && (uid == request.auth.uid || isManager());
       allow list: if isManager();
       allow create, update: if isManager()
-        && request.resource.data.keys().hasOnly(['heads', 'nodes', 'people', 'perms', 'manage', 'mind', 'evals', 'at'])
+        && request.resource.data.keys().hasOnly(['heads', 'nodes', 'people', 'perms', 'manage', 'mind', 'evals', 'team', 'at'])
         && request.resource.data.manage is list && request.resource.data.manage.size() <= 500
         && request.resource.data.at == request.time;
       allow delete: if isManager();
@@ -232,6 +238,16 @@ service cloud.firestore {
         && request.resource.data.payload is map
         && request.resource.data.at == request.time;
       allow get, list, delete: if isManager();
+    }
+
+    // قائمة تأشيرات العمل (أسماء الأعمال فقط، بلا نقاطها): يختار منها الموظف عند الرد على مهمة
+    match /catalog/{id} {
+      allow get: if isMember();
+      allow create, update: if isManager()
+        && request.resource.data.keys().hasOnly(['list', 'at'])
+        && request.resource.data.list is list && request.resource.data.list.size() <= 200
+        && request.resource.data.at == request.time;
+      allow delete: if isManager();
     }
 
     // أماكن الموظف في عقل المؤسسة: أسماء كراته، ومن يستطيع إضافتهم مباشرة لمجموعة محادثة (من في وحدته وما تحتها)

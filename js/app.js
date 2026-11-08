@@ -8,6 +8,7 @@ import * as staff from './screens/staff.js';
 import * as group from './screens/group.js';
 import * as chats from './screens/chats.js';
 import * as branch from './screens/branch.js';
+import * as tasks from './screens/tasks.js';
 import * as structure from './screens/structure.js';
 import * as points from './screens/points.js';
 import * as reports from './screens/reports.js';
@@ -21,7 +22,7 @@ import { getSetting } from './storage.js';
 import { IS_DEV } from './env.js';
 import { loadCategories } from './categories.js';
 
-const routes = { home, mind, folder, settings, org, join: org, staff, group, chats, branch, structure, points, reports };
+const routes = { home, mind, folder, settings, org, join: org, staff, group, chats, branch, tasks, structure, points, reports };
 const app = document.getElementById('app');
 const titleEl = document.getElementById('screen-title');
 
@@ -29,7 +30,7 @@ let current = null;
 let navId = 0;
 
 // الموظف: منشورات الأعمال والإعدادات فقط (لا عقل ولا رفيقة ولا ذكاء)
-const EMPLOYEE_ROUTES = new Set(['group', 'chats', 'branch', 'settings', 'org', 'join']);
+const EMPLOYEE_ROUTES = new Set(['group', 'chats', 'branch', 'tasks', 'settings', 'org', 'join']);
 // ما يفتحه المسؤول بحسب خيارات إظهاره (يقررها رئيس القسم)
 const officialAllows = (name) => {
   const p = groupBranch()?.perms || {};
@@ -59,7 +60,7 @@ async function navigate() {
   app.replaceChildren(view);
   titleEl.textContent = screen.title;
   document.body.classList.toggle('on-home', screen === home);
-  document.body.classList.toggle('on-group', screen === group || screen === chats);
+  document.body.classList.toggle('on-group', screen === group || screen === chats || screen === tasks);
   document.body.classList.toggle('on-structure', screen === structure || screen === branch);
   document.body.classList.toggle('on-mind', screen === mind);
   document.body.classList.toggle('on-staffnav', screen === staff || screen === points || screen === reports);
@@ -102,7 +103,7 @@ function applyRole(next) {
   role = next || null;
   const tab = document.querySelector('.tabbar__item[data-route="staff"]');
   if (tab) tab.hidden = role !== 'manager';
-  for (const r of ['group', 'chats']) {
+  for (const r of ['group', 'chats', 'tasks']) {
     const t = document.querySelector(`.tabbar__item[data-route="${r}"]`);
     if (t) t.hidden = !role;
   }
@@ -137,6 +138,18 @@ groupEvents.addEventListener('branch', syncMindTab);
 window.addEventListener('sm:mindview', syncMindTab);
 
 // عدد رسائل المجموعة غير المقروءة على التبويب
+// المهام: الجديدة عليّ، وما لم يُنشر فيه منذ ١٢ ساعة مما أرسلتُه
+async function refreshTaskBadge() {
+  const badge = document.querySelector('.tabbar__item[data-route="tasks"] .tabbar__badge');
+  if (!badge || !role) return;
+  const { unseenCount } = await import('./tasks.js');
+  const n = await unseenCount().catch(() => 0);
+  badge.textContent = n > 99 ? '99+' : String(n);
+  badge.hidden = !n;
+}
+import('./tasks.js').then((t) => t.taskEvents.addEventListener('change', refreshTaskBadge));
+groupEvents.addEventListener('members', refreshTaskBadge);
+
 async function refreshBadge() {
   for (const [route, kind] of [['group', 'work'], ['chats', 'chat']]) {
     const badge = document.querySelector(`.tabbar__item[data-route="${route}"] .tabbar__badge`);
@@ -192,7 +205,11 @@ function notice(text) {
   el.addEventListener('click', () => el.remove());
   document.body.append(el);
 }
-const tickReminders = () => checkReminders((r) => notice(r.text)).catch(() => {});
+const tickReminders = () => {
+  checkReminders((r) => notice(r.text)).catch(() => {});
+  // مهام أرسلتُها ولم يُنشر فيها منذ ١٢ ساعة: ملاحظة «لم ينشر حتى الآن»
+  if (role) import('./tasks.js').then((t) => t.checkSilent((txt) => notice(`📌 ${txt}`))).then(refreshTaskBadge).catch(() => {});
+};
 tickReminders();
 setInterval(tickReminders, 30_000);
 document.addEventListener('visibilitychange', () => { if (!document.hidden) tickReminders(); });

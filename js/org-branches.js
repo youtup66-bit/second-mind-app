@@ -57,8 +57,9 @@ export function branchOf(st, uid, names, ctx = null) {
     const places = p.places.filter((pl) => ids.has(pl.node)).map((pl) => ({ node: pl.node, ...(pl.head ? { head: true } : {}), ...(pl.assistant ? { assistant: true } : {}) }));
     return places.length && names.has(u) ? { uid: u, name: names.get(u), places } : null;
   }).filter(Boolean);
-  const out = { heads, nodes, people, perms, manage: [...manage] };
   const inBranch = new Set(people.map((p) => p.uid));
+  // فريقه: من يستطيع تكليفهم بالمهام (من في فرعه عداه)
+  const out = { heads, nodes, people, perms, manage: [...manage], team: [...inBranch].filter((u) => u !== uid) };
   // عقل فرعه: تصنيف منشورات مشاريعه، والعامة من موظفيه، والمحادثات المُثرية التي هو فيها (الرسائل نفسها على جواله أصلاً)
   if (ctx && perms.mind) {
     const mind = {};

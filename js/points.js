@@ -13,6 +13,7 @@ const uid = () => Math.random().toString(36).slice(2, 10);
 export const getWorks = () => getSetting('orgWorks', []);
 async function saveWorks(list) {
   await setSetting('orgWorks', list);
+  window.dispatchEvent(new Event('sm:works')); // تُنشر أسماء الأعمال كتأشيرات للرد على المهام
   // الفحص يبدأ من لحظة إنشاء أول عمل (لا نعيد احتساب الماضي كله)
   if (!(await getSetting('pointsSince', 0))) await setSetting('pointsSince', Date.now());
   changed();
@@ -116,7 +117,23 @@ export async function scan() {
     const queue = (await getGroupMessages()).filter((m) => !m.mine && !m.pointsChecked && m.text && m.sentAt >= since
       && members.get(m.from)?.role !== 'manager' && countsForPoints(m));
     let found = 0;
+    // المؤشَّرة أولاً: لا تحتاج ذكاءً، فلا يوقفها غياب المفتاح أو الإنترنت
+    queue.sort((x, y) => (!!y.work?.id) - (!!x.work?.id));
     for (const m of queue) {
+      // عمل مؤشَّر من رد مهمة: يُسجَّل مباشرة دون ذكاء (الموظف اختاره بنفسه)
+      if (m.work?.id) {
+        const w = works.find((x) => x.id === m.work.id);
+        if (w) {
+          const count = Math.max(1, Math.min(50, Number(m.work.count) || 1));
+          await putPoint({
+            id: `${m.id}:${w.id}`, user: m.from, workId: w.id, workName: w.name, points: w.points * count, count,
+            at: m.sentAt, msgId: m.id, quote: m.text.slice(0, 200), status: 'approved', source: 'task',
+          });
+          found++;
+        }
+        await patchGroupMessage(m.id, { pointsChecked: true });
+        continue;
+      }
       try {
         const done = await detectWorks(m.text, works.map((w) => ({ key: w.id, name: w.name })));
         for (const d of done) {
