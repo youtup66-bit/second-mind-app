@@ -13,6 +13,7 @@ import * as reports from './screens/reports.js';
 import { checkReminders } from './org-insights.js';
 import { scanSoon } from './points.js';
 import { enrichSoon } from './org-mind.js';
+import { setOrbVisible } from './orb-float.js';
 import { startGroupSync, groupEvents, unreadCount } from './group.js';
 import { autoSnapshot } from './backup.js';
 import { getSetting } from './storage.js';
@@ -81,7 +82,8 @@ let floaterRoute = 'home';
 // تطبيق مؤسسة: لا رفيقة مرسومة ولا رفيقة طافية
 const noCompanion = true;
 // لا تطفو فوق شاشات المحادثة (الرئيسية والمجموعة)
-const syncFloater = () => {};
+// كرة المساعد الطافية: عند رئيس القسم في كل الشاشات عدا شاشة المساعد
+const syncFloater = () => setOrbVisible(role === 'manager' && floaterRoute !== 'home');
 // بلا رفيقة: تبويب "المحادثة"، والشاشة الرئيسية بلا شريط عنوان (رأس المحادثة يكفي)
 // تبويب "الموظفين" يظهر للمدير فقط (الصلاحية الفعلية تفرضها قاعدة البيانات)
 function applyRole(next) {

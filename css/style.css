@@ -1063,6 +1063,17 @@ body.on-staffnav .topbar { display: none; }
 }
 @keyframes orb-glow { 50% { transform: scale(.9); box-shadow: 0 0 8px 3px rgba(90,167,255,.4), 0 0 18px 6px rgba(90,167,255,.12); } }
 .wa-head .wa-avatar--orb .g-orb { width: 18px; height: 18px; }
+/* كرة المساعد الطافية فوق التطبيق (A33): تحت النوافذ المنسدلة (35) وفوق الشاشات */
+.orb-float {
+  position: fixed; z-index: 34; width: 52px; height: 52px; padding: 0; border: 0; border-radius: 50%;
+  background: radial-gradient(circle, rgba(90,167,255,.18), rgba(11,15,20,0) 70%);
+  display: grid; place-items: center; cursor: pointer; touch-action: none; -webkit-tap-highlight-color: transparent;
+  transition: left .2s ease, top .2s ease;
+}
+.orb-float[hidden] { display: none; }
+.orb-float.is-dragging { transition: none; }
+.orb-float .g-orb { width: 24px; height: 24px; }
+.orb-float:active .g-orb { transform: scale(.85); }
 .g-new { position: absolute; inset-inline-end: 16px; bottom: 16px; background: var(--wa-green, #00a884); color: #111b21; border: 0; border-radius: 16px; padding: 14px 18px; font: inherit; font-weight: 700; box-shadow: 0 4px 14px rgba(0,0,0,.35); cursor: pointer; }
 .g-list { position: relative; }
 .g-list .g-rooms { padding-bottom: 80px; }
