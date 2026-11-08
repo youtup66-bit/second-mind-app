@@ -148,7 +148,8 @@ export async function mount(root) {
   let waMode = plain || (await getSetting('chatStyle', 'companion')) === 'whatsapp';
   let lastReplyBubble = '';
   // التطبيق للمؤسسة: المحادثة دائماً مع "المساعد"؛ ورئيس القسم يرجع منها إلى المحادثات
-  const orgHead = (await getSetting('orgRole', null)) === 'manager';
+  const orgRole = await getSetting('orgRole', null);
+  const orgHead = orgRole === 'manager' || orgRole === 'employee'; // المسؤول المسموح له بالمساعد يرجع إلى المحادثات أيضاً
   if (plain) {
     root.querySelector('#wa-name').textContent = 'المساعد';
     root.querySelector('#wa-avatar').innerHTML = '<span class="g-orb" aria-hidden="true"></span>';

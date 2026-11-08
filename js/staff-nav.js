@@ -5,10 +5,14 @@ const TABS = [['staff', 'الأسماء'], ['points', 'النقاط'], ['reports
 // الأقسام: الهيكل (الشعب والوحدات والموظفون والمشاريع) · عقل المؤسسة: التصنيفات (سؤال، تفكير، قرار...)
 const MIND_TABS = [['structure', 'الأقسام'], ['mind', 'عقل المؤسسة']];
 export const MIND_VIEW_KEY = 'sm-mind-view';
-export function mindTabs(current) {
-  try { localStorage.setItem(MIND_VIEW_KEY, current); } catch { /* لا شيء */ }
+// sections: مسار «الأقسام» (رئيس القسم: الهيكل كله، والمسؤول: فرعه) أو null إن لم يُسمح له به
+export function mindTabs(current, sections = 'structure') {
+  const view = current === 'mind' ? 'mind' : 'structure';
+  try { localStorage.setItem(MIND_VIEW_KEY, view); } catch { /* لا شيء */ }
   window.dispatchEvent(new Event('sm:mindview'));
-  return `<nav class="struct-tabs page-tabs" aria-label="عرض العقل">${MIND_TABS.map(([route, label]) =>
+  const tabs = MIND_TABS.map(([route, label]) => [route === 'structure' ? sections : route, label]).filter(([r]) => r);
+  if (tabs.length < 2) return '';
+  return `<nav class="struct-tabs page-tabs" aria-label="عرض العقل">${tabs.map(([route, label]) =>
     (route === current ? `<b aria-current="page">${label}</b>` : `<a href="#/${route}">${label}</a>`)).join('')}</nav>`;
 }
 

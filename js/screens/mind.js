@@ -15,8 +15,8 @@ import { createSummary, summaryHTML } from '../summaries.js';
 import { findOldNotesFor } from '../suggest.js';
 import { setCategory } from '../classifier.js';
 import { mindTabs } from '../staff-nav.js';
-import { mindPosts, mindRooms } from '../org-mind.js';
-import { groupEvents } from '../group.js';
+import { mindPosts, mindRooms, hasOrgMind } from '../org-mind.js';
+import { groupEvents, groupBranch, startGroupSync } from '../group.js';
 
 export const title = 'العقل';
 
@@ -156,7 +156,11 @@ function findGroups(weights, pairs) {
 export async function mount(root) {
   // التطبيق للمؤسسة: هذا "عقل المؤسسة" دائماً (التصنيفات)، وعند رئيس القسم بجانبه عرض الأقسام
   const head = true;
-  const isHead = (await getSetting('orgRole', null)) === 'manager';
+  const role = await getSetting('orgRole', null);
+  if (role) await startGroupSync().catch(() => {});
+  // رئيس القسم، أو مسؤول سمح له رئيس القسم بعقل المؤسسة (يرى عقل فرعه)
+  const isHead = role === 'manager' || (role === 'employee' && hasOrgMind());
+  const sectionsRoute = role === 'manager' ? 'structure' : groupBranch()?.perms?.sections ? 'branch' : null;
   const orgName = (await getSetting('cloud', null)) && (await import('../cloud.js').then((c) => c.session()).catch(() => null))?.org?.name;
   let entries = await getEntries();
   let posts = isHead ? await mindPosts() : [];
@@ -168,7 +172,7 @@ export async function mount(root) {
       <canvas class="mind-canvas" aria-label="عقل المؤسسة. قرّب إصبعين أو باعدهما للتصغير والتكبير"></canvas>
       <button type="button" class="struct-handle" id="handle" aria-label="القائمة" aria-expanded="false"><span></span></button>
       <div class="struct-menu mind-menu" id="menu" hidden>
-        ${mindTabs('mind')}
+        ${mindTabs('mind', sectionsRoute)}
         <p class="mind-hint" id="hint"></p>
         <div class="mind-words zoom-ctrl" role="group" aria-label="الخيارات">
           <button type="button" class="text-btn" id="add-cat">قسم جديد</button>
@@ -712,7 +716,8 @@ export async function mount(root) {
     const later = () => { clearTimeout(t); t = setTimeout(() => { if (graph) refresh().catch(() => {}); }, 400); };
     window.addEventListener('sm:orgmind', later);
     groupEvents.addEventListener('rooms', later);
-    offs.push(() => { window.removeEventListener('sm:orgmind', later); groupEvents.removeEventListener('rooms', later); clearTimeout(t); });
+    groupEvents.addEventListener('branch', later);
+    offs.push(() => { window.removeEventListener('sm:orgmind', later); groupEvents.removeEventListener('rooms', later); groupEvents.removeEventListener('branch', later); clearTimeout(t); });
     import('../org-mind.js').then((x) => x.enrichSoon());
   }
 }

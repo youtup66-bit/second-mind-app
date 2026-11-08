@@ -6,7 +6,7 @@ import { detectWorks } from './gemini.js';
 import { groupEvents, groupMe, groupMembers, countsForPoints } from './group.js';
 
 export const pointsEvents = new EventTarget(); // change
-const changed = () => pointsEvents.dispatchEvent(new Event('change'));
+const changed = () => { pointsEvents.dispatchEvent(new Event('change')); window.dispatchEvent(new Event('sm:points')); };
 const uid = () => Math.random().toString(36).slice(2, 10);
 
 // ---- قائمة الأعمال ----

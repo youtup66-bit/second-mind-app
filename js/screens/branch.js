@@ -9,6 +9,7 @@ import { sendRequest } from '../org-branches.js';
 import { recoveryInvite, TITLES } from '../org-accounts.js';
 import { getSetting, setSetting } from '../storage.js';
 import { IS_DEV } from '../env.js';
+import { mindTabs } from '../staff-nav.js';
 
 export const title = 'الأقسام';
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -36,8 +37,10 @@ export async function mount(root) {
         <canvas id="sg" aria-label="فرعك"></canvas>
         <button type="button" class="struct-handle" id="handle" aria-label="القائمة" aria-expanded="false"><span></span></button>
         <div class="struct-menu" id="menu" hidden>
+          ${b.perms.mind ? mindTabs('branch', 'branch') : ''}
           <p class="struct-sub" id="info"></p>
           <div class="struct-legend" id="legend"></div>
+          <div class="branch-evals" id="evals" hidden></div>
           <button type="button" class="struct-fit" id="fit">عرض الكل</button>
         </div>
         <button type="button" class="struct-name" id="name" hidden></button>
@@ -66,6 +69,13 @@ export async function mount(root) {
   async function renderInfo() {
     const pend = ((await getSetting(PENDING, [])) || []).filter((x) => x.at > (b.at || 0) - 5000);
     $('#info').innerHTML = `آخر تحديث من رئيس القسم: ${fmt.format(b.at || Date.now())}${pend.length ? ` · <b>${pend.length}</b> ${pend.length === 1 ? 'طلب ينتظر' : 'طلبات تنتظر'} تطبيقه` : ''}`;
+    // التقييمات (إن سمح رئيس القسم): نقاط من تحته هذا الشهر
+    const ev = b.perms.evals ? b.evals || {} : null;
+    $('#evals').hidden = !ev;
+    if (ev) {
+      const rows = b.people.filter((p) => ev[p.uid]).sort((x, y) => ev[y.uid].month - ev[x.uid].month);
+      $('#evals').innerHTML = `<b>التقييمات · نقاط هذا الشهر</b>${rows.length ? `<ul>${rows.map((p) => `<li><span>${esc(p.name)}</span><b>${ev[p.uid].month}</b></li>`).join('')}</ul>` : '<p class="muted">لا نقاط بعد.</p>'}`;
+    }
     $('#legend').innerHTML = `<span>${dot(TYPES.division.color)}شعبة</span><span>${dot(TYPES.unit.color)}وحدة</span><span>${dot(TYPES.section.color)}قسم وحدة</span><span>${dot(PERSON.color)}موظف</span><span>${dot(ASSISTANT.color)}معاون</span>`;
   }
   const request = async (op, payload) => {
@@ -207,6 +217,7 @@ export async function mount(root) {
     let sub = mode === 'link' && lastLink ? linkOut() : '';
     panel.innerHTML = `
       <div class="struct-title">${dot(p.places.some((x) => x.assistant) ? ASSISTANT.color : PERSON.color)}<div><b>${esc(nameOf(u))}</b><small>${u === me?.uid ? 'أنت' : ''}</small></div></div>
+      ${!sub && b.perms.evals && b.evals?.[u] ? `<p class="struct-stats">نقاط هذا الأسبوع <b>${b.evals[u].week}</b> · هذا الشهر <b>${b.evals[u].month}</b>${b.evals[u].works.length ? `<br><small>${b.evals[u].works.map(esc).join('، ')}</small>` : ''}</p>` : ''}
       ${sub || `<ul class="struct-places">${p.places.map((pl) => { const n = nodeById(st, pl.node); return `<li>${dot(colorOf(n))}<span><b>${esc(n.name)}</b>${pl.head ? ' <span class="struct-tag">مسؤول</span>' : ''}${pl.assistant ? ' <span class="struct-tag">معاون</span>' : ''}</span>
           ${manage.has(pl.node) && u !== me?.uid ? `${canHaveHead(n.type) && !isHeadBall(n.id) ? `<button type="button" data-title="${esc(n.id)}" data-v="${pl.head ? 'member' : 'head'}">${pl.head ? 'إلغاء المسؤول' : 'مسؤول'}</button>` : ''}<button type="button" data-rm="${esc(n.id)}" class="is-danger">إزالة</button>` : ''}</li>`; }).join('')}</ul>
       <div class="struct-actions">

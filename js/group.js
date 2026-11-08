@@ -281,6 +281,9 @@ let published = null;
 let roomsTimer = 0, roomsRun = Promise.resolve();
 function publishRoomsSoon() { clearTimeout(roomsTimer); roomsTimer = setTimeout(() => publishRooms().catch((e) => console.warn('rooms', e)), 1500); }
 window.addEventListener('sm:structure', () => { if (me?.role === 'manager') publishRoomsSoon(); });
+// صُنّفت منشورات أو تغيّرت النقاط: تتحدث عقول الفروع وتقييماتها
+window.addEventListener('sm:orgmind', () => { if (me?.role === 'manager') publishRoomsSoon(); });
+window.addEventListener('sm:points', () => { if (me?.role === 'manager') publishRoomsSoon(); });
 
 const BALL_KINDS = ['division', 'unit', 'section', 'custom'];
 // من يضيفه الموظف مباشرة: من في كراته وما تحتها (الكرة المخصصة: من فيها)

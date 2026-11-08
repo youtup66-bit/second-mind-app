@@ -30,13 +30,18 @@ let navId = 0;
 
 // الموظف: منشورات الأعمال والإعدادات فقط (لا عقل ولا رفيقة ولا ذكاء)
 const EMPLOYEE_ROUTES = new Set(['group', 'chats', 'branch', 'settings', 'org', 'join']);
+// ما يفتحه المسؤول بحسب خيارات إظهاره (يقررها رئيس القسم)
+const officialAllows = (name) => {
+  const p = groupBranch()?.perms || {};
+  return (name === 'mind' && p.mind) || (name === 'home' && p.assistant);
+};
 let role = null;
 
 async function navigate() {
   const myNav = ++navId;
   // رئيس القسم يبدأ من المحادثات (المساعد كرة فيها)، والموظف من الأعمال
   let name = location.hash.replace(/^#\//, '').split('?')[0] || (role === 'employee' ? 'group' : role === 'manager' ? 'chats' : 'home');
-  if (role === 'employee' && !EMPLOYEE_ROUTES.has(name)) {
+  if (role === 'employee' && !EMPLOYEE_ROUTES.has(name) && !officialAllows(name)) {
     name = 'group';
     history.replaceState(null, '', '#/group');
   }
@@ -84,7 +89,7 @@ let floaterRoute = 'home';
 const noCompanion = true;
 // لا تطفو فوق شاشات المحادثة (الرئيسية والمجموعة)
 // كرة المساعد الطافية: عند رئيس القسم في كل الشاشات عدا شاشة المساعد
-const syncFloater = () => setOrbVisible(role === 'manager' && floaterRoute !== 'home');
+const syncFloater = () => setOrbVisible((role === 'manager' || (role === 'employee' && !!groupBranch()?.perms?.assistant)) && floaterRoute !== 'home');
 // بلا رفيقة: تبويب "المحادثة"، والشاشة الرئيسية بلا شريط عنوان (رأس المحادثة يكفي)
 // تبويب "الموظفين" يظهر للمدير فقط (الصلاحية الفعلية تفرضها قاعدة البيانات)
 function applyRole(next) {
@@ -116,9 +121,12 @@ function syncMindTab() {
   if (!t) return;
   let view = 'structure';
   try { view = localStorage.getItem('sm-mind-view') || 'structure'; } catch { /* لا شيء */ }
-  t.setAttribute('href', role === 'manager' ? `#/${view === 'mind' ? 'mind' : 'structure'}` : role === 'employee' ? '#/branch' : '#/mind');
-  // المسؤول: يظهر له تبويب العقل (فرعه في «الأقسام») إن سمح له رئيس القسم
-  if (role === 'employee') t.hidden = !groupBranch()?.perms?.sections;
+  const p = groupBranch()?.perms || {};
+  const official = role === 'employee' ? (view === 'mind' && p.mind ? 'mind' : p.sections ? 'branch' : p.mind ? 'mind' : null) : null;
+  t.setAttribute('href', role === 'manager' ? `#/${view === 'mind' ? 'mind' : 'structure'}` : role === 'employee' ? `#/${official || 'branch'}` : '#/mind');
+  // المسؤول: يظهر له تبويب العقل إن سمح له رئيس القسم بالأقسام أو بعقل المؤسسة
+  if (role === 'employee') t.hidden = !official;
+  syncFloater();
 }
 groupEvents.addEventListener('branch', syncMindTab);
 window.addEventListener('sm:mindview', syncMindTab);

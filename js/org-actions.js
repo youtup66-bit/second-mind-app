@@ -218,7 +218,9 @@ export async function runOrgAction(a) {
 
 // ملخص المؤسسة للذكاء (يُرفق بالطلب ليعرف الأسماء الحالية)
 export async function orgContext() {
-  if (await getSetting('orgRole', null) !== 'manager') return '';
+  const role = await getSetting('orgRole', null);
+  if (role === 'employee') return branchContext();
+  if (role !== 'manager') return '';
   const st = await loadStructure(await orgName());
   const emps = [...groupMembers()].filter(([, m]) => m.role === 'employee');
   const nodes = st.nodes.map((n) => `${n.name} (${TYPES[n.type].label}${n.parent ? ` تحت ${nodeById(st, n.parent)?.name}` : ''}${n.links ? ` مرتبطة بـ ${n.links.map((l) => nodeById(st, l)?.name).join('/')}` : ''})`);
@@ -235,4 +237,20 @@ ${nodes.slice(0, 80).join('\n')}
 الأعمال ونقاطها: ${works.join('، ') || 'لا شيء بعد'}
 اقتراحات نقاط تنتظر موافقته: ${pending}
 ${await insightsContext().catch(() => '')}`;
+}
+
+// المسؤول: يعرف المساعد فرعه فقط (لا ينفّذ أوامر إدارة المؤسسة، فهي لرئيس القسم)
+async function branchContext() {
+  const { groupBranch } = await import('./group.js');
+  const b = groupBranch();
+  if (!b?.perms?.assistant) return '';
+  const byId = new Map(b.nodes.map((n) => [n.id, n]));
+  const nodes = b.nodes.map((n) => `${n.name} (${TYPES[n.type]?.label || ''}${n.parent ? ` تحت ${byId.get(n.parent)?.name}` : ''})`);
+  const people = b.people.map((p) => `${p.name}: ${p.places.map((pl) => `${pl.head ? 'مسؤول ' : pl.assistant ? 'معاون ' : ''}${byId.get(pl.node)?.name || ''}`).join('، ')}`);
+  const evals = b.evals ? b.people.filter((p) => b.evals[p.uid]).map((p) => `${p.name}: ${b.evals[p.uid].month} نقطة هذا الشهر${b.evals[p.uid].works.length ? ` (${b.evals[p.uid].works.join('، ')})` : ''}`) : [];
+  return `
+أنت تساعد مسؤولاً في المؤسسة على فرعه. فرعه: ${b.heads.map((h) => byId.get(h)?.name).filter(Boolean).join('، ')}.
+الكرات: ${nodes.join('؛ ')}.
+الأشخاص: ${people.join('؛ ')}.${evals.length ? `\nالتقييمات: ${evals.join('؛ ')}.` : ''}
+أوامر إدارة الهيكل (org_*) لرئيس القسم وحده؛ إن طلبها المسؤول فاشرح له أنها من شاشة «الأقسام».`;
 }

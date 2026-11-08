@@ -2,7 +2,7 @@
 // وكل مجموعة محادثة مستقلة (نصوص وصور وكلام يتحول إلى نص). ‎#/group‎ القائمة · ‎#/group?room=…‎ المحادثة
 import {
   startGroupSync, groupEvents, groupMe, groupMembers, groupOnline, groupRooms, sendGroup, resend, markSeen, compressImage,
-  GENERAL, roomOf, unreadByRoom, roomNameOf, isChatRoom, groupInvites, myContacts, saveChat, deleteChat, acceptInvite, declineInvite, leaveChat,
+  GENERAL, roomOf, unreadByRoom, roomNameOf, groupBranch, isChatRoom, groupInvites, myContacts, saveChat, deleteChat, acceptInvite, declineInvite, leaveChat,
 } from '../group.js';
 import { PALETTE } from '../org-structure.js';
 import { getGroupMessages } from '../storage.js';
@@ -360,7 +360,7 @@ function openEditor(root, g = null) {
     } catch (err) {
       if (/permission/i.test(String(err?.code || err?.message))) {
         const project = (await cloudConfig().catch(() => null))?.projectId || '';
-        msg.textContent = `تعذّر الحفظ: قواعد Firebase في المشروع «${project}» قديمة. من «المؤسسة» في هذه النسخة اضغط «نسخ قواعد الحماية» (الإصدار ٨)، والصقها في هذا المشروع، ثم Publish.`;
+        msg.textContent = `تعذّر الحفظ: قواعد Firebase في المشروع «${project}» قديمة. من «المؤسسة» في هذه النسخة اضغط «نسخ قواعد الحماية» (الإصدار ٩)، والصقها في هذا المشروع، ثم Publish.`;
       } else msg.textContent = err.message;
       msg.hidden = false;
       btn.disabled = false;
@@ -410,7 +410,7 @@ async function mountList(root, s, syncErr, mode) {
         <button type="button" class="text-btn" data-join="${esc(id)}">انضم</button><button type="button" class="text-btn text-btn--muted" data-decline="${esc(id)}">رفض</button></li>`).join('') : '';
     const empty = chat && !items.length && !inv ? '<li class="wa-day">لا مجموعات محادثة بعد. أنشئ واحدة من الزر بالأسفل.</li>' : '';
     // رئيس القسم: المساعد كرة متوهجة مثبتة أعلى المحادثات
-    const orb = chat && s.member.role === 'manager' ? `<li><a class="g-room g-room--orb" href="#/home">
+    const orb = chat && (s.member.role === 'manager' || groupBranch()?.perms?.assistant) ? `<li><a class="g-room g-room--orb" href="#/home">
         <span class="wa-avatar wa-avatar--orb" aria-hidden="true"><span class="g-orb"></span></span>
         <span class="g-room__body"><span class="g-room__top"><b>المساعد</b></span>
         <span class="g-room__bottom"><span class="g-room__last"><i>مرتبط بعقل المؤسسة</i></span></span></span></a></li>` : '';

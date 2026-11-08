@@ -33,8 +33,9 @@ export function subtree(st, id) {
   return ids;
 }
 
-// يحسب فرع مسؤول: { heads, nodes, people, perms, manage }
-export function branchOf(st, uid, names) {
+// يحسب فرع مسؤول: { heads, nodes, people, perms, manage, mind?, evals? }
+// ctx (اختياري): { posts: منشورات مصنّفة، rooms: المجموعات، week/month: نقاط } لعقل فرعه وتقييماته إن سُمح بهما
+export function branchOf(st, uid, names, ctx = null) {
   const heads = headedBy(st, uid);
   if (!heads.length) return null;
   const ids = new Set(), manage = new Set(), projects = new Set();
@@ -56,18 +57,49 @@ export function branchOf(st, uid, names) {
     const places = p.places.filter((pl) => ids.has(pl.node)).map((pl) => ({ node: pl.node, ...(pl.head ? { head: true } : {}), ...(pl.assistant ? { assistant: true } : {}) }));
     return places.length && names.has(u) ? { uid: u, name: names.get(u), places } : null;
   }).filter(Boolean);
-  return { heads, nodes, people, perms, manage: [...manage] };
+  const out = { heads, nodes, people, perms, manage: [...manage] };
+  const inBranch = new Set(people.map((p) => p.uid));
+  // عقل فرعه: تصنيف منشورات مشاريعه، والعامة من موظفيه، والمحادثات المُثرية التي هو فيها (الرسائل نفسها على جواله أصلاً)
+  if (ctx && perms.mind) {
+    const mind = {};
+    for (const m of ctx.posts) {
+      const room = m.room || 'general';
+      const nodeId = room.startsWith('n_') ? room.slice(2) : null;
+      const ok = (nodeId && ids.has(nodeId)) || (room === 'general' && inBranch.has(m.from))
+        || (room.startsWith('c_') && ctx.rooms.get(room)?.members?.includes(uid));
+      if (ok) mind[m.id] = m.mindCat;
+    }
+    out.mind = Object.fromEntries(Object.entries(mind).slice(-400));
+  }
+  // تقييمات من تحته: نقاط الأسبوع والشهر وأعماله
+  if (ctx && perms.evals) {
+    out.evals = Object.fromEntries([...inBranch].filter((u) => u !== uid).map((u) => {
+      const w = ctx.week.get(u), mo = ctx.month.get(u);
+      const works = {};
+      for (const p of mo?.items || []) works[p.workName] = (works[p.workName] || 0) + (p.count || 1);
+      return [u, { week: w?.points || 0, month: mo?.points || 0, works: Object.entries(works).sort((a, b) => b[1] - a[1]).slice(0, 6).map(([n, c]) => (c > 1 ? `${n} ×${c}` : n)) }];
+    }));
+  }
+  return out;
 }
 
 // members: Map(uid ← { name, role })
 export async function publishBranches(st, members) {
   const names = new Map([...members].map(([u, m]) => [u, m.name]));
   const { db, F } = await api();
+  // ما يلزم لعقل الفروع وتقييماتها (يُحسب مرة واحدة)
+  const [{ getGroupMessages }, { totals }, { groupRooms, enrichesMind, roomOf }] = await Promise.all([
+    import('./storage.js'), import('./points.js'), import('./group.js'),
+  ]);
+  const ctx = {
+    posts: (await getGroupMessages()).filter((m) => m.mindCat && m.mindCat !== 'none' && enrichesMind(roomOf(m))),
+    rooms: groupRooms(), week: await totals('week'), month: await totals('month'),
+  };
   const done = (await getSetting(KEY, {})) || {};
   const now = {};
   for (const [uid, m] of members) {
     if (m.role === 'manager') continue;
-    const b = branchOf(st, uid, names);
+    const b = branchOf(st, uid, names, ctx);
     if (!b) continue;
     const sig = JSON.stringify(b);
     now[uid] = sig;

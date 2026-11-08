@@ -1,7 +1,7 @@
 rules_version = '2';
 
 // عقلي الثاني: قواعد حماية المؤسسة على Firestore
-// إصدار القواعد: 8 (فروع المسؤولين وطلباتهم ودعواتهم)
+// إصدار القواعد: 9 (عقل الفروع وتقييماتها)
 // المرحلة ١: الحسابات (المدير، والموظفون، والدعوات)
 //
 // انسخ هذا الملف كاملاً في Firebase ← Firestore Database ← Rules، ثم اضغط Publish.
@@ -218,7 +218,7 @@ service cloud.firestore {
       allow get: if signedIn() && (uid == request.auth.uid || isManager());
       allow list: if isManager();
       allow create, update: if isManager()
-        && request.resource.data.keys().hasOnly(['heads', 'nodes', 'people', 'perms', 'manage', 'at'])
+        && request.resource.data.keys().hasOnly(['heads', 'nodes', 'people', 'perms', 'manage', 'mind', 'evals', 'at'])
         && request.resource.data.manage is list && request.resource.data.manage.size() <= 500
         && request.resource.data.at == request.time;
       allow delete: if isManager();
