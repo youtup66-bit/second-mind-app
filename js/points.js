@@ -118,18 +118,24 @@ export async function scan() {
       && members.get(m.from)?.role !== 'manager' && countsForPoints(m));
     let found = 0;
     // المؤشَّرة أولاً: لا تحتاج ذكاءً، فلا يوقفها غياب المفتاح أو الإنترنت
-    queue.sort((x, y) => (!!y.work?.id) - (!!x.work?.id));
+    const tagged = (m) => !!(m.work?.id || m.works?.length);
+    queue.sort((x, y) => tagged(y) - tagged(x));
     for (const m of queue) {
-      // عمل مؤشَّر من رد مهمة: يُسجَّل مباشرة دون ذكاء (الموظف اختاره بنفسه)
-      if (m.work?.id) {
-        const w = works.find((x) => x.id === m.work.id);
-        if (w) {
-          const count = Math.max(1, Math.min(50, Number(m.work.count) || 1));
-          await putPoint({
-            id: `${m.id}:${w.id}`, user: m.from, workId: w.id, workName: w.name, points: w.points * count, count,
-            at: m.sentAt, msgId: m.id, quote: m.text.slice(0, 200), status: 'approved', source: 'task',
-          });
-          found++;
+      // أعمال مؤشَّرة من رد مهمة: تُسجَّل مباشرة دون ذكاء (الموظف اختارها بنفسه)، له ولمن ذهب معه
+      if (tagged(m)) {
+        const list = (m.works?.length ? m.works : [m.work]).slice(0, 10);
+        const people = [m.from, ...(m.helpers || []).filter((u) => u !== m.from && members.get(u)?.role === 'employee')].slice(0, 21);
+        for (const item of list) {
+          const w = works.find((x) => x.id === item?.id);
+          if (!w) continue;
+          const count = Math.max(1, Math.min(50, Number(item.count) || 1));
+          for (const u of people) {
+            await putPoint({
+              id: `${m.id}:${w.id}${u === m.from ? '' : `:${u}`}`, user: u, workId: w.id, workName: w.name, points: w.points * count, count,
+              at: m.sentAt, msgId: m.id, quote: m.text.slice(0, 200), status: 'approved', source: u === m.from ? 'task' : 'task-helper',
+            });
+            found++;
+          }
         }
         await patchGroupMessage(m.id, { pointsChecked: true });
         continue;

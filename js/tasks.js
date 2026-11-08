@@ -66,20 +66,26 @@ export async function sendTask({ to, title, text = '', due = '' }) {
 export async function deleteTask(t) { await saveTasks((await listTasks()).filter((x) => !(x.id === t.id && x.from === t.from))); }
 
 // ---- المكلَّف ----
-// status: done | ongoing · work: { id, name } · room: مجموعة النشر (تُحفظ ثابتة)
-export async function replyTask(t, { status, work = null, count = 1, note = '', image = null, room = GENERAL }) {
+// status: done | ongoing · works: [{ id, name, count }] (أكثر من عمل في المهمة الواحدة)
+// helpers: [{ uid?, name }] من ذهب معه (من وحدته، أو اسم يكتبه) · room: مجموعة النشر (تُحفظ ثابتة)
+export const worksLine = (works) => works.map((w) => `${w.name}${w.count > 1 ? ` ×${w.count}` : ''}`).join('، ');
+export async function replyTask(t, { status, works = [], helpers = [], note = '', image = null, room = GENERAL }) {
   const me = groupMe();
-  count = Math.max(1, Math.min(50, Math.round(Number(count) || 1)));
+  works = works.slice(0, 10).map((w) => ({ id: w.id, name: w.name, count: Math.max(1, Math.min(50, Math.round(Number(w.count) || 1))) }));
+  helpers = helpers.slice(0, 20).map((h) => ({ ...(h.uid ? { uid: h.uid } : {}), name: String(h.name || '').trim().slice(0, 60) })).filter((h) => h.name);
   note = String(note || '').trim().slice(0, 600);
-  const upd = { at: Date.now(), status, ...(work ? { work: work.name, count } : {}), ...(note ? { note } : {}), ...(image ? { image: true } : {}) };
+  const wl = worksLine(works);
+  const hl = helpers.map((h) => h.name).join('، ');
+  const upd = { at: Date.now(), status, ...(wl ? { work: wl } : {}), ...(hl ? { helpers: hl } : {}), ...(note ? { note } : {}), ...(image ? { image: true } : {}) };
   await upsert({ id: t.id, from: t.from, status, lastAt: upd.at, updates: [...(t.updates || []), upd] });
   await setSetting(`taskRoom_${me.uid}`, room);
   // ١) الرد إلى المسؤول
   const head = status === 'done' ? '✅ تم' : '⏳ مازال يستأنف';
-  const line = `${head}: ${t.title}${work ? ` — ${work.name}${count > 1 ? ` ×${count}` : ''}` : ''}${note ? `\n${note}` : ''}`;
-  await relay([t.from], line, { kind: 'update', id: t.id, status, ...(work ? { work: work.name, count } : {}), ...(note ? { note } : {}) });
-  // ٢) النشر الذاتي في مجموعة الأعمال: يُحسب منه العمل في النقاط والتقارير
-  await sendGroup({ text: line, image, room, ...(work ? { work: { id: work.id, name: work.name, count } } : {}) });
+  const line = `${head}: ${t.title}${wl ? ` — ${wl}` : ''}${hl ? `\nمعي: ${hl}` : ''}${note ? `\n${note}` : ''}`;
+  await relay([t.from], line, { kind: 'update', id: t.id, status, ...(wl ? { work: wl } : {}), ...(hl ? { helpers: hl } : {}), ...(note ? { note } : {}) });
+  // ٢) النشر الذاتي في مجموعة الأعمال: يُحسب منه العمل له ولمعاونيه في النقاط والتقارير
+  const ids = helpers.map((h) => h.uid).filter(Boolean);
+  await sendGroup({ text: line, image, room, ...(works.length ? { works } : {}), ...(ids.length ? { helpers: ids } : {}) });
 }
 export async function taskRoom() { return (await getSetting(`taskRoom_${groupMe()?.uid}`, GENERAL)) || GENERAL; }
 
@@ -101,7 +107,7 @@ export async function onTaskMessage(x) {
     if (!t) return;
     // «وصلت» لا يغيّر مهمة أُنجزت أو مستمرة
     if (k.status === 'received' && t.status !== 'sent') return;
-    const upd = { at: x.sentAt || Date.now(), status: k.status, ...(k.work ? { work: k.work, count: k.count || 1 } : {}), ...(k.note ? { note: k.note } : {}) };
+    const upd = { at: x.sentAt || Date.now(), status: k.status, ...(k.work ? { work: k.work, ...(k.count > 1 ? { count: k.count } : {}) } : {}), ...(k.helpers ? { helpers: k.helpers } : {}), ...(k.note ? { note: k.note } : {}) };
     await upsert({ id: t.id, from: t.from, status: k.status, lastAt: k.status === 'received' ? t.lastAt : upd.at, updates: k.status === 'received' ? t.updates : [...(t.updates || []), upd], silentNoted: false });
   }
 }

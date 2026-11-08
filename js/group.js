@@ -169,7 +169,7 @@ async function receive(d, F) {
       id, from: x.from, fromName: x.fromName, text: x.text || '', image: x.image || null, ...(x.tag ? { tag: x.tag } : {}),
       // اسم المجموعة يُحفظ مع الرسالة (يبقى ظاهراً لو غادرها أو حُذفت)
       room: x.room || GENERAL, ...(x.room && rooms.get(x.room)?.name ? { roomName: rooms.get(x.room).name } : {}),
-      ...(x.work ? { work: x.work } : {}),
+      ...(x.work ? { work: x.work } : {}), ...(Array.isArray(x.works) ? { works: x.works } : {}), ...(Array.isArray(x.helpers) ? { helpers: x.helpers } : {}),
       sentAt: x.sentAt, mine: x.from === me.uid, status: 'received', receivedAt: Date.now(),
     };
     await putGroupMessage(m);
@@ -181,8 +181,8 @@ async function receive(d, F) {
 }
 
 // ---- الإرسال ----
-// work: عمل مؤشَّر { id, name, count } (من رد المهمة) يُحسب في النقاط مباشرة
-export async function sendGroup({ text = '', image = null, tag = '', room = GENERAL, work = null }) {
+// works: أعمال مؤشَّرة [{ id, name, count }] وhelpers: معاونون (من رد المهمة) تُحسب في النقاط مباشرة
+export async function sendGroup({ text = '', image = null, tag = '', room = GENERAL, work = null, works = null, helpers = null }) {
   if (!me) throw new Error('لم تدخل إلى المؤسسة بعد.');
   text = String(text).trim().slice(0, 4000);
   if (!text && !image) return null;
@@ -198,6 +198,7 @@ export async function sendGroup({ text = '', image = null, tag = '', room = GENE
   const m = {
     id: ref.id, from: me.uid, fromName: me.name, text, image, sentAt: Date.now(), mine: true, status: 'queued', room,
     ...(roomName ? { roomName } : {}), ...(tag ? { tag } : {}), ...(work ? { work } : {}),
+    ...(works?.length ? { works } : {}), ...(helpers?.length ? { helpers } : {}),
   };
   await putGroupMessage(m);
   emit('message', { msg: m });
@@ -225,6 +226,7 @@ async function deliver(m) {
     await F.setDoc(F.doc(db, 'relay', m.id), {
       mid: m.id, from: me.uid, fromName: me.name, sentAt: m.sentAt, createdAt: F.serverTimestamp(), pending,
       ...(room !== GENERAL ? { room } : {}), ...(m.work ? { work: m.work } : {}),
+      ...(m.works ? { works: m.works } : {}), ...(m.helpers ? { helpers: m.helpers } : {}),
       ...(m.text ? { text: m.text } : {}), ...(m.image ? { image: m.image } : {}), ...(m.tag ? { tag: m.tag } : {}),
     });
     await done('sent');

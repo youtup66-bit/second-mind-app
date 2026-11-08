@@ -1,5 +1,5 @@
 // شاشة المهام: «مهامي» (ما كُلّفت به، وأرد عليه بتأشيرة العمل) و«أرسلتُها» (للمسؤول ورئيس القسم)
-import { startGroupSync, groupEvents, groupRooms, groupMe, GENERAL, compressImage, isChatRoom } from '../group.js';
+import { startGroupSync, groupEvents, groupRooms, groupMe, groupMembers, myContacts, GENERAL, compressImage, isChatRoom } from '../group.js';
 import {
   taskEvents, listTasks, sendTask, replyTask, deleteTask, assignable, canAssign, catalog, taskRoom, isSilent, markSeen, STATUS,
 } from '../tasks.js';
@@ -57,7 +57,7 @@ export async function mount(root) {
       <div class="task__top"><b>${esc(t.title)}</b><span class="task__st">${STATUS[t.status] || ''}</span></div>
       <small class="task__who">${t.mine ? `إلى ${esc(t.toName)}` : `من ${esc(t.fromName)}`} · ${fmt.format(t.createdAt)}${t.due ? ` · الموعد ${fmtDay.format(new Date(`${t.due}T00:00`))}${late ? ' <span class="task__late">متأخرة</span>' : ''}` : ''}</small>
       ${t.text ? `<p class="task__text">${esc(t.text)}</p>` : ''}
-      ${last && last.status !== 'received' ? `<p class="task__last">${last.status === 'done' ? '✅' : '⏳'} ${esc(STATUS[last.status])}${last.work ? ` · ${esc(last.work)}${last.count > 1 ? ` ×${last.count}` : ''}` : ''}${last.note ? ` · ${esc(last.note)}` : ''} <small>${fmt.format(last.at)}</small></p>` : ''}
+      ${last && last.status !== 'received' ? `<p class="task__last">${last.status === 'done' ? '✅' : '⏳'} ${esc(STATUS[last.status])}${last.work ? ` · ${esc(last.work)}${last.count > 1 ? ` ×${last.count}` : ''}` : ''}${last.helpers ? ` · معه: ${esc(last.helpers)}` : ''}${last.note ? ` · ${esc(last.note)}` : ''} <small>${fmt.format(last.at)}</small></p>` : ''}
       ${silent ? '<p class="task__silent">لم ينشر حتى الآن</p>' : ''}
       ${t.failed ? '<p class="task__silent">لم تُرسل. احذفها وأعد الإرسال.</p>' : ''}
       <div class="task__acts">
@@ -92,16 +92,30 @@ export async function mount(root) {
     form.querySelector('#tn-title').focus();
   }
 
-  // ---- الرد على مهمة: تأشيرة العمل، والعدد، وملاحظة وصورة، ومجموعة النشر (ثابتة) ----
+  // ---- الرد على مهمة: أعمال متعددة (لكل عمل عدده)، ومعاونون ذهبوا معه، وملاحظة وصورة، ومجموعة النشر (ثابتة) ----
   async function openReply(t, status) {
     const [works, room] = await Promise.all([catalog(), taskRoom()]);
     const rooms = [[GENERAL, 'العامة'], ...[...groupRooms()].filter(([id]) => !isChatRoom(id)).map(([id, r]) => [id, r.name])];
-    let work = null, image = null;
+    const all = groupMembers();
+    const me = groupMe();
+    // من في وحدته (ومن تحتها)؛ ورئيس القسم يرى الجميع
+    const unit = myContacts().filter((u) => u !== me.uid && all.has(u)).map((u) => ({ uid: u, name: all.get(u).name })).sort((a, b) => a.name.localeCompare(b.name, 'ar'));
+    const picked = new Map(); // id ← count
+    const helpers = new Map(); // مفتاح ← { uid?, name }
+    let image = null;
     form.innerHTML = `
       <p class="sheet__title">${status === 'done' ? '✅ تم' : '⏳ مازال يستأنف'}: ${esc(t.title)}</p>
-      <p class="g-sub">تأشيرة العمل</p>
+      <p class="g-sub">الأعمال <small>اختر كل ما أنجزته، ولكل عمل عدده</small></p>
       <div class="task-tags">${works.map((w) => `<button type="button" class="task-tag" data-w="${esc(w.id)}">${esc(w.name)}</button>`).join('') || '<span class="muted">لا تأشيرات بعد (يضيفها رئيس القسم في النقاط).</span>'}</div>
-      <label class="struct-field">العدد<input type="number" id="tr-count" min="1" max="50" value="1" inputmode="numeric"></label>
+      <ul class="task-counts" id="tr-counts"></ul>
+      <p class="g-sub">المعاونون <small>من ذهب معك</small></p>
+      <ul class="g-pick task-helpers" id="tr-helpers">${unit.map((p) => `<li><label><input type="checkbox" value="${esc(p.uid)}"><span>${esc(p.name)}</span></label></li>`).join('')}</ul>
+      <div class="task-add-helper">
+        <input id="tr-hname" placeholder="إضافة شخص غير موجود في القائمة" autocomplete="off">
+        <button type="button" class="text-btn" id="tr-hadd">إضافة</button>
+      </div>
+      <ul class="g-found" id="tr-hfound"></ul>
+      <ul class="g-invited" id="tr-hextra"></ul>
       <textarea id="tr-note" rows="2" maxlength="600" placeholder="ملاحظة (اختياري): المكان، المدة، ما بقي…"></textarea>
       <div class="row"><button type="button" class="btn btn--ghost" id="tr-photo">📷 صورة</button><span class="muted" id="tr-photo-st"></span></div>
       <input type="file" id="tr-file" accept="image/*" hidden>
@@ -109,30 +123,66 @@ export async function mount(root) {
       <small class="muted">تبقى مجموعة النشر كما اخترتها للمرات القادمة.</small>
       <p class="status" id="tr-msg" role="status"></p>
       <div class="g-sheet__actions"><button class="btn" type="submit">نشر</button><button class="btn btn--ghost" type="button" data-close>إلغاء</button></div>`;
-    form.querySelector('.task-tags').addEventListener('click', (e) => {
+    const $f = (q) => form.querySelector(q);
+    const renderCounts = () => {
+      $f('#tr-counts').innerHTML = [...picked].map(([id, n]) => {
+        const w = works.find((x) => x.id === id);
+        return `<li><span>${esc(w.name)}</span><button type="button" class="task-step" data-step="-1" data-id="${esc(id)}" aria-label="أقل">−</button><b>${n}</b><button type="button" class="task-step" data-step="1" data-id="${esc(id)}" aria-label="أكثر">+</button></li>`;
+      }).join('');
+    };
+    $f('.task-tags').addEventListener('click', (e) => {
       const b = e.target.closest('[data-w]');
       if (!b) return;
-      const on = !b.classList.contains('is-on');
-      form.querySelectorAll('[data-w]').forEach((x) => x.classList.remove('is-on'));
-      b.classList.toggle('is-on', on);
-      work = on ? works.find((w) => w.id === b.dataset.w) : null;
+      if (picked.has(b.dataset.w)) picked.delete(b.dataset.w); else picked.set(b.dataset.w, 1);
+      b.classList.toggle('is-on', picked.has(b.dataset.w));
+      renderCounts();
     });
-    const file = form.querySelector('#tr-file');
-    form.querySelector('#tr-photo').onclick = () => file.click();
+    $f('#tr-counts').addEventListener('click', (e) => {
+      const b = e.target.closest('[data-step]');
+      if (!b) return;
+      picked.set(b.dataset.id, Math.max(1, Math.min(50, picked.get(b.dataset.id) + Number(b.dataset.step))));
+      renderCounts();
+    });
+    // إضافة شخص: من المؤسسة بالاسم، أو اسم يُكتب كما هو (ليس له حساب)
+    const renderExtra = () => {
+      $f('#tr-hextra').innerHTML = [...helpers].filter(([k]) => !unit.some((p) => p.uid === k)).map(([k, h]) => `<li>معي: <b>${esc(h.name)}</b>${h.uid ? '' : ' <small>(بلا حساب)</small>'} <button type="button" class="text-btn text-btn--muted" data-hrm="${esc(k)}">إزالة</button></li>`).join('');
+    };
+    const addHelper = (h) => { helpers.set(h.uid || `n:${h.name}`, h); $f('#tr-hname').value = ''; $f('#tr-hfound').innerHTML = ''; renderExtra(); };
+    $f('#tr-helpers').addEventListener('change', (e) => {
+      const c = e.target;
+      const p = unit.find((x) => x.uid === c.value);
+      if (c.checked) helpers.set(p.uid, p); else helpers.delete(p.uid);
+    });
+    $f('#tr-hname').addEventListener('input', (e) => {
+      const q = e.target.value.trim();
+      const found = q.length < 2 ? [] : [...all].filter(([u, m]) => u !== me.uid && !helpers.has(u) && !unit.some((p) => p.uid === u) && m.name.includes(q)).slice(0, 5);
+      $f('#tr-hfound').innerHTML = found.map(([u, m]) => `<li><span>${esc(m.name)}</span><button type="button" class="text-btn" data-hpick="${esc(u)}">إضافة</button></li>`).join('');
+    });
+    $f('#tr-hfound').addEventListener('click', (e) => {
+      const b = e.target.closest('[data-hpick]');
+      if (b) addHelper({ uid: b.dataset.hpick, name: all.get(b.dataset.hpick).name });
+    });
+    $f('#tr-hadd').addEventListener('click', () => { const n = $f('#tr-hname').value.trim(); if (n) addHelper({ name: n.slice(0, 60) }); });
+    $f('#tr-hextra').addEventListener('click', (e) => { const b = e.target.closest('[data-hrm]'); if (b) { helpers.delete(b.dataset.hrm); renderExtra(); } });
+    const file = $f('#tr-file');
+    $f('#tr-photo').onclick = () => file.click();
     file.onchange = async () => {
       const f = file.files?.[0];
       if (!f) return;
-      form.querySelector('#tr-photo-st').textContent = 'أجهّز الصورة…';
-      try { image = await compressImage(f); form.querySelector('#tr-photo-st').textContent = 'أُرفقت صورة ✓'; } catch (err) { form.querySelector('#tr-photo-st').textContent = err.message; }
+      $f('#tr-photo-st').textContent = 'أجهّز الصورة…';
+      try { image = await compressImage(f); $f('#tr-photo-st').textContent = 'أُرفقت صورة ✓'; } catch (err) { $f('#tr-photo-st').textContent = err.message; }
     };
     form.onsubmit = async (e) => {
       e.preventDefault();
       const btn = form.querySelector('[type=submit]');
       btn.disabled = true;
       try {
-        await replyTask(t, { status, work, count: form.querySelector('#tr-count').value, note: form.querySelector('#tr-note').value, image, room: form.querySelector('#tr-room').value });
+        await replyTask(t, {
+          status, works: [...picked].map(([id, count]) => ({ ...works.find((w) => w.id === id), count })),
+          helpers: [...helpers.values()], note: $f('#tr-note').value, image, room: $f('#tr-room').value,
+        });
         sheet.hidden = true; render(); say(status === 'done' ? 'نُشر الإنجاز ✓ ووصل لمسؤولك.' : 'نُشر أنك مستمر ✓', true);
-      } catch (err) { form.querySelector('#tr-msg').textContent = err.message; btn.disabled = false; }
+      } catch (err) { $f('#tr-msg').textContent = err.message; btn.disabled = false; }
     };
     sheet.hidden = false;
   }

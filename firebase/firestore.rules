@@ -1,7 +1,7 @@
 rules_version = '2';
 
 // عقلي الثاني: قواعد حماية المؤسسة على Firestore
-// إصدار القواعد: 10 (المهام وتأشيرات العمل)
+// إصدار القواعد: 11 (أعمال متعددة ومعاونون في رد المهمة)
 // المرحلة ١: الحسابات (المدير، والموظفون، والدعوات)
 //
 // انسخ هذا الملف كاملاً في Firebase ← Firestore Database ← Rules، ثم اضغط Publish.
@@ -112,7 +112,10 @@ service cloud.firestore {
     // وآخر مستلم يحذف الرسالة من السحابة. الأرشيف الدائم على جوال المدير، وكل موظف يحتفظ بما وصله.
     match /relay/{id} {
       function validMsg(d) {
-        return d.keys().hasOnly(['mid', 'from', 'fromName', 'text', 'image', 'tag', 'room', 'sentAt', 'createdAt', 'pending', 'history', 'task', 'work'])
+        return d.keys().hasOnly(['mid', 'from', 'fromName', 'text', 'image', 'tag', 'room', 'sentAt', 'createdAt', 'pending', 'history', 'task', 'work', 'works', 'helpers'])
+          // رد المهمة: عدة أعمال مؤشَّرة، ومعاونون ذهبوا معه (يُحسب لهم العمل أيضاً على هاتف رئيس القسم)
+          && (!('works' in d) || (d.works is list && d.works.size() >= 1 && d.works.size() <= 10))
+          && (!('helpers' in d) || (d.helpers is list && d.helpers.size() <= 20))
           // المهام: new (من مسؤول لمن تحته) أو update (رد المكلَّف)؛ والعمل المؤشَّر في منشور الإنجاز
           && (!('task' in d) || (d.task is map && d.task.kind in ['new', 'update'] && d.task.id is string && d.task.id.size() <= 64))
           && (!('work' in d) || (d.work is map && d.work.id is string && d.work.count is int && d.work.count >= 1 && d.work.count <= 50))

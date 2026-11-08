@@ -1215,3 +1215,14 @@ body.on-group .tasks .wa-head { padding-top: calc(env(safe-area-inset-top) + 8px
 .task-draft__due { font-size: .85rem; color: var(--wa-meta, #8696a0); }
 .task-draft__acts { display: flex; align-items: center; gap: 12px; margin-top: 4px; }
 .task-draft input, .task-draft select { width: 100%; }
+
+.task-counts { list-style: none; margin: 0; padding: 0; }
+.task-counts li { display: flex; align-items: center; gap: 10px; padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,.06); }
+.task-counts li span { flex: 1; }
+.task-counts b { min-width: 24px; text-align: center; }
+.task-step { width: 34px; height: 34px; border-radius: 50%; border: 1px solid rgba(255,255,255,.2); background: none; color: inherit; font-size: 1.2rem; cursor: pointer; }
+.task-helpers { max-height: 180px; }
+.task-add-helper { display: flex; gap: 8px; align-items: center; }
+.task-add-helper input { flex: 1; }
+#t-form { overflow-y: auto; }
+#t-form > * { flex: none; }

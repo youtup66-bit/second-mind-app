@@ -360,7 +360,7 @@ function openEditor(root, g = null) {
     } catch (err) {
       if (/permission/i.test(String(err?.code || err?.message))) {
         const project = (await cloudConfig().catch(() => null))?.projectId || '';
-        msg.textContent = `تعذّر الحفظ: قواعد Firebase في المشروع «${project}» قديمة. من «المؤسسة» في هذه النسخة اضغط «نسخ قواعد الحماية» (الإصدار ١٠)، والصقها في هذا المشروع، ثم Publish.`;
+        msg.textContent = `تعذّر الحفظ: قواعد Firebase في المشروع «${project}» قديمة. من «المؤسسة» في هذه النسخة اضغط «نسخ قواعد الحماية» (الإصدار ١١)، والصقها في هذا المشروع، ثم Publish.`;
       } else msg.textContent = err.message;
       msg.hidden = false;
       btn.disabled = false;
