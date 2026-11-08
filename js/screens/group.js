@@ -6,7 +6,7 @@ import {
 } from '../group.js';
 import { PALETTE } from '../org-structure.js';
 import { getGroupMessages } from '../storage.js';
-import { session } from '../cloud.js';
+import { session, cloudConfig } from '../cloud.js';
 import { attachHoldMic } from '../hold-mic.js';
 import { canListen, canBrowserListen } from '../voice.js';
 
@@ -353,7 +353,10 @@ function openEditor(root, g = null) {
       close();
       if (!g) location.hash = `#/chats?room=${encodeURIComponent(saved.id)}`;
     } catch (err) {
-      msg.textContent = /permission/i.test(String(err?.code || err?.message)) ? 'تعذّر الحفظ: انشر قواعد الحماية الجديدة في Firebase.' : err.message;
+      if (/permission/i.test(String(err?.code || err?.message))) {
+        const project = (await cloudConfig().catch(() => null))?.projectId || '';
+        msg.textContent = `تعذّر الحفظ: قواعد Firebase في المشروع «${project}» قديمة. من «المؤسسة» في هذه النسخة اضغط «نسخ قواعد الحماية» (الإصدار ٦)، والصقها في هذا المشروع، ثم Publish.`;
+      } else msg.textContent = err.message;
       msg.hidden = false;
       btn.disabled = false;
     }

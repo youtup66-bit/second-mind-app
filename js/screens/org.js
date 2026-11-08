@@ -65,14 +65,17 @@ function bindRulesBox(root) {
       const text = await (await fetch('firebase/firestore.rules', { cache: 'no-cache' })).text();
       if (!/service cloud\.firestore/.test(text)) throw new Error();
       box.value = text;
+      // رقم الإصدار والمشروع: حتى لا تُلصق قواعد قديمة أو في مشروع آخر (مثل مشروع النسخة الأساسية)
+      const ver = text.match(/إصدار القواعد:\s*(\d+)/)?.[1] || '؟';
+      const project = (await cloudConfig())?.projectId || 'المربوط بهذه النسخة';
       try {
         await navigator.clipboard.writeText(text);
-        setMsg(msg, 'نُسخت القواعد ✓ الصقها الآن في Firebase.', true);
+        setMsg(msg, `نُسخت قواعد الإصدار ${ver} ✓ الصقها في Firebase في المشروع «${project}» تحديداً، ثم Publish.`, true);
       } catch {
         // النسخ التلقائي غير مسموح: نعرض النص محدداً لينسخه يدوياً
         box.hidden = false;
         box.focus(); box.select();
-        setMsg(msg, 'حدّد النص أدناه كله وانسخه.', true);
+        setMsg(msg, `حدّد النص أدناه كله وانسخه (الإصدار ${ver})، والصقه في المشروع «${project}».`, true);
       }
     } catch { setMsg(msg, 'تعذّر جلب القواعد. تحقق من الإنترنت.'); }
   });
