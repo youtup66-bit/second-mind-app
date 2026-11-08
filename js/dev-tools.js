@@ -6,7 +6,7 @@ import {
   session, signIn, signOut, createInvite, secondaryApi, usernameEmail, listMembers,
 } from './cloud.js';
 import {
-  loadStructure, saveStructure, addNode, addCustom, placePerson, toggleLink,
+  loadStructure, saveStructure, addNode, addCustom, placePerson, toggleLink, setHead,
 } from './org-structure.js';
 import { getWorks, addWork } from './points.js';
 import { publishRooms, roomIdOf, startGroupSync } from './group.js';
@@ -41,6 +41,10 @@ const DEMO_ROOM_POSTS = [
 ];
 
 export const devAccounts = () => getSetting(KEY, null);
+export async function updateManagerPassword(password) {
+  const a = await devAccounts();
+  if (a?.manager) await setSetting(KEY, { ...a, manager: { ...a.manager, password } });
+}
 const guard = () => { if (!IS_DEV) throw new Error('أدوات المطوّر في نسخة التجربة فقط.'); };
 
 // ينشئ موظفاً تجريبياً كاملاً: دعوة من المدير، ثم حساب ينضم بها (عبر الاتصال الثاني)
@@ -114,6 +118,7 @@ export async function seedDemoOrg({ managerPassword }, onStep = () => {}) {
     const [ahmed, sara, hussein, zainab, mustafa] = people.map((x) => x.uid);
     placePerson(st, ahmed, cams.id); placePerson(st, ahmed, project.id);
     placePerson(st, sara, maint.id, true);
+    placePerson(st, ahmed, cams.id); setHead(st, ahmed, cams.id, true);
     placePerson(st, hussein, install.id);
     placePerson(st, zainab, cables.id); placePerson(st, zainab, project.id);
     placePerson(st, mustafa, power.id); placePerson(st, mustafa, net.id, true);

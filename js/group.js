@@ -46,11 +46,13 @@ export async function startGroupSync() {
 
     unsubs.push(F.onSnapshot(F.collection(db, 'members'), (snap) => {
       members = new Map(snap.docs.map((d) => [d.id, {
-        name: d.data().displayName, role: d.data().role, joinedAt: d.data().createdAt?.toMillis?.() || 0,
+        name: d.data().displayName, role: d.data().role, joinedAt: d.data().createdAt?.toMillis?.() || 0, invite: d.data().invite || null,
       }]));
       resolveMembers();
       emit('members');
       if (me?.role === 'manager') {
+        // من انضم بدعوة كرة: يوضع فيها بمنصبه (قبل نشر المجموعات)
+        import('./org-accounts.js').then((x) => x.placeJoined(members)).catch((e) => console.warn('place joined', e));
         managerChores().catch((e) => console.warn('group chores', e));
         publishRoomsSoon();
       }

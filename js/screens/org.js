@@ -1,7 +1,7 @@
 // شاشة المؤسسة: الدخول، وإنشاء المؤسسة (المدير)، والانضمام بدعوة (الموظف)
 import {
   cloudConfig, setCloudConfig, clearCloudConfig, session, signIn, signOut, createOrg,
-  readInvite, joinWithInvite, orgExists,
+  readInvite, joinWithInvite, orgExists, sendReset,
 } from '../cloud.js';
 
 export const title = 'المؤسسة';
@@ -133,10 +133,11 @@ async function renderLogin(root, err) {
       </div>
       ${err ? `<p class="status status--err">${esc(err.message)}</p>` : ''}
       <form class="card org-form" id="login-form" ${exists ? '' : 'hidden'}>
-        ${userField('li-user')}
+        ${userField('li-user', 'اسم المستخدم (أو البريد إن ربطته)')}
         ${field('li-pass', 'كلمة المرور', 'type="password" autocomplete="current-password" dir="ltr" required')}
         <button class="btn" id="li-go" type="submit">دخول</button>
         <p class="status" id="li-msg" role="status"></p>
+        <button type="button" class="link-btn" id="li-forgot">نسيت كلمة المرور؟</button>
       </form>
       <form class="card org-form" id="new-form" ${exists ? 'hidden' : ''}>
         ${field('no-org', 'اسم المؤسسة', 'type="text" required maxlength="80"')}
@@ -157,6 +158,14 @@ async function renderLogin(root, err) {
       location.hash = s?.member?.role === 'manager' ? '#/structure' : '#/group';
     } catch (e) { setMsg(root.querySelector('#li-msg'), e.message); }
   }));
+
+  // الاستعادة: بالبريد لمن ربطه (رئيس القسم)، وغيره يطلب من مسؤوله رابطاً جديداً
+  root.querySelector('#li-forgot').addEventListener('click', async () => {
+    const msg = root.querySelector('#li-msg');
+    const typed = root.querySelector('#li-user').value.trim();
+    if (!typed.includes('@')) { setMsg(msg, 'إن ربطت بريدك فاكتبه في الخانة الأولى ثم اضغط «نسيت كلمة المرور» مرة أخرى. غير ذلك: اطلب من مسؤولك رابط استعادة.'); return; }
+    try { await sendReset(typed); setMsg(msg, `أرسلنا رابط تغيير كلمة المرور إلى ${typed}.`, true); } catch (e) { setMsg(msg, e.message); }
+  });
 
   const noBtn = root.querySelector('#no-go');
   root.querySelector('#new-form').addEventListener('submit', busyButton(noBtn, async () => {

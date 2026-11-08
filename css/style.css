@@ -974,6 +974,16 @@ body.on-structure .topbar { display: none; }
 .struct-sheet .struct-actions .is-danger { color: var(--danger); background: none; }
 .struct-sheet .struct-places button { background: none; border: 0; color: var(--accent); padding: 4px 6px; }
 .struct-sheet .struct-places button.is-danger { color: var(--danger); }
+.struct-perms { list-style: none; margin: 0 0 8px; padding: 0; }
+.struct-perms li { padding: 8px 0; border-bottom: 1px solid var(--border); }
+.struct-perms .switch span { display: flex; flex-direction: column; gap: 2px; }
+.struct-perms small, .struct-note { font-size: .78rem; color: var(--muted); }
+.struct-waiting { list-style: none; margin: 4px 0; padding: 0; font-size: .85rem; }
+.struct-waiting li { display: flex; align-items: center; gap: 8px; padding: 4px 0; }
+.struct-waiting li span { flex: 1; }
+.struct-waiting button { background: none; border: 0; color: var(--accent); font: inherit; cursor: pointer; padding: 2px 4px; }
+.struct-waiting button.is-danger { color: var(--danger); }
+.struct-pick--row { display: flex; gap: 14px; flex-wrap: wrap; }
 .struct-color--any { font-size: 0; }
 
 /* ---- شاشات المدير: كلمات بدل الأزرار والمربعات ---- */

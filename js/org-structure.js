@@ -12,13 +12,42 @@ export const TYPES = {
   unit: { label: 'وحدة', color: '#ff9a3d', child: 'section', r: 6, rest: 95 },
   section: { label: 'قسم وحدة', color: '#ffd23f', child: null, r: 5, rest: 75 },
   custom: { label: 'كرة مخصصة', color: '#c084fc', child: null, r: 6.5, rest: 110 },
+  // الذاتية: البريد والكتب وإرسالها إلى مسؤولي الشعب والوحدات (A22)؛ كرة واحدة تحت القسم
+  personnel: { label: 'الذاتية', color: '#e2e8f0', child: null, r: 6.5, rest: 110 },
 };
+
+// خيارات الإظهار لكل كرة: ما يُسمح لمسؤولها (يقررها رئيس القسم)
+export const PERMS = [
+  ['sections', 'الأقسام', 'يرى فرعه من الهيكل: كراته وأسماء من فيها'],
+  ['accounts', 'إدارة الحسابات', 'ينشئ كرات وحسابات لما تحته ويحذفها'],
+  ['projects', 'كرات المشاريع', 'ينشئ كرات مشاريع لفرعه ويضيف لها موظفيه'],
+  ['assistantAsHead', 'صلاحيات المعاون', 'المعاون له صلاحيات المسؤول نفسها'],
+  ['assistant', 'المساعد', 'يستشير المساعد الذكي'],
+  ['mind', 'عقل المؤسسة', 'يرى عقل المؤسسة الخاص بفرعه'],
+  ['evals', 'التقييمات', 'يرى تقييمات ونقاط من تحته'],
+];
+// المسؤول الافتراضي: يرى فرعه، ويدير حسابات وحدته (مسؤول الوحدة ينشئ موظفيه وأقسامها)
+export const defaultPerms = (type) => ({ sections: true, accounts: type === 'unit' || type === 'section' });
+export const permsOf = (n) => ({ ...defaultPerms(n?.type), ...(n?.perms || {}) });
+export function setPerm(s, id, key, on) {
+  const n = nodeById(s, id);
+  if (n) n.perms = { ...(n.perms || {}), [key]: !!on };
+}
+export function addPersonnel(s) {
+  let n = s.nodes.find((x) => x.type === 'personnel');
+  if (n) return n;
+  n = { id: uid(), type: 'personnel', name: 'الذاتية', parent: 'root' };
+  s.nodes.push(n);
+  return n;
+}
 export const PERSON = { label: 'موظف', color: '#3ddc84', r: 4.5, rest: 48 };
 export const ASSISTANT = { label: 'معاون', color: '#2dd4bf', r: 5.5, rest: 42 };
 // ألوان مقترحة للكرات المخصصة (والمدير يختار أي لون)
 export const PALETTE = ['#c084fc', '#f472b6', '#22d3ee', '#f87171', '#a3e635', '#e879f9', '#38bdf8', '#fb7185', '#facc15', '#94a3b8'];
 // المعاون في القسم والشعب والوحدات
-export const canHaveAssistant = (type) => type === 'dept' || type === 'division' || type === 'unit';
+export const canHaveAssistant = (type) => type === 'dept' || type === 'division' || type === 'unit' || type === 'personnel';
+// كرات لها مسؤول بحساب (المشروع بلا حساب: يُضاف له الموظفون فقط)
+export const canHaveHead = (type) => type === 'division' || type === 'unit' || type === 'section' || type === 'personnel';
 export const colorOf = (n) => (n?.type === 'custom' && n.color) || TYPES[n?.type]?.color || '#ffffff';
 
 const uid = () => Math.random().toString(36).slice(2, 10);
@@ -98,6 +127,14 @@ export function removeNode(s, id) {
 export const placesOf = (s, userId) => (s.people[userId]?.places || []).filter((pl) => nodeById(s, pl.node));
 
 // يضيف مكاناً للموظف (أو يحدّث كونه معاوناً فيه). لكل مكان معاون واحد
+// مسؤول الكرة (قد يكون لها أكثر من حساب مسؤول)
+export function setHead(s, userId, nodeId, on = true) {
+  const pl = (s.people[userId]?.places || []).find((x) => x.node === nodeId);
+  if (pl) { pl.head = !!on; if (on) pl.assistant = false; }
+}
+export const headsOf = (s, nodeId) =>
+  Object.entries(s.people).filter(([, p]) => p.places.some((pl) => pl.node === nodeId && pl.head)).map(([u]) => u);
+
 export function placePerson(s, userId, nodeId, assistant = false) {
   const n = nodeById(s, nodeId);
   if (!n) return;

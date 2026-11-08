@@ -1,16 +1,18 @@
 // شاشة "عقل المؤسسة" (للمدير فقط): القسم والشعب والوحدات وأقسامها، وكرات مخصصة (مشاريع...)
 // يسمّيها المدير ويلوّنها ويربطها بأكثر من فرع، ومكان كل موظف ومعاون (وقد يكون في أكثر من كرة)
-import { session, listMembers } from '../cloud.js';
+import { session, listMembers, inviteLink, removeMember, changePassword, linkRecoveryEmail, currentEmail } from '../cloud.js';
+import { inviteToBall, cancelBallInvite, ballInvites, TITLES } from '../org-accounts.js';
 import {
   TYPES, PERSON, ASSISTANT, PALETTE, canHaveAssistant, colorOf, loadStructure, saveStructure, nodeById, childrenOf,
   addNode, addCustom, setColor, toggleLink, renameNode, removeNode, placesOf, placePerson, removePlace, unplacePerson,
-  assistantOf, peopleAt, pathOf, toGraph,
+  assistantOf, peopleAt, pathOf, toGraph, canHaveHead, headsOf, setHead, PERMS, permsOf, setPerm, addPersonnel,
 } from '../org-structure.js';
 import { createOrgGraph } from '../org-graph.js';
 import { totals, pointsEvents } from '../points.js';
 import { getGroupMessages } from '../storage.js';
 import { groupEvents, groupMembers, countsForPoints } from '../group.js';
 import { mindTabs } from '../staff-nav.js';
+import { IS_DEV } from '../env.js';
 
 export const title = 'عقل المؤسسة';
 
@@ -120,10 +122,15 @@ export async function mount(root) {
       <span>${dot(TYPES.dept.color)}القسم</span><span>${dot(TYPES.division.color)}شعبة</span>
       <span>${dot(TYPES.unit.color)}وحدة</span><span>${dot(TYPES.section.color)}قسم وحدة</span>
       <span>${dot(PERSON.color)}موظف</span><span>${dot(ASSISTANT.color)}معاون</span>
+      ${st.nodes.some((x) => x.type === 'personnel') ? `<span>${dot(TYPES.personnel.color)}الذاتية</span>` : ''}
       ${custom.map((n) => `<span>${dot(colorOf(n))}${esc(n.name)}</span>`).join('')}`;
   };
 
   const panel = root.querySelector('#panel');
+  // دعوات الكرات التي لم ينضم أصحابها بعد
+  let pending = await ballInvites();
+  const reloadPending = async () => { pending = await ballInvites(); };
+  let lastInvite = null; // { code, name } آخر دعوة أُنشئت لعرض رابطها
   // نموذج فرعي في اللوحة: add | custom | rename | color | links | pick-person | pick-assistant | add-place
   let mode = null;
   let draftColor = PALETTE[0];
@@ -153,6 +160,7 @@ export async function mount(root) {
     },
   });
   nameBtn.addEventListener('click', openSheet);
+  if (IS_DEV) window.__structGraph = graph; // للاختبار في نسخة التجربة فقط
   sheet.addEventListener('click', (e) => { if (e.target === sheet) closeSheet(); });
   // النقطة المتوهجة في الأعلى تُسدل القائمة ودليل الألوان
   function setMenu(on) {
@@ -210,6 +218,8 @@ export async function mount(root) {
     const t = TYPES[n.type];
     const childT = t.child && TYPES[t.child];
     const asst = assistantOf(st, n.id);
+    const heads = headsOf(st, n.id).filter(isMember);
+    const waiting = Object.entries(pending).filter(([, x]) => x.node === n.id);
     const here = peopleAt(st, n.id, { assistants: false }).filter(isMember);
     const kids = childrenOf(st, n.id);
     const custom = n.type === 'custom';
@@ -233,6 +243,49 @@ export async function mount(root) {
       sub = `<p class="struct-sub">اربط «${esc(n.name)}» بالفروع (يمكن اختيار أكثر من فرع):</p>
         <div class="struct-pick">${st.nodes.filter((x) => x.id !== n.id).map((x) => `<button type="button" data-link="${esc(x.id)}" class="${n.links?.includes(x.id) ? 'is-on' : ''}">${n.links?.includes(x.id) ? '✓ ' : ''}${nodeLine(x)}</button>`).join('')}</div>
         <button class="btn btn--ghost" type="button" data-a="cancel">تم</button>`;
+    } else if (mode === 'account') {
+      const titles = n.id === 'root' ? ['assistant', 'member'] : canHaveHead(n.type) ? ['head', 'assistant', 'member'] : ['member'];
+      sub = `<form class="struct-form struct-form--col" id="af">
+          <p class="struct-sub">حساب جديد في «${esc(n.name)}». يصله رابط فيضع كلمة مروره بنفسه:</p>
+          <input id="af-name" maxlength="60" required placeholder="الاسم الكامل">
+          <input id="af-user" maxlength="30" required dir="ltr" placeholder="اسم المستخدم (إنجليزي)" autocapitalize="off" autocomplete="off">
+          <div class="struct-pick struct-pick--row">${titles.map((t, i) => `<label class="switch"><input type="radio" name="af-title" value="${t}" ${i === 0 ? 'checked' : ''}><span>${TITLES[t]}</span></label>`).join('')}</div>
+          <p class="status" id="af-msg" role="status"></p>
+          <div class="row"><button class="btn" type="submit">إنشاء الرابط</button><button class="btn btn--ghost" type="button" data-a="cancel">إلغاء</button></div>
+        </form>`;
+    } else if (mode === 'invite-out' && lastInvite) {
+      sub = `<div class="struct-form struct-form--col">
+          <p class="struct-sub">أرسل هذا الرابط إلى <b>${esc(lastInvite.name)}</b> (واتساب مثلاً). يفتحه ويضع كلمة مروره، فيظهر في «${esc(n.name)}» تلقائياً. يُستخدم مرة واحدة.</p>
+          <input class="invite-out__link" dir="ltr" readonly value="${esc(lastInvite.link)}">
+          <div class="row">${navigator.share ? '<button class="btn" type="button" id="inv-share">مشاركة</button>' : ''}<button class="btn btn--ghost" type="button" id="inv-copy">نسخ</button><button class="btn btn--ghost" type="button" data-a="cancel">تم</button></div>
+          <p class="status" id="inv-msg" role="status"></p>
+        </div>`;
+    } else if (mode === 'perms') {
+      const p = permsOf(n);
+      sub = `<p class="struct-sub">ما يُسمح لمسؤول «${esc(n.name)}» (ولمعاونه إن فعّلت صلاحيات المعاون):</p>
+        <ul class="struct-perms">${PERMS.map(([k, label, hint]) => `<li><label class="switch"><input type="checkbox" data-perm="${k}" ${p[k] ? 'checked' : ''}><span><b>${label}</b><small>${hint}</small></span></label></li>`).join('')}</ul>
+        <p class="muted struct-note">تُحفظ الآن، وتعمل حين يصل لكل مسؤول فرعه (المرحلة التالية: الأقسام وإدارة الحسابات وكرات المشاريع، ثم المساعد وعقل المؤسسة والتقييمات).</p>
+        <button class="btn btn--ghost" type="button" data-a="cancel">تم</button>`;
+    } else if (mode === 'me') {
+      sub = `<div class="struct-form struct-form--col">
+          <p class="struct-sub">رئيس القسم: <b>${esc(s.member.display_name)}</b> · اسم المستخدم: <b dir="ltr">${esc(s.member.username)}</b></p>
+          <p class="muted" id="me-email">البريد للاستعادة: …</p>
+          <form class="struct-form struct-form--col" id="pw">
+            <b>تغيير كلمة المرور</b>
+            <input type="password" id="pw-cur" required placeholder="كلمة المرور الحالية" autocomplete="current-password">
+            <input type="password" id="pw-new" required minlength="8" placeholder="الجديدة (٨ أحرف على الأقل)" autocomplete="new-password">
+            <button class="btn" type="submit">تغيير</button>
+          </form>
+          <form class="struct-form struct-form--col" id="em">
+            <b>الاستعادة بالبريد</b>
+            <small class="muted">تصل رسالة تأكيد إلى بريدك. بعدها تدخل ببريدك بدل اسم المستخدم، وتستعيد كلمة المرور منه إن نسيتها.</small>
+            <input type="email" id="em-addr" required dir="ltr" placeholder="name@example.com">
+            <input type="password" id="em-cur" required placeholder="كلمة المرور الحالية" autocomplete="current-password">
+            <button class="btn" type="submit">ربط البريد</button>
+          </form>
+          <p class="status" id="me-msg" role="status"></p>
+          <button class="btn btn--ghost" type="button" data-a="cancel">تم</button>
+        </div>`;
     } else if (mode === 'pick-person' || mode === 'pick-assistant') {
       const list = members.filter((m) => {
         const pl = placesOf(st, m.user_id).find((x) => x.node === n.id);
@@ -249,11 +302,17 @@ export async function mount(root) {
       <div class="struct-title">${dot(colorOf(n))}<div><b>${esc(n.name)}</b><small>${t.label}${where}</small></div></div>
       ${sub ? '' : statsLine(n.parent || custom ? peopleUnder(n.id) : members.map((m) => m.user_id), n)}
       ${sub ? '' : `<p class="struct-meta">
+        ${canHaveHead(n.type) ? `المسؤول: <b>${heads.length ? heads.map((u) => esc(nameOf(u))).join('، ') : 'لا يوجد'}</b> · ` : ''}
         ${canHaveAssistant(n.type) ? `المعاون: <b>${asst ? esc(nameOf(asst)) : 'لا يوجد'}</b> · ` : ''}
         ${t.child ? `${count(kids.length, t.child)} · ` : ''}${count(here.length, 'person')}
-      </p>`}
+      </p>
+      ${waiting.length ? `<ul class="struct-waiting">${waiting.map(([code, x]) => `<li><span>بانتظار التسجيل: <b>${esc(x.name)}</b> (${TITLES[x.title]})</span><button type="button" data-link-code="${esc(code)}" data-link-name="${esc(x.name)}">الرابط</button><button type="button" data-cancel-code="${esc(code)}" class="is-danger">إلغاء</button></li>`).join('')}</ul>` : ''}`}
       ${sub || `<div class="struct-actions">
+        ${n.id === 'root' ? '<button type="button" data-a="me">حسابك: كلمة المرور والاستعادة</button>' : ''}
+        ${!custom ? '<button type="button" data-a="account">إضافة حساب</button>' : ''}
+        ${canHaveHead(n.type) ? '<button type="button" data-a="perms">خيارات الإظهار</button>' : ''}
         ${childT ? `<button type="button" data-a="add">إضافة ${childT.label}</button>` : ''}
+        ${n.id === 'root' && !st.nodes.some((x) => x.type === 'personnel') ? '<button type="button" data-a="personnel">إضافة الذاتية</button>' : ''}
         <button type="button" data-a="custom">إضافة كرة مخصصة</button>
         <button type="button" data-a="pick-person">إضافة موظف</button>
         ${canHaveAssistant(n.type) ? `<button type="button" data-a="pick-assistant">${asst ? 'تغيير المعاون' : 'إضافة معاون'}</button>` : ''}
@@ -262,6 +321,69 @@ export async function mount(root) {
         <button type="button" data-a="rename">تعديل الاسم</button>
         ${n.id !== 'root' ? '<button type="button" data-a="delete" class="is-danger">حذف</button>' : ''}
       </div>`}`;
+
+    panel.querySelector('#af')?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const msg = panel.querySelector('#af-msg');
+      const btn = panel.querySelector('#af [type=submit]');
+      btn.disabled = true;
+      try {
+        const name = panel.querySelector('#af-name').value;
+        const code = await inviteToBall({ node: n.id, title: panel.querySelector('[name=af-title]:checked').value, name, username: panel.querySelector('#af-user').value });
+        await reloadPending();
+        lastInvite = { code, name: name.trim(), link: await inviteLink(code) };
+        mode = 'invite-out';
+        renderPanel();
+      } catch (err) { msg.textContent = err.message; msg.className = 'status status--err'; btn.disabled = false; }
+    });
+    const bindLinkOut = () => {
+      const msg = panel.querySelector('#inv-msg');
+      panel.querySelector('#inv-share')?.addEventListener('click', () => {
+        navigator.share({ title: 'دعوة إلى المؤسسة', text: `${lastInvite.name}، هذه دعوتك للانضمام:`, url: lastInvite.link }).catch(() => {});
+      });
+      panel.querySelector('#inv-copy')?.addEventListener('click', async () => {
+        try { await navigator.clipboard.writeText(lastInvite.link); msg.textContent = 'نُسخ الرابط ✓'; } catch {
+          panel.querySelector('.invite-out__link').select(); msg.textContent = 'حدّد الرابط وانسخه يدوياً.';
+        }
+      });
+    };
+    if (mode === 'invite-out') bindLinkOut();
+    panel.querySelectorAll('[data-link-code]').forEach((b) => b.addEventListener('click', async () => {
+      lastInvite = { code: b.dataset.linkCode, name: b.dataset.linkName, link: await inviteLink(b.dataset.linkCode) };
+      mode = 'invite-out';
+      renderPanel();
+    }));
+    panel.querySelectorAll('[data-cancel-code]').forEach((b) => b.addEventListener('click', async () => {
+      if (!confirm('إلغاء هذه الدعوة؟ لن يعمل رابطها بعد ذلك.')) return;
+      await cancelBallInvite(b.dataset.cancelCode);
+      await reloadPending();
+      renderPanel();
+    }));
+    panel.querySelectorAll('[data-perm]').forEach((c) => c.addEventListener('change', async () => {
+      setPerm(st, n.id, c.dataset.perm, c.checked);
+      await saveStructure(st);
+    }));
+    if (mode === 'me') {
+      const msg = panel.querySelector('#me-msg');
+      const say = (t, ok) => { msg.textContent = t; msg.className = `status ${ok ? 'status--ok' : 'status--err'}`; };
+      currentEmail().then((e) => { const el = panel.querySelector('#me-email'); if (el) el.textContent = e ? `البريد للاستعادة: ${e} (تدخل به أيضاً)` : 'البريد للاستعادة: لم يُربط بعد'; }).catch(() => {});
+      panel.querySelector('#pw').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const next = panel.querySelector('#pw-new').value;
+        try {
+          await changePassword(panel.querySelector('#pw-cur').value, next);
+          e.target.reset();
+          say('غُيّرت كلمة المرور ✓', true);
+          // نسخة التجربة: مبدّل الأدوار يحفظ كلمة مرور المدير، فنحدّثها
+          if (IS_DEV) import('../dev-tools.js').then((d) => d.updateManagerPassword?.(next)).catch(() => {});
+        } catch (err) { say(err.message); }
+      });
+      panel.querySelector('#em').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const addr = panel.querySelector('#em-addr').value;
+        try { await linkRecoveryEmail(panel.querySelector('#em-cur').value, addr); e.target.reset(); say(`أرسلنا رسالة تأكيد إلى ${addr}. افتحها واضغط الرابط، ثم ادخل ببريدك.`, true); } catch (err) { say(err.message); }
+      });
+    }
 
     panel.querySelector('#nf')?.addEventListener('submit', async (e) => {
       e.preventDefault();
@@ -305,6 +427,7 @@ export async function mount(root) {
       const a = b.dataset.a;
       if (a === 'cancel') { mode = null; renderPanel(); return; }
       if (a === 'no-assistant') { placePerson(st, asst, n.id, false); await commit(n.id); return; }
+      if (a === 'personnel') { const p = addPersonnel(st); await commit(p.id); return; }
       if (a === 'delete') {
         if (!confirm(`حذف «${n.name}»${custom ? '' : ' وكل ما تحته'}؟ يُزال موظفوه من هذا المكان فقط.`)) return;
         const back = n.parent || (custom ? n.links?.[0] : null);
@@ -333,8 +456,9 @@ export async function mount(root) {
       ${sub ? '' : statsLine([u])}
       ${sub || `<ul class="struct-places">${places.map((pl) => {
         const n = nodeById(st, pl.node);
-        return `<li>${dot(colorOf(n))}<span><b>${esc(n.name)}</b>${pl.assistant ? ' <span class="struct-tag">معاون</span>' : ''}<small>${typeLabel(n)}</small></span>
-          ${canHaveAssistant(n.type) ? `<button type="button" data-asst="${esc(n.id)}">${pl.assistant ? 'إلغاء المعاون' : 'معاون'}</button>` : ''}
+        return `<li>${dot(colorOf(n))}<span><b>${esc(n.name)}</b>${pl.head ? ' <span class="struct-tag">مسؤول</span>' : ''}${pl.assistant ? ' <span class="struct-tag">معاون</span>' : ''}<small>${typeLabel(n)}</small></span>
+          ${canHaveHead(n.type) ? `<button type="button" data-head="${esc(n.id)}">${pl.head ? 'إلغاء المسؤول' : 'مسؤول'}</button>` : ''}
+          ${canHaveAssistant(n.type) && !pl.head ? `<button type="button" data-asst="${esc(n.id)}">${pl.assistant ? 'إلغاء المعاون' : 'معاون'}</button>` : ''}
           <button type="button" data-rm="${esc(n.id)}" class="is-danger">إزالة</button></li>`;
       }).join('')}</ul>
       ${recentPosts(u)}
@@ -342,7 +466,13 @@ export async function mount(root) {
         <button type="button" data-a="add-place">إضافة إلى كرة أخرى</button>
         <a href="#/staff?id=${encodeURIComponent(u)}">صفحة الموظف</a>
         <button type="button" data-a="unplace" class="is-danger">إخراج من الهيكل</button>
+        <button type="button" data-a="delete-account" class="is-danger">حذف الحساب</button>
       </div>`}`;
+    panel.querySelectorAll('[data-head]').forEach((b) => b.addEventListener('click', async () => {
+      const pl = places.find((x) => x.node === b.dataset.head);
+      setHead(st, u, b.dataset.head, !pl.head);
+      await commit(`p:${u}`);
+    }));
     panel.querySelectorAll('[data-n]').forEach((b) => b.addEventListener('click', async () => {
       placePerson(st, u, b.dataset.n, false);
       await commit(`p:${u}`);
@@ -359,6 +489,15 @@ export async function mount(root) {
     panel.querySelectorAll('[data-a]').forEach((b) => b.addEventListener('click', async () => {
       const a = b.dataset.a;
       if (a === 'cancel') { mode = null; renderPanel(); return; }
+      if (a === 'delete-account') {
+        if (!confirm(`حذف حساب ${nameOf(u)} من المؤسسة؟ لا يستطيع الدخول بعدها، ويُخرج من كل الكرات. تبقى منشوراته ونقاطه السابقة.`)) return;
+        try { await removeMember(u); } catch (err) { alert(err.message); return; }
+        const back = places[0].node;
+        unplacePerson(st, u);
+        members = members.filter((m) => m.user_id !== u);
+        await commit(back);
+        return;
+      }
       if (a === 'unplace') {
         if (!confirm(`إخراج ${nameOf(u)} من كل كرات الهيكل؟`)) return;
         const back = places[0].node;
@@ -391,7 +530,17 @@ export async function mount(root) {
     if (!mode) renderPanel();
   };
   groupEvents.addEventListener('members', onMembers);
+  // انضم صاحب دعوة كرة فوُضع فيها: نعيد قراءة الهيكل
+  const onPlaced = async () => {
+    const fresh = await loadStructure();
+    st.nodes = fresh.nodes; st.people = fresh.people;
+    await reloadPending();
+    graph.setData(toGraph(st, members));
+    if (!mode) renderPanel();
+  };
+  window.addEventListener('sm:placed', onPlaced);
   offStats = () => {
+    window.removeEventListener('sm:placed', onPlaced);
     pointsEvents.removeEventListener('change', refreshStats);
     groupEvents.removeEventListener('message', refreshStats);
     groupEvents.removeEventListener('members', onMembers);

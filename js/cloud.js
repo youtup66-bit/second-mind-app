@@ -148,10 +148,46 @@ export async function orgExists() {
   return run(async () => (await F.getDoc(F.doc(db, 'orgs', 'main'))).exists());
 }
 
+// الدخول باسم المستخدم، أو بالبريد الحقيقي لمن ربطه للاستعادة (رئيس القسم)
 export async function signIn(username, password) {
   const { auth, A } = await api();
-  await run(() => A.signInWithEmailAndPassword(auth, toEmail(username), password));
+  const email = String(username || '').includes('@') ? String(username).trim() : toEmail(username);
+  await run(() => A.signInWithEmailAndPassword(auth, email, password));
   return session();
+}
+
+// ---- الحساب: كلمة المرور والاستعادة ----
+export async function changePassword(current, next) {
+  checkPassword(next);
+  const { auth, A } = await api();
+  const user = auth.currentUser;
+  if (!user) throw new CloudError('ادخل أولاً.', 'NO_USER');
+  await run(async () => {
+    await A.reauthenticateWithCredential(user, A.EmailAuthProvider.credential(user.email, current));
+    await A.updatePassword(user, next);
+  });
+}
+// يربط بريداً حقيقياً: تصل رسالة تأكيد، وبعدها يُدخل بالبريد ويستعيد كلمة المرور منه
+export async function linkRecoveryEmail(current, email) {
+  email = String(email || '').trim();
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) throw new CloudError('اكتب بريداً صحيحاً.', 'BAD_EMAIL');
+  const { auth, A } = await api();
+  const user = auth.currentUser;
+  await run(async () => {
+    await A.reauthenticateWithCredential(user, A.EmailAuthProvider.credential(user.email, current));
+    await A.verifyBeforeUpdateEmail(user, email);
+  });
+}
+export async function currentEmail() {
+  const { auth } = await api();
+  const e = auth.currentUser?.email || '';
+  return e.endsWith(`@${EMAIL_DOMAIN}`) ? '' : e;
+}
+export async function sendReset(email) {
+  email = String(email || '').trim();
+  if (!email.includes('@')) throw new CloudError('الاستعادة بالبريد لمن ربطه فقط. غير ذلك: اطلب من مسؤولك رابط استعادة.', 'BAD_EMAIL');
+  const { auth, A } = await api();
+  await run(() => A.sendPasswordResetEmail(auth, email));
 }
 
 export async function signOut() {
