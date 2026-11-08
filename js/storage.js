@@ -138,6 +138,11 @@ const mineRec = (r) => (isOwner() ? !r.acct || r.acct === groupOwner : r.acct ==
 export const putGroupMessage = (m) =>
   run('group', 'readwrite', (s) => s.put({ ...m, id: gKey(m.id), mid: m.id, ...(groupAcct ? { acct: groupAcct } : {}) }));
 export const getGroupMessage = (id) => run('group', 'readonly', (s) => s.get(gKey(id))).then(fromRec);
+// تعديل حقول رسالة دون الكتابة فوق ما غيّرته عملية أخرى (النقاط والإثراء يعملان معاً)
+export async function patchGroupMessage(id, fields) {
+  const m = await getGroupMessage(id);
+  if (m) await putGroupMessage({ ...m, ...fields });
+}
 export async function getGroupMessages() {
   const all = await run('group', 'readonly', (s) => s.getAll());
   return all.filter(mineRec).map(fromRec).sort((a, b) => a.sentAt - b.sentAt);

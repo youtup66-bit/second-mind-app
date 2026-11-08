@@ -60,6 +60,7 @@ export async function startGroupSync() {
     const asRoom = (d) => ({
       name: d.data().name, color: d.data().color || '#c084fc', members: d.data().members || [],
       invited: d.data().invited || [], kind: d.data().kind || 'custom', owner: d.data().owner || null,
+      enrich: d.data().enrich === true,
     });
     const parts = { mine: new Map(), balls: new Map() };
     let waiting = me.role === 'manager' ? 2 : 1;
@@ -342,7 +343,8 @@ async function doPublishRooms() {
 
 // ---- مجموعات المحادثة: ينشئها أي عضو (لا نقاط منها، ولا تصل للمدير إن لم يكن فيها) ----
 // يضيف مباشرة من في وحدته وما تحتها، ومن هو أعلى منه يدعوه فينضم بنفسه.
-export async function saveChat({ id, name, color, members: who = [], invited = [] }) {
+// enrich: صاحبها يسمح بأن تُثري منشوراتها عقل المؤسسة (A32)، ويُعلَم أعضاؤها بذلك
+export async function saveChat({ id, name, color, members: who = [], invited = [], enrich = false }) {
   if (!me) throw new Error('لم تدخل إلى المؤسسة بعد.');
   name = String(name || '').trim().slice(0, 60);
   if (!name) throw new Error('اكتب اسم المجموعة.');
@@ -354,7 +356,7 @@ export async function saveChat({ id, name, color, members: who = [], invited = [
   // من يُضاف مباشرة: من جهاتي أو كان عضواً قبلاً؛ وغيرهم يُدعون
   const direct = [...new Set(who)].filter((u) => u !== me.uid && (ok.has(u) || was.has(u)));
   const inv = [...new Set([...invited, ...who.filter((u) => u !== me.uid && !direct.includes(u))])].filter((u) => !direct.includes(u) && members.has(u)).slice(0, 50);
-  const data = { name, color: color || '#c084fc', members: [me.uid, ...direct], invited: inv, kind: 'chat', owner: me.uid, at: F.serverTimestamp() };
+  const data = { name, color: color || '#c084fc', members: [me.uid, ...direct], invited: inv, kind: 'chat', owner: me.uid, enrich: !!enrich, at: F.serverTimestamp() };
   await F.setDoc(F.doc(db, 'rooms', id), data);
   rooms.set(id, { ...data, at: undefined });
   emit('rooms');
@@ -378,6 +380,13 @@ async function selfChange(id, join) {
 export const acceptInvite = (id) => selfChange(id, true);
 export const declineInvite = (id) => selfChange(id, false);
 export const leaveChat = (id) => selfChange(id, false);
+
+// هل تُثري منشورات هذه المجموعة عقل المؤسسة؟ العامة والمشاريع نعم؛ المحادثة بإذن صاحبها فقط
+export function enrichesMind(roomId) {
+  if (roomId === GENERAL) return true;
+  const r = rooms.get(roomId);
+  return !!r && (r.kind === 'custom' || (r.kind === 'chat' && r.enrich));
+}
 
 // منشورات مجموعات المحادثة لا تُحسب منها النقاط
 export const countsForPoints = (m) => !isChatRoom(roomOf(m));

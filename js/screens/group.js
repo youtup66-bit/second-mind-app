@@ -106,9 +106,12 @@ export async function mountMode(root, mode) {
     edit.hidden = !isChatRoom(room) || !!info.past;
     edit.textContent = info.owner === groupMe()?.uid ? 'تعديل' : 'مغادرة';
     form.hidden = !!info.past;
+    // المجموعة تُثري عقل المؤسسة: يعرف أعضاؤها ذلك دائماً (A32)
+    statusEl.dataset.enrich = isChatRoom(room) && info.enrich ? '1' : '';
     const n = room === GENERAL ? groupMembers().size : info.past ? 0 : info.members.filter((u) => groupMembers().has(u)).length;
     statusEl.textContent = !groupOnline() ? 'بلا إنترنت · الرسائل تُرسل عند الاتصال'
       : info.past ? '' : n === 1 ? 'عضو واحد' : n === 2 ? 'عضوان' : n ? `${n} ${n <= 10 ? 'أعضاء' : 'عضواً'}` : 'متصل';
+    if (statusEl.dataset.enrich && groupOnline()) statusEl.textContent += ' · تُثري عقل المؤسسة';
   };
 
   // ---- عرض الرسائل ----
@@ -297,6 +300,7 @@ function openEditor(root, g = null) {
         <input id="ge-find" placeholder="اكتب الاسم" autocomplete="off">
         <ul class="g-found" id="ge-found"></ul>
         <ul class="g-invited" id="ge-invited"></ul>` : ''}
+        <label class="switch g-enrich"><input type="checkbox" id="ge-enrich" ${g?.enrich ? 'checked' : ''}><span>تُثري عقل المؤسسة<small>يصنّف المساعد عند رئيس القسم منشوراتها (سؤال، فكرة، قرار…) إن كان عضواً فيها. يظهر ذلك لكل الأعضاء.</small></span></label>
       </div>
       <p class="wa-note" id="ge-msg" hidden></p>
       <div class="g-sheet__actions">
@@ -349,13 +353,14 @@ function openEditor(root, g = null) {
         id: g?.id, name: $('#ge-name').value, color,
         members: [...el.querySelectorAll('.g-pick input:checked')].map((x) => x.value),
         invited: [...invited],
+        enrich: $('#ge-enrich').checked,
       });
       close();
       if (!g) location.hash = `#/chats?room=${encodeURIComponent(saved.id)}`;
     } catch (err) {
       if (/permission/i.test(String(err?.code || err?.message))) {
         const project = (await cloudConfig().catch(() => null))?.projectId || '';
-        msg.textContent = `تعذّر الحفظ: قواعد Firebase في المشروع «${project}» قديمة. من «المؤسسة» في هذه النسخة اضغط «نسخ قواعد الحماية» (الإصدار ٦)، والصقها في هذا المشروع، ثم Publish.`;
+        msg.textContent = `تعذّر الحفظ: قواعد Firebase في المشروع «${project}» قديمة. من «المؤسسة» في هذه النسخة اضغط «نسخ قواعد الحماية» (الإصدار ٧)، والصقها في هذا المشروع، ثم Publish.`;
       } else msg.textContent = err.message;
       msg.hidden = false;
       btn.disabled = false;
@@ -401,7 +406,7 @@ async function mountList(root, s, syncErr, mode) {
     const members = groupMembers();
     const inv = chat ? [...groupInvites()].map(([id, r]) => `<li class="g-invite" data-id="${esc(id)}">
         <span class="wa-avatar wa-avatar--group" style="background:${esc(r.color)};color:${textOn(r.color)}" aria-hidden="true">${esc(initial(r.name))}</span>
-        <span class="g-room__body"><b>${esc(r.name)}</b><small>دعوة من ${esc(members.get(r.owner)?.name || 'عضو')}</small></span>
+        <span class="g-room__body"><b>${esc(r.name)}</b><small>دعوة من ${esc(members.get(r.owner)?.name || 'عضو')}${r.enrich ? ' · تُثري عقل المؤسسة' : ''}</small></span>
         <button type="button" class="text-btn" data-join="${esc(id)}">انضم</button><button type="button" class="text-btn text-btn--muted" data-decline="${esc(id)}">رفض</button></li>`).join('') : '';
     const empty = chat && !items.length && !inv ? '<li class="wa-day">لا مجموعات محادثة بعد. أنشئ واحدة من الزر بالأسفل.</li>' : '';
     // رئيس القسم: المساعد كرة متوهجة مثبتة أعلى المحادثات

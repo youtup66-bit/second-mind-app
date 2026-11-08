@@ -1,7 +1,7 @@
 rules_version = '2';
 
 // عقلي الثاني: قواعد حماية المؤسسة على Firestore
-// إصدار القواعد: 6 (مجموعات المحادثة)
+// إصدار القواعد: 7 (إثراء عقل المؤسسة بإذن)
 // المرحلة ١: الحسابات (المدير، والموظفون، والدعوات)
 //
 // انسخ هذا الملف كاملاً في Firebase ← Firestore Database ← Rules، ثم اضغط Publish.
@@ -157,7 +157,8 @@ service cloud.firestore {
       }
       function chatOk(d) {
         return roomId.matches('c_[a-z0-9]{6,20}')
-          && d.keys().hasOnly(['name', 'color', 'members', 'invited', 'kind', 'owner', 'at'])
+          && d.keys().hasOnly(['name', 'color', 'members', 'invited', 'kind', 'owner', 'enrich', 'at'])
+          && (!('enrich' in d) || d.enrich is bool)
           && d.kind == 'chat' && text(d.name, 60) && d.color is string && d.color.size() <= 9
           && d.owner == request.auth.uid && request.auth.uid in d.members
           && d.members is list && d.members.size() <= 256

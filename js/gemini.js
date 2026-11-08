@@ -53,7 +53,8 @@ const ORG_PERSONA = `أنت "المساعد"، مساعد ذكي لرئيس ال
 الأسلوب:
 - العربية البسيطة المهنية الودودة، وخاطبه بصيغة محايدة.
 - الرد الطبيعي من جملتين إلى خمس. إن قدّمت خطوات فبحد أقصى خمس نقاط قصيرة تبدأ كل منها بـ "- ". بلا عناوين ولا رموز تنسيق أخرى.`;
-let personaMode = 'personal';
+// التطبيق صار للمؤسسة وحدها: المساعد مرتبط بعقل المؤسسة دائماً
+let personaMode = 'org';
 export function setPersonaMode(mode) { personaMode = mode === 'org' ? 'org' : 'personal'; }
 const persona = () => (personaMode === 'org' ? ORG_PERSONA : PERSONA);
 
@@ -225,7 +226,7 @@ ${[...CATEGORIES, NONE].map((c) => `- ${c.id} (${c.label}): ${c.desc || c.label}
 أعد أيضاً عنواناً قصيراً من ٢ إلى ٦ كلمات يلخّص الملاحظة.
 إن ناسبت الملاحظة قسماً أضافه المستخدم (معرّفه يبدأ بـ c_) وقسماً عاماً معاً، ففضّل قسم المستخدم لأنه أدق.`;
 
-const CLASSIFIER_INTRO = `أنت مصنِّف لملاحظات شخصية مكتوبة بالعربية (فصحى أو عامية).
+const CLASSIFIER_INTRO = `أنت مصنِّف لملاحظات عمل في مؤسسة، مكتوبة بالعربية (فصحى أو عامية).
 صنّف "الملاحظة الحالية" فقط إلى قسم واحد هو الأنسب، واستعن بالسياق إن كانت قصيرة.`;
 const classifierPrompt = () => `${CLASSIFIER_INTRO}\n${categoryRules()}`;
 const categoryIds = () => [...CATEGORIES.map((c) => c.id), 'none'];
@@ -321,6 +322,35 @@ export async function classify(text, context = []) {
   }
   const category = ids.includes(out.category) ? out.category : 'thought';
   return { category, title: String(out.title || '').trim().slice(0, 60) };
+}
+
+// ---- إثراء عقل المؤسسة: تصنيف منشورات المجموعات دفعة واحدة ----
+// items: [{ i, text, room }] ← [{ i, category }] (none = لا يخص العقل: تحية، شكر، رد قصير)
+export async function classifyPosts(items) {
+  if (!items.length) return [];
+  const ids = categoryIds();
+  const raw = await generate({
+    systemInstruction: { parts: [{ text: `أنت تصنّف منشورات مجموعات العمل في مؤسسة لتُثري "عقل المؤسسة".
+صنّف كل منشور وحده إلى قسم واحد هو الأنسب، أو none إن لم يحمل فكرة أو سؤالاً أو قراراً أو مهمة (مثل التحية والشكر و"تمام").
+${categoryRules().replace(/\nأعد أيضاً عنواناً[^\n]*/, '')}` }] },
+    contents: [{ role: 'user', parts: [{ text: items.map((x) => `[${x.i}]${x.room ? ` (${x.room})` : ''} ${x.text.slice(0, 600).replace(/\s+/g, ' ')}`).join('\n') }] }],
+    generationConfig: {
+      temperature: 0,
+      maxOutputTokens: 2048,
+      responseMimeType: 'application/json',
+      responseSchema: {
+        type: 'OBJECT',
+        properties: { items: { type: 'ARRAY', items: { type: 'OBJECT', properties: { i: { type: 'INTEGER' }, category: { type: 'STRING', enum: ids } }, required: ['i', 'category'] } } },
+        required: ['items'],
+      },
+    },
+  }, 'classify');
+  try {
+    const out = JSON.parse(raw.replace(/^```(?:json)?\s*|\s*```$/g, '')).items;
+    return (Array.isArray(out) ? out : []).filter((x) => ids.includes(x.category)).map((x) => ({ i: Number(x.i), category: x.category }));
+  } catch {
+    throw new GeminiError('رد التصنيف غير مفهوم.', 'PARSE');
+  }
 }
 
 // ---- الملخصات ----

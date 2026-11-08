@@ -12,12 +12,12 @@ import * as points from './screens/points.js';
 import * as reports from './screens/reports.js';
 import { checkReminders } from './org-insights.js';
 import { scanSoon } from './points.js';
+import { enrichSoon } from './org-mind.js';
 import { startGroupSync, groupEvents, unreadCount } from './group.js';
 import { autoSnapshot } from './backup.js';
 import { getSetting } from './storage.js';
 import { IS_DEV } from './env.js';
 import { loadCategories } from './categories.js';
-import { setPersonaMode } from './gemini.js';
 
 const routes = { home, mind, folder, settings, org, join: org, staff, group, chats, structure, points, reports };
 const app = document.getElementById('app');
@@ -99,13 +99,12 @@ function applyRole(next) {
     if (t) t.hidden = role === 'employee' || (r === 'home' && role === 'manager');
   }
   syncMindTab();
-  setPersonaMode(role ? 'org' : 'personal');
   document.body.classList.toggle('is-employee', role === 'employee');
   if (changed) applyNoCompanion();
   syncFloater();
   if (changed && current) navigate();
   // عضو في المؤسسة: نستلم رسائل المجموعة ما دام التطبيق مفتوحاً، في أي شاشة
-  if (role) startGroupSync().then(() => { refreshBadge(); if (role === 'manager') scanSoon(); }).catch(() => {});
+  if (role) startGroupSync().then(() => { refreshBadge(); if (role === 'manager') { scanSoon(); enrichSoon(); } }).catch(() => {});
 }
 
 // تبويب العقل عند رئيس القسم: يفتح آخر عرض اختاره (الأقسام أو عقل المؤسسة)
@@ -145,7 +144,7 @@ function applyNoCompanion() {
   if (tab) {
     tab.querySelector('.tabbar__icon').textContent = noCompanion ? '💬' : '✦';
     // في المؤسسة "المحادثات" تبويب للمجموعات، فالذكاء يُسمى "المساعد"
-    tab.querySelector('span:last-child').textContent = noCompanion ? (role ? 'المساعد' : 'المحادثة') : 'الرفيقة';
+    tab.querySelector('span:last-child').textContent = noCompanion ? 'المساعد' : 'الرفيقة';
   }
 }
 

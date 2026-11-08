@@ -15,6 +15,8 @@ import { createSummary, summaryHTML } from '../summaries.js';
 import { findOldNotesFor } from '../suggest.js';
 import { setCategory } from '../classifier.js';
 import { mindTabs } from '../staff-nav.js';
+import { mindPosts, mindRooms } from '../org-mind.js';
+import { groupEvents } from '../group.js';
 
 export const title = 'العقل';
 
@@ -62,9 +64,24 @@ function autoName(members, weights) {
 }
 
 // يحسب الأوزان والروابط من الملاحظات
-function buildModel(entries) {
+// posts: منشورات المجموعات المصنّفة (mindCat) · rooms: المجموعات التي تُثري العقل
+function buildModel(entries, posts = [], rooms = []) {
   const weights = Object.fromEntries(CATEGORIES.map((c) => [c.id, 0]));
   entries.forEach((e) => { if (e.category in weights) weights[e.category]++; });
+  // كرة لكل مجموعة تُثري العقل، تتصل بالتصنيفات التي جاءت منها منشوراتها
+  const roomLinks = {};
+  const ids = new Set(rooms.map((r) => r.id));
+  posts.forEach((m) => {
+    if (!(m.mindCat in weights)) return;
+    weights[m.mindCat]++;
+    const rid = m.room || 'general';
+    if (!ids.has(rid)) return;
+    weights[`r:${rid}`] = (weights[`r:${rid}`] || 0) + 1;
+    const k = `r:${rid}|${m.mindCat}`;
+    roomLinks[k] = (roomLinks[k] || 0) + 1;
+  });
+  rooms.forEach((r) => { weights[`r:${r.id}`] ||= 0; });
+  const maxRoomLink = Math.max(1, ...Object.values(roomLinks));
 
   const known = entries
     .filter((e) => e.category in weights)
@@ -89,11 +106,17 @@ function buildModel(entries) {
   ];
   // الأقسام الفارغة تبقى متصلة بخيط خفيف حتى لا تشرد بعيداً
   CATEGORIES.filter((c) => !weights[c.id]).forEach((c) => links.push({ a: 'me', b: c.id, w: 0.05 }));
+  // المجموعات: خيط خفيف إلى المركز، وخيوط أقوى إلى تصنيفات منشوراتها
+  rooms.forEach((r) => links.push({ a: 'me', b: `r:${r.id}`, w: 0.06 }));
+  Object.entries(roomLinks).forEach(([k, n]) => {
+    const [a, b] = k.split('|');
+    links.push({ a, b, w: 0.2 + 0.6 * (n / maxRoomLink) });
+  });
   // قبل وجود أي ملاحظات: شبكة خفيفة حتى لا تبدو الشاشة فارغة
   if (!known.length) {
     CATEGORIES.forEach((c, i) => links.push({ a: c.id, b: CATEGORIES[(i + 1) % CATEGORIES.length].id, w: 0 }));
   }
-  return { weights, links, total: known.length, groups: findGroups(weights, pairs) };
+  return { weights, links, total: known.length + posts.length, groups: findGroups(weights, pairs), rooms };
 }
 
 // يكتشف مجموعات الأقسام المترابطة (انتشار التسميات الموزون):
@@ -131,17 +154,21 @@ function findGroups(weights, pairs) {
 }
 
 export async function mount(root) {
+  // التطبيق للمؤسسة: هذا "عقل المؤسسة" دائماً (التصنيفات)، وعند رئيس القسم بجانبه عرض الأقسام
+  const head = true;
+  const isHead = (await getSetting('orgRole', null)) === 'manager';
+  const orgName = (await getSetting('cloud', null)) && (await import('../cloud.js').then((c) => c.session()).catch(() => null))?.org?.name;
   let entries = await getEntries();
-  let model = buildModel(entries);
-  // رئيس القسم: هذا "عقل المؤسسة" (التصنيفات)، وبجانبه عرض الأقسام
-  const head = (await getSetting('orgRole', null)) === 'manager';
+  let posts = isHead ? await mindPosts() : [];
+  const roomsNow = () => (isHead ? mindRooms(orgName || 'المؤسسة') : []);
+  let model = buildModel(entries, posts, roomsNow());
 
   root.innerHTML = `
     <div class="mind-full">
-      <canvas class="mind-canvas" aria-label="${head ? 'عقل المؤسسة' : 'خريطة أقسام عقلك'}. قرّب إصبعين أو باعدهما للتصغير والتكبير"></canvas>
+      <canvas class="mind-canvas" aria-label="عقل المؤسسة. قرّب إصبعين أو باعدهما للتصغير والتكبير"></canvas>
       <button type="button" class="struct-handle" id="handle" aria-label="القائمة" aria-expanded="false"><span></span></button>
       <div class="struct-menu mind-menu" id="menu" hidden>
-        ${head ? mindTabs('mind') : ''}
+        ${mindTabs('mind')}
         <p class="mind-hint" id="hint"></p>
         <div class="mind-words zoom-ctrl" role="group" aria-label="الخيارات">
           <button type="button" class="text-btn" id="add-cat">قسم جديد</button>
@@ -263,6 +290,7 @@ export async function mount(root) {
     const nodes = [
       { id: 'me', label: head ? 'المؤسسة' : 'أنا', color: '#ffffff', weight: 0, fixedR: 22 },
       ...visible.map((c) => ({ id: c.id, label: c.label, color: c.color, weight: model.weights[c.id] || 0, ...styleFor(c) })),
+      ...model.rooms.map((r) => { const c = { id: `r:${r.id}`, color: r.color }; return { id: c.id, label: r.name, color: r.color, weight: model.weights[c.id] || 0, ...styleFor(c) }; }),
     ];
     graph = createMindGraph(canvas, nodes, model.links, {
       spacing,
@@ -291,7 +319,7 @@ export async function mount(root) {
   spaceVal();
   spaceIn.addEventListener('input', () => { spacing = Number(spaceIn.value); spaceVal(); graph.setSpacing(spacing); });
   spaceIn.addEventListener('change', () => setSetting('mindSpacing', spacing));
-  const counts = () => Object.values(model.weights).filter(Boolean);
+  const counts = () => CATEGORIES.map((c) => model.weights[c.id]).filter(Boolean);
   function styleFor(c) {
     if (colorMode !== 'heat') return { color: c.color, ring: null, core: null, fixedR: undefined };
     const n = model.weights[c.id] || 0;
@@ -403,9 +431,14 @@ export async function mount(root) {
   // أول مرة (لا ملاحظات بعد): نُظهر القائمة ليعرف مكانها
   if (!model.total) setMenu(true);
 
+  const roomSig = (m) => m.rooms.map((r) => `${r.id}:${r.name}:${r.color}`).join('|');
   async function refresh() {
     entries = await getEntries();
-    model = buildModel(entries);
+    if (isHead) posts = await mindPosts();
+    const before = roomSig(model);
+    model = buildModel(entries, posts, roomsNow());
+    // تغيّرت المجموعات (أُضيفت أو أُوقف إثراؤها): نعيد بناء الكرات
+    if (roomSig(model) !== before) { buildGraph(); applyStyles(); setHint(); if (openCat) renderNotes(); return; }
     graph.update(model.weights, model.links, model.groups);
     applyStyles();
     refreshLabels();
@@ -417,7 +450,7 @@ export async function mount(root) {
   // بعد إضافة قسم أو تعديله أو حذفه نعيد بناء الكرات
   async function rebuild() {
     entries = await getEntries();
-    model = buildModel(entries);
+    model = buildModel(entries, posts, roomsNow());
     buildGraph();
     nameNewGroups();
     setHint();
@@ -444,6 +477,7 @@ export async function mount(root) {
   });
 
   function openSheet(catId) {
+    if (String(catId).startsWith('r:')) return openRoomSheet(catId);
     const c = categoryById(catId);
     if (!c) return;
     openCat = catId;
@@ -524,13 +558,52 @@ export async function mount(root) {
     openCat = null;
   }
 
+  // ---- منشورات المجموعات في العقل ----
+  const fmtPost = new Intl.DateTimeFormat('ar', { day: 'numeric', month: 'short' });
+  const roomLabel = (m) => model.rooms.find((r) => r.id === (m.room || 'general'))?.name || m.roomName || '';
+  const postHTML = (m, { withCat = false, withRoom = true } = {}) => {
+    const c = categoryById(m.mindCat);
+    return `<li class="note note--post">
+      ${withCat && c ? `<span class="chip chip--small chip--static" style="--c:${c.color}">${esc(c.label)}</span>` : ''}
+      <p class="note__text">${esc(m.text)}</p>
+      <div class="note__foot"><time class="muted">${esc(m.mine ? 'أنت' : m.fromName)}${withRoom ? ` · ${esc(roomLabel(m))}` : ''} · ${fmtPost.format(m.sentAt)}</time></div>
+    </li>`;
+  };
+  function openRoomSheet(id) {
+    const rid = id.slice(2);
+    const r = model.rooms.find((x) => x.id === rid);
+    if (!r) return;
+    openCat = id;
+    catSum.innerHTML = '';
+    sumBtn.hidden = true;
+    findBtn.hidden = true;
+    findBox.innerHTML = '';
+    root.querySelector('#edit-cat').hidden = true;
+    root.querySelector('#sheet-title').textContent = r.name;
+    root.querySelector('#sheet-dot').style.background = r.color;
+    const desc = root.querySelector('#sheet-desc');
+    desc.hidden = false;
+    desc.textContent = r.kind === 'chat' ? 'مجموعة محادثة سمح صاحبها بإثراء العقل.' : r.kind === 'custom' ? 'مجموعة مشروع.' : 'المجموعة العامة.';
+    renderNotes();
+    show(sheet);
+  }
+
   function renderNotes() {
+    if (String(openCat).startsWith('r:')) {
+      const mine = posts.filter((m) => `r:${m.room || 'general'}` === openCat).sort((a, b) => b.sentAt - a.sentAt);
+      notesEl.innerHTML = mine.length ? mine.map((m) => postHTML(m, { withCat: true, withRoom: false })).join('')
+        : '<li class="notes__empty muted">لم يُصنَّف من منشوراتها شيء بعد. يصنّفها المساعد تلقائياً حين يتوفر مفتاح Gemini.</li>';
+      return;
+    }
+    const fromRooms = posts.filter((m) => m.mindCat === openCat).sort((a, b) => b.sentAt - a.sentAt);
+    const roomsHTML = fromRooms.length ? `<li class="notes__sep muted">من المجموعات (${fromRooms.length})</li>${fromRooms.map((m) => postHTML(m)).join('')}` : '';
     const list = entries.filter((e) => e.category === openCat);
+    if (!list.length && fromRooms.length) { notesEl.innerHTML = roomsHTML; return; }
     if (!list.length) {
       notesEl.innerHTML = `<li class="notes__empty muted">لا توجد ملاحظات هنا بعد.${isCustom(openCat) ? ` ${head ? 'سيصنّف المساعد' : 'ستصنّف الرفيقة'} فيه ما يناسبه من كلامك القادم.` : ''}</li>`;
       return;
     }
-    notesEl.innerHTML = list.map((e) => noteHTML(e)).join('');
+    notesEl.innerHTML = list.map((e) => noteHTML(e)).join('') + roomsHTML;
   }
 
   sheet.addEventListener('click', (e) => {
@@ -632,9 +705,22 @@ export async function mount(root) {
     await rebuild();
     hint.textContent = `حذفتُ القسم${moved ? `، ونقلتُ ${moved} ملاحظة إلى "تفكير"` : ''}.`;
   });
+
+  // صنّف المساعد منشورات جديدة، أو تغيّرت المجموعات: نحدّث الكرات
+  if (isHead) {
+    let t = 0;
+    const later = () => { clearTimeout(t); t = setTimeout(() => { if (graph) refresh().catch(() => {}); }, 400); };
+    window.addEventListener('sm:orgmind', later);
+    groupEvents.addEventListener('rooms', later);
+    offs.push(() => { window.removeEventListener('sm:orgmind', later); groupEvents.removeEventListener('rooms', later); clearTimeout(t); });
+    import('../org-mind.js').then((x) => x.enrichSoon());
+  }
 }
 
+let offs = [];
 export function unmount() {
+  offs.forEach((f) => f());
+  offs = [];
   graph?.destroy();
   graph = null;
 }

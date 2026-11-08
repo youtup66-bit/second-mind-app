@@ -1,7 +1,7 @@
 // نقاط الموظفين (للمدير فقط، على جهازه؛ لا تُرفع إلى السحابة ولا يراها الموظفون)
 // المدير يحدد الأعمال ونقاط كل عمل، والذكاء يقرأ رسائل المجموعة ويقترح النقاط، والمدير يوافق،
 // أو تُحتسب تلقائياً إن فعّل ذلك.
-import { getPoints, putPoint, deletePoint, getSetting, setSetting, getGroupMessages, putGroupMessage } from './storage.js';
+import { getPoints, putPoint, deletePoint, getSetting, setSetting, getGroupMessages, putGroupMessage, patchGroupMessage } from './storage.js';
 import { detectWorks } from './gemini.js';
 import { groupEvents, groupMe, groupMembers, countsForPoints } from './group.js';
 
@@ -127,10 +127,10 @@ export async function scan() {
           });
           found++;
         }
-        await putGroupMessage({ ...m, pointsChecked: true });
+        await patchGroupMessage(m.id, { pointsChecked: true });
       } catch (err) {
         if (STOP.has(err.code)) break; // بلا مفتاح أو إنترنت: نكمل لاحقاً
-        await putGroupMessage({ ...m, pointsChecked: true });
+        await patchGroupMessage(m.id, { pointsChecked: true });
       }
     }
     if (found) changed();
