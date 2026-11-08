@@ -21,7 +21,10 @@ export const setActionContext = (text) => { orgCtx = text || ''; };
 // وصف الأوامر للنموذج (يُبنى في كل مرة ليحوي الأقسام والشخصيات الحالية)
 export function actionsPrompt() {
   const cats = CATEGORIES.map((c) => `${c.label}${isCustom(c.id) ? ' (أضافه المستخدم)' : ''}`).join('، ');
+  const now = new Date();
+  const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
   return `
+اليوم: ${new Intl.DateTimeFormat('ar', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }).format(now)} (${today})، والساعة ${now.getHours()}:${String(now.getMinutes()).padStart(2, '0')}.
 أنتِ تستطيعين التحكم في التطبيق نفسه عبر الحقل actions (مصفوفة أوامر). نفّذي أمراً فقط إن طلبه المستخدم صراحة أو بوضوح،
 واذكري في reply ما فعلتِه بجملة قصيرة. إن لم يطلب شيئاً فاتركي actions فارغة. لا تعدي بشيء لا تستطيعين فعله.
 الأقسام الحالية (الكرات في شاشة العقل): ${cats}.
@@ -58,7 +61,7 @@ ${orgCtx}
 - post_to_group: value: نص المنشور في مجموعة المؤسسة (سيُطلب التأكيد).
 - invite_employee: name: اسم الموظف، value: اسم دخول بالإنجليزية (حروف وأرقام).
 - make_org_report: value: week أو month (تقرير عمل المؤسسة).
-- assign_task: تكليف موظف بمهمة (تُنشر في المجموعة). employee، value: نص المهمة، target: اسم العمل من قائمة الأعمال إن كانت لها نقاط (اختياري).
+- assign_task: حوّل كلامه إلى مهمة لشخص (تظهر له بطاقة يؤكدها بلمسة). employee: اسم الشخص، value: المهمة بصيغة أمر قصيرة واضحة (مثل: تركيب كاميرتين في الطابق الثاني)، due: الموعد بصيغة YYYY-MM-DD إن ذُكر، احسبه من تاريخ اليوم أعلاه («قبل الخميس» أو «الخميس» = الخميس القادم، «باجر» = غداً، «نهاية الأسبوع» = الخميس). لعدة أشخاص: أمر لكل شخص.
 - complete_org_task: تعليم مهمة مكلّفة كمنجزة. target: اسم الموظف أو كلمات من المهمة.
 نفّذي عدة أوامر معاً إن طلب ذلك (حتى ٦)، مثل إنشاء شعبة ثم وحدات تحتها.` : ''}`;
 }
@@ -75,6 +78,7 @@ export const actionsSchema = {
       description: { type: 'STRING' },
       color: { type: 'STRING' },
       employee: { type: 'STRING' },
+      due: { type: 'STRING' },
     },
     required: ['action'],
   },

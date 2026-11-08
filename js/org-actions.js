@@ -11,7 +11,7 @@ import {
 } from './points.js';
 import { sendGroup, groupMembers, startGroupSync } from './group.js';
 import { createInvite, inviteLink, listMembers, session } from './cloud.js';
-import { makeReport, assignTask, listTasks, completeTask, insightsContext } from './org-insights.js';
+import { makeReport, listTasks, completeTask, insightsContext } from './org-insights.js';
 
 const orgName = async () => (await session().catch(() => null))?.org?.name || 'القسم';
 
@@ -42,8 +42,23 @@ async function employees() {
 const findEmployee = (list, name) => best(list, name, (m) => m.display_name);
 const nodesList = (v) => String(v || '').split(/[،,]| و /).map((x) => x.trim()).filter(Boolean);
 
+// تحويل الكلام إلى مهمة (A38): لا تُرسل مباشرة، بل تعود «مسودة» تظهر بطاقةً يؤكدها المسؤول بلمسة
+async function taskDraft(a) {
+  const { assignable } = await import('./tasks.js');
+  const people = assignable().map((p) => ({ user_id: p.uid, display_name: p.name }));
+  const emp = findEmployee(people, a.employee || a.name);
+  if (!emp) return say(false, `لم أجد «${a.employee || a.name || ''}» بين من تستطيع تكليفهم`);
+  const title = String(a.value || '').trim().slice(0, 120);
+  if (!title) return say(false, 'ما المهمة؟');
+  const due = /^\d{4}-\d{2}-\d{2}$/.test(String(a.due || '')) ? a.due : '';
+  return { ok: true, text: `مهمة جاهزة إلى ${emp.display_name}`, draft: { to: emp.user_id, toName: emp.display_name, title, due } };
+}
+
 export async function runOrgAction(a) {
-  if (await getSetting('orgRole', null) !== 'manager') return say(false, 'إدارة المؤسسة للمدير فقط. ادخل بحساب المدير أولاً.', '#/org');
+  const role = await getSetting('orgRole', null);
+  // المسؤول: المساعد يحوّل كلامه إلى مهام لفريقه فقط؛ وبقية أوامر الإدارة لرئيس القسم
+  if (a.action === 'assign_task' && role) return taskDraft(a);
+  if (role !== 'manager') return say(false, 'إدارة المؤسسة للمدير فقط. ادخل بحساب المدير أولاً.', '#/org');
   // أول مرة: القسم الرئيسي باسم المؤسسة
   const st = await loadStructure(await orgName());
   const save = () => saveStructure(st);
@@ -195,15 +210,6 @@ export async function runOrgAction(a) {
       const period = String(a.value || '').startsWith('m') || /شهر/.test(a.value || '') ? 'month' : 'week';
       const r = await makeReport(period);
       return say(true, `جهّزتُ ${period === 'month' ? 'تقرير الشهر' : 'تقرير الأسبوع'}: «${r.headline}»`, '#/reports');
-    }
-    case 'assign_task': {
-      const emp = need(findEmployee(await employees(), a.employee || a.name), `موظفاً باسم «${a.employee || a.name}»`);
-      const text = String(a.value || '').trim();
-      if (!text) return say(false, 'ما المهمة؟');
-      const w = a.target ? best(await getWorks(), a.target, (x) => x.name) : null;
-      if (!confirm(`الذكاء سيكلّف ${emp.display_name} بهذه المهمة وينشرها في المجموعة:\n\n«${text}»${w ? `\n(عند إنجازها: ${w.name} +${w.points})` : ''}\n\nموافق؟`)) return say(false, 'لم تُكلَّف (ألغيتَ)');
-      await assignTask({ user: emp.user_id, name: emp.display_name, text, workId: w?.id || null });
-      return say(true, `كلّفتُ ${emp.display_name}: ${text}`, '#/reports');
     }
     case 'complete_org_task': {
       const open = (await listTasks()).filter((x) => !x.done);

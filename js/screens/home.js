@@ -611,8 +611,11 @@ export async function mount(root) {
     if (!done?.length) return;
     const box = document.createElement('div');
     box.className = 'msg__acts';
-    box.innerHTML = done.map((d) => `<span class="act ${d.ok ? '' : 'act--fail'}">${d.ok ? '⚙️' : '⚠️'} ${escapeHtml(d.text)}${d.link ? ` <a href="${d.link}">عرض</a>` : ''}</span>`).join('')
-      + (undo ? '<button type="button" class="act-undo">تراجع عن كل ما سبق</button>' : '');
+    const plain = done.filter((d) => !d.draft);
+    box.innerHTML = plain.map((d) => `<span class="act ${d.ok ? '' : 'act--fail'}">${d.ok ? '⚙️' : '⚠️'} ${escapeHtml(d.text)}${d.link ? ` <a href="${d.link}">عرض</a>` : ''}</span>`).join('')
+      + (undo && plain.some((d) => d.ok) ? '<button type="button" class="act-undo">تراجع عن كل ما سبق</button>' : '');
+    // مهام حوّلها المساعد من الكلام: بطاقة لكل مهمة يؤكدها المسؤول بلمسة (A38)
+    done.filter((d) => d.draft).forEach((d) => box.append(taskCard(d.draft)));
     li.querySelector('.msg__text').after(box);
     // التراجع: يعيد الهيكل والأعمال والنقاط والأقسام والملاحظات إلى ما قبل الأوامر
     box.querySelector('.act-undo')?.addEventListener('click', async (e) => {
@@ -626,6 +629,52 @@ export async function mount(root) {
         btn.replaceWith(Object.assign(document.createElement('span'), { className: 'act', textContent: '↩️ تراجعتُ عن هذه الأوامر' }));
       } catch (err) { btn.disabled = false; say(`تعذّر التراجع: ${escapeHtml(err.message)}`); }
     });
+  }
+
+  // ---- بطاقة مهمة جاهزة: إرسال، أو تعديل الشخص والنص والموعد، أو إلغاء ----
+  // (دالة لا ثابت: قد تُرسم البطاقة قبل الوصول إلى هذا السطر)
+  function fmtDue(d) { return d ? new Intl.DateTimeFormat('ar', { weekday: 'long', day: 'numeric', month: 'long' }).format(new Date(`${d}T00:00`)) : 'بلا موعد'; }
+  function taskCard(draft) {
+    const el = document.createElement('div');
+    el.className = 'task-draft';
+    const view = () => {
+      el.innerHTML = `<p class="task-draft__head">📌 مهمة إلى <b>${escapeHtml(draft.toName)}</b></p>
+        <p class="task-draft__title">${escapeHtml(draft.title)}</p>
+        <p class="task-draft__due">الموعد: ${escapeHtml(fmtDue(draft.due))}</p>
+        <div class="task-draft__acts"><button type="button" class="btn" data-t="send">إرسال</button><button type="button" class="text-btn" data-t="edit">تعديل</button><button type="button" class="text-btn text-btn--muted" data-t="cancel">إلغاء</button></div>
+        <p class="status" data-t="msg"></p>`;
+    };
+    const edit = async () => {
+      const { assignable } = await import('../tasks.js');
+      const people = assignable();
+      el.innerHTML = `<label class="struct-field">إلى<select data-f="to">${people.map((p) => `<option value="${escapeHtml(p.uid)}" ${p.uid === draft.to ? 'selected' : ''}>${escapeHtml(p.name)}</option>`).join('')}</select></label>
+        <input data-f="title" maxlength="120" value="${escapeHtml(draft.title)}">
+        <label class="struct-field">الموعد<input type="date" data-f="due" value="${escapeHtml(draft.due)}"></label>
+        <div class="task-draft__acts"><button type="button" class="btn" data-t="save">تم</button></div>`;
+    };
+    view();
+    el.addEventListener('click', async (e) => {
+      const b = e.target.closest('[data-t]');
+      if (!b) return;
+      const t = b.dataset.t;
+      if (t === 'cancel') { el.innerHTML = '<span class="act">ألغيتَ المهمة.</span>'; return; }
+      if (t === 'edit') { await edit(); return; }
+      if (t === 'save') {
+        const sel = el.querySelector('[data-f=to]');
+        draft = { to: sel.value, toName: sel.selectedOptions[0]?.textContent || draft.toName, title: el.querySelector('[data-f=title]').value.trim() || draft.title, due: el.querySelector('[data-f=due]').value };
+        view();
+        return;
+      }
+      if (t === 'send') {
+        b.disabled = true;
+        try {
+          const { sendTask } = await import('../tasks.js');
+          await sendTask(draft);
+          el.innerHTML = `<span class="act">📌 أُرسلت المهمة إلى ${escapeHtml(draft.toName)} ✓ <a href="#/tasks">المهام</a></span>`;
+        } catch (err) { b.disabled = false; el.querySelector('[data-t=msg]').textContent = err.message; }
+      }
+    });
+    return el;
   }
 
   // شارة صغيرة على الردود التي جاءت من النموذج على الجهاز

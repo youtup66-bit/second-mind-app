@@ -1207,3 +1207,11 @@ body.on-group .tasks .wa-head { padding-top: calc(env(safe-area-inset-top) + 8px
 .task-tag.is-on { background: var(--wa-green, #00a884); border-color: transparent; color: #111b21; font-weight: 700; }
 .g-sheet select, .g-sheet textarea { width: 100%; }
 .wa-note.is-ok { color: var(--wa-green, #00a884); }
+
+/* بطاقة مهمة حوّلها المساعد من الكلام */
+.task-draft { margin-top: 8px; padding: 10px 12px; border-radius: 10px; background: rgba(0,0,0,.18); border-inline-start: 3px solid var(--wa-green, #00a884); display: flex; flex-direction: column; gap: 4px; }
+.task-draft p { margin: 0; }
+.task-draft__title { font-weight: 700; }
+.task-draft__due { font-size: .85rem; color: var(--wa-meta, #8696a0); }
+.task-draft__acts { display: flex; align-items: center; gap: 12px; margin-top: 4px; }
+.task-draft input, .task-draft select { width: 100%; }
