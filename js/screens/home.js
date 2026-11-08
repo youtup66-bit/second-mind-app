@@ -147,7 +147,16 @@ export async function mount(root) {
   const waNote = root.querySelector('#wa-note');
   let waMode = plain || (await getSetting('chatStyle', 'companion')) === 'whatsapp';
   let lastReplyBubble = '';
-  if (plain) {
+  // رئيس القسم: المساعد مرتبط بعقل المؤسسة، ويُفتح من كرته في المحادثات
+  const orgHead = (await getSetting('orgRole', null)) === 'manager';
+  if (plain && orgHead) {
+    root.querySelector('#wa-name').textContent = 'المساعد';
+    root.querySelector('#wa-avatar').innerHTML = '<span class="g-orb" aria-hidden="true"></span>';
+    root.querySelector('#wa-avatar').classList.add('wa-avatar--orb');
+    root.querySelector('#wa-who').setAttribute('aria-label', 'المساعد');
+    root.querySelector('#wa-who').insertAdjacentHTML('beforebegin', '<a class="wa-head__back" href="#/chats" aria-label="رجوع إلى المحادثات">→</a>');
+    root.querySelector('#wa-tools').append(root.querySelector('#stop-voice'), root.querySelector('#voice-toggle'));
+  } else if (plain) {
     root.querySelector('#wa-name').textContent = 'عقلي الثاني';
     // صورة عامة كصورة جهة اتصال بلا صورة
     root.querySelector('#wa-avatar').innerHTML = '<svg viewBox="0 0 40 40"><circle cx="20" cy="15" r="7" fill="#cfd8dc"/><path d="M6 36c1.5-8 7-12 14-12s12.5 4 14 12z" fill="#cfd8dc"/></svg>';

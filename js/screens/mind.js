@@ -14,6 +14,7 @@ import { noteHTML, bindNoteActions, esc } from '../notes-view.js';
 import { createSummary, summaryHTML } from '../summaries.js';
 import { findOldNotesFor } from '../suggest.js';
 import { setCategory } from '../classifier.js';
+import { mindTabs } from '../staff-nav.js';
 
 export const title = 'العقل';
 
@@ -132,12 +133,15 @@ function findGroups(weights, pairs) {
 export async function mount(root) {
   let entries = await getEntries();
   let model = buildModel(entries);
+  // رئيس القسم: هذا "عقل المؤسسة" (التصنيفات)، وبجانبه عرض الأقسام
+  const head = (await getSetting('orgRole', null)) === 'manager';
 
   root.innerHTML = `
     <div class="mind-full">
-      <canvas class="mind-canvas" aria-label="خريطة أقسام عقلك. قرّب إصبعين أو باعدهما للتصغير والتكبير"></canvas>
+      <canvas class="mind-canvas" aria-label="${head ? 'عقل المؤسسة' : 'خريطة أقسام عقلك'}. قرّب إصبعين أو باعدهما للتصغير والتكبير"></canvas>
       <button type="button" class="struct-handle" id="handle" aria-label="القائمة" aria-expanded="false"><span></span></button>
       <div class="struct-menu mind-menu" id="menu" hidden>
+        ${head ? mindTabs('mind') : ''}
         <p class="mind-hint" id="hint"></p>
         <div class="mind-words zoom-ctrl" role="group" aria-label="الخيارات">
           <button type="button" class="text-btn" id="add-cat">قسم جديد</button>
@@ -219,7 +223,7 @@ export async function mount(root) {
   const setHint = () => {
     hint.textContent = model.total
       ? (mindStyle === 'dots' ? 'المس نقطة لترى ما يرتبط بها · قرّب بإصبعين لتظهر الأسماء' : 'المس كرة أو اسم مجموعة · بإصبعين كبّر وصغّر')
-      : 'تحدّث مع الرفيقة، وستكبر الكرات مع كل ما تقوله.';
+      : head ? 'تحدّث مع المساعد، وستكبر كرات عقل المؤسسة مع كل ما تقوله.' : 'تحدّث مع الرفيقة، وستكبر الكرات مع كل ما تقوله.';
   };
   setHint();
 
@@ -257,7 +261,7 @@ export async function mount(root) {
     tgl.hidden = model.total === 0 || (!showEmpty && !hiddenCount);
     tgl.textContent = showEmpty ? 'إخفاء الفارغة' : `+${hiddenCount} فارغة`;
     const nodes = [
-      { id: 'me', label: 'أنا', color: '#ffffff', weight: 0, fixedR: 22 },
+      { id: 'me', label: head ? 'المؤسسة' : 'أنا', color: '#ffffff', weight: 0, fixedR: 22 },
       ...visible.map((c) => ({ id: c.id, label: c.label, color: c.color, weight: model.weights[c.id] || 0, ...styleFor(c) })),
     ];
     graph = createMindGraph(canvas, nodes, model.links, {
@@ -523,7 +527,7 @@ export async function mount(root) {
   function renderNotes() {
     const list = entries.filter((e) => e.category === openCat);
     if (!list.length) {
-      notesEl.innerHTML = `<li class="notes__empty muted">لا توجد ملاحظات هنا بعد.${isCustom(openCat) ? ' ستصنّف الرفيقة فيه ما يناسبه من كلامك القادم.' : ''}</li>`;
+      notesEl.innerHTML = `<li class="notes__empty muted">لا توجد ملاحظات هنا بعد.${isCustom(openCat) ? ` ${head ? 'سيصنّف المساعد' : 'ستصنّف الرفيقة'} فيه ما يناسبه من كلامك القادم.` : ''}</li>`;
       return;
     }
     notesEl.innerHTML = list.map((e) => noteHTML(e)).join('');
@@ -608,7 +612,7 @@ export async function mount(root) {
       else created = await addCategory(data);
       form.hidden = true;
       await rebuild();
-      hint.textContent = editingId ? 'عدّلتُ القسم ✓' : `أضفتُ "${data.label.trim()}" ✓ ستصنّف الرفيقة فيه ما يناسبه من كلامك القادم.`;
+      hint.textContent = editingId ? 'عدّلتُ القسم ✓' : `أضفتُ "${data.label.trim()}" ✓ ${head ? 'سيصنّف المساعد' : 'ستصنّف الرفيقة'} فيه ما يناسبه من كلامك القادم.`;
       // قسم جديد: نفتح نافذته ونقترح البحث في الملاحظات القديمة
       if (created && entries.some((e) => e.category && e.category !== 'none')) {
         openSheet(created.id);

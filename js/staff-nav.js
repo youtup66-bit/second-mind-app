@@ -1,5 +1,16 @@
 // كلمات التنقل أعلى شاشات المدير: الأسماء · عقل المؤسسة · النقاط (بلا أزرار ولا مربعات)
-const TABS = [['staff', 'الأسماء'], ['structure', 'عقل المؤسسة'], ['points', 'النقاط'], ['reports', 'التقارير']];
+const TABS = [['staff', 'الأسماء'], ['points', 'النقاط'], ['reports', 'التقارير']];
+
+// تبويب "العقل" عند رئيس القسم: عرضان لعقل المؤسسة
+// الأقسام: الهيكل (الشعب والوحدات والموظفون والمشاريع) · عقل المؤسسة: التصنيفات (سؤال، تفكير، قرار...)
+const MIND_TABS = [['structure', 'الأقسام'], ['mind', 'عقل المؤسسة']];
+export const MIND_VIEW_KEY = 'sm-mind-view';
+export function mindTabs(current) {
+  try { localStorage.setItem(MIND_VIEW_KEY, current); } catch { /* لا شيء */ }
+  window.dispatchEvent(new Event('sm:mindview'));
+  return `<nav class="struct-tabs page-tabs" aria-label="عرض العقل">${MIND_TABS.map(([route, label]) =>
+    (route === current ? `<b aria-current="page">${label}</b>` : `<a href="#/${route}">${label}</a>`)).join('')}</nav>`;
+}
 
 export function staffTabs(current) {
   return `<nav class="struct-tabs page-tabs" aria-label="الموظفين">${TABS.map(([route, label]) =>

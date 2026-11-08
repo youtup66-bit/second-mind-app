@@ -404,7 +404,12 @@ async function mountList(root, s, syncErr, mode) {
         <span class="g-room__body"><b>${esc(r.name)}</b><small>دعوة من ${esc(members.get(r.owner)?.name || 'عضو')}</small></span>
         <button type="button" class="text-btn" data-join="${esc(id)}">انضم</button><button type="button" class="text-btn text-btn--muted" data-decline="${esc(id)}">رفض</button></li>`).join('') : '';
     const empty = chat && !items.length && !inv ? '<li class="wa-day">لا مجموعات محادثة بعد. أنشئ واحدة من الزر بالأسفل.</li>' : '';
-    list.innerHTML = inv + empty + [...top, ...items].map((it) => {
+    // رئيس القسم: المساعد كرة متوهجة مثبتة أعلى المحادثات
+    const orb = chat && s.member.role === 'manager' ? `<li><a class="g-room g-room--orb" href="#/home">
+        <span class="wa-avatar wa-avatar--orb" aria-hidden="true"><span class="g-orb"></span></span>
+        <span class="g-room__body"><span class="g-room__top"><b>المساعد</b></span>
+        <span class="g-room__bottom"><span class="g-room__last"><i>مرتبط بعقل المؤسسة</i></span></span></span></a></li>` : '';
+    list.innerHTML = orb + inv + empty + [...top, ...items].map((it) => {
       const m = last.get(it.id);
       const n = unread.get(it.id) || 0;
       const preview = m ? `${m.mine ? 'أنت' : esc(m.fromName)}: ${m.text ? esc(m.text.slice(0, 80)) : '📷 صورة'}` : `<i>${esc(it.kind)}</i>`;

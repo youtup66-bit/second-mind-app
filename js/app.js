@@ -17,6 +17,7 @@ import { autoSnapshot } from './backup.js';
 import { getSetting } from './storage.js';
 import { IS_DEV } from './env.js';
 import { loadCategories } from './categories.js';
+import { setPersonaMode } from './gemini.js';
 
 const routes = { home, mind, folder, settings, org, join: org, staff, group, chats, structure, points, reports };
 const app = document.getElementById('app');
@@ -31,7 +32,8 @@ let role = null;
 
 async function navigate() {
   const myNav = ++navId;
-  let name = location.hash.replace(/^#\//, '').split('?')[0] || (role === 'employee' ? 'group' : 'home');
+  // رئيس القسم يبدأ من المحادثات (المساعد كرة فيها)، والموظف من الأعمال
+  let name = location.hash.replace(/^#\//, '').split('?')[0] || (role === 'employee' ? 'group' : role === 'manager' ? 'chats' : 'home');
   if (role === 'employee' && !EMPLOYEE_ROUTES.has(name)) {
     name = 'group';
     history.replaceState(null, '', '#/group');
@@ -52,7 +54,7 @@ async function navigate() {
   document.title = `${screen.title} · عقلي الثاني`;
 
   document.querySelectorAll('.tabbar__item').forEach((a) => {
-    const tabOf = { join: 'org', structure: 'staff', points: 'staff', reports: 'staff' };
+    const tabOf = { join: 'org', structure: 'mind', points: 'staff', reports: 'staff', ...(role ? { home: 'chats' } : {}) };
     const active = a.dataset.route === (tabOf[name] || (routes[name] ? name : 'home'));
     a.classList.toggle('is-active', active);
     if (active) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
@@ -91,11 +93,13 @@ function applyRole(next) {
     const t = document.querySelector(`.tabbar__item[data-route="${r}"]`);
     if (t) t.hidden = !role;
   }
-  // الموظف لا يرى الرفيقة ولا العقل ولا المجلد
+  // الموظف لا يرى المساعد ولا العقل ولا المجلد؛ ورئيس القسم يجد المساعد كرة في المحادثات
   for (const r of ['home', 'mind', 'folder']) {
     const t = document.querySelector(`.tabbar__item[data-route="${r}"]`);
-    if (t) t.hidden = role === 'employee';
+    if (t) t.hidden = role === 'employee' || (r === 'home' && role === 'manager');
   }
+  syncMindTab();
+  setPersonaMode(role ? 'org' : 'personal');
   document.body.classList.toggle('is-employee', role === 'employee');
   if (changed) applyNoCompanion();
   syncFloater();
@@ -103,6 +107,16 @@ function applyRole(next) {
   // عضو في المؤسسة: نستلم رسائل المجموعة ما دام التطبيق مفتوحاً، في أي شاشة
   if (role) startGroupSync().then(() => { refreshBadge(); if (role === 'manager') scanSoon(); }).catch(() => {});
 }
+
+// تبويب العقل عند رئيس القسم: يفتح آخر عرض اختاره (الأقسام أو عقل المؤسسة)
+function syncMindTab() {
+  const t = document.querySelector('.tabbar__item[data-route="mind"]');
+  if (!t) return;
+  let view = 'structure';
+  try { view = localStorage.getItem('sm-mind-view') || 'structure'; } catch { /* لا شيء */ }
+  t.setAttribute('href', role === 'manager' ? `#/${view === 'mind' ? 'mind' : 'structure'}` : '#/mind');
+}
+window.addEventListener('sm:mindview', syncMindTab);
 
 // عدد رسائل المجموعة غير المقروءة على التبويب
 async function refreshBadge() {

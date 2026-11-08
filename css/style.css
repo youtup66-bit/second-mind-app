@@ -1053,6 +1053,16 @@ body.on-staffnav .topbar { display: none; }
 .g-room__badge { background: var(--wa-green, #00a884); color: #111b21; font-size: .72rem; font-weight: 700; min-width: 20px; height: 20px; border-radius: 10px; display: grid; place-items: center; padding: 0 6px; }
 .g-past { margin: 0; padding: 12px 16px calc(12px + env(safe-area-inset-bottom)); text-align: center; font-size: .85rem; color: var(--wa-meta, #8696a0); background: var(--wa-head, #202c33); }
 .g-past[hidden], .composer[hidden] { display: none; }
+/* المساعد: كرة متوهجة مثل كرات عقل المؤسسة */
+.wa-avatar--orb { background: none; display: grid; place-items: center; overflow: visible; }
+.g-orb {
+  width: 22px; height: 22px; border-radius: 50%;
+  background: radial-gradient(circle at 38% 35%, #ffffff 0%, #bfe3ff 35%, #5aa7ff 75%, #2b5fb8 100%);
+  box-shadow: 0 0 14px 5px rgba(90,167,255,.55), 0 0 30px 10px rgba(90,167,255,.18);
+  animation: orb-glow 2.8s ease-in-out infinite;
+}
+@keyframes orb-glow { 50% { transform: scale(.9); box-shadow: 0 0 8px 3px rgba(90,167,255,.4), 0 0 18px 6px rgba(90,167,255,.12); } }
+.wa-head .wa-avatar--orb .g-orb { width: 18px; height: 18px; }
 .g-new { position: absolute; inset-inline-end: 16px; bottom: 16px; background: var(--wa-green, #00a884); color: #111b21; border: 0; border-radius: 16px; padding: 14px 18px; font: inherit; font-weight: 700; box-shadow: 0 4px 14px rgba(0,0,0,.35); cursor: pointer; }
 .g-list { position: relative; }
 .g-list .g-rooms { padding-bottom: 80px; }
