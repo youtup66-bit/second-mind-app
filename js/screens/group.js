@@ -1,6 +1,8 @@
-// شاشة مجموعة المؤسسة: محادثة مشتركة مثل مجموعة واتساب (نصوص وصور وكلام يتحول إلى نص)
+// شاشة منشورات الأعمال: قائمة مجموعات مثل واتساب (العامة، ومجموعة لكل كرة أنت فيها)،
+// وكل مجموعة محادثة مستقلة (نصوص وصور وكلام يتحول إلى نص). ‎#/group‎ القائمة · ‎#/group?room=…‎ المحادثة
 import {
-  startGroupSync, groupEvents, groupMe, groupMembers, groupOnline, groupPlaces, sendGroup, resend, markSeen, compressImage,
+  startGroupSync, groupEvents, groupMembers, groupOnline, groupRooms, sendGroup, resend, markSeen, compressImage,
+  GENERAL, roomOf, unreadByRoom,
 } from '../group.js';
 import { getGroupMessages } from '../storage.js';
 import { session } from '../cloud.js';
@@ -37,19 +39,29 @@ export async function mount(root) {
   }
 
   const manager = s.member.role === 'manager';
+  const room = new URLSearchParams(location.hash.split('?')[1] || '').get('room');
+  // نبدأ المزامنة أولاً: هي التي تحدد أرشيف أي حساب يُعرض
+  const syncErr = await startGroupSync().then(() => '', (err) => err.message);
+  if (!root.isConnected) return;
+  if (!room) return mountList(root, s, syncErr);
+  const orgName = s.org?.name || 'المؤسسة';
+  const roomInfo = () => (room === GENERAL ? { name: orgName, color: '#00a884' } : groupRooms().get(room) || pastRoom(room));
+  let pastName = '';
+  const pastRoom = () => ({ name: pastName || 'مجموعة سابقة', color: '#6b7c85', past: true });
   // الموظف بلا ذكاء: الميكروفون بخدمة المتصفح فقط
   const micOk = manager ? canListen : canBrowserListen;
   root.innerHTML = `
     <section class="chat chat--wa chat--plain chat--group">
       <header class="wa-head">
+        <a class="wa-head__back" href="#/group" aria-label="رجوع إلى المجموعات">→</a>
         <div class="wa-head__who">
-          <span class="wa-avatar wa-avatar--group" aria-hidden="true">${esc((s.org?.name || 'م').trim().charAt(0))}</span>
-          <span class="wa-head__text"><b>${esc(s.org?.name || 'المؤسسة')}</b><small id="g-status"></small></span>
+          <span class="wa-avatar wa-avatar--group" id="g-avatar" aria-hidden="true"></span>
+          <span class="wa-head__text"><b id="g-name"></b><small id="g-status"></small></span>
         </div>
       </header>
       <p class="wa-note" id="g-note" hidden role="status"></p>
       <ol class="chat__log" id="g-log" aria-label="رسائل المجموعة"></ol>
-      <div class="g-tags" id="g-tags" hidden></div>
+      <p class="g-past" id="g-past" hidden>لم تعد عضواً في هذه المجموعة؛ تبقى رسائلها عندك للقراءة.</p>
       <form class="composer" id="g-form" autocomplete="off">
         <button type="button" class="composer__mic" id="g-mic" aria-label="اضغط مطولاً للتسجيل" ${micOk ? '' : 'hidden'}>🎙</button>
         <textarea id="g-input" rows="1" placeholder="اكتب منشور عمل" aria-label="منشورك"></textarea>
@@ -75,9 +87,17 @@ export async function mount(root) {
   };
 
   const renderStatus = () => {
-    const n = groupMembers().size;
+    const info = roomInfo();
+    root.querySelector('#g-name').textContent = info.name;
+    const av = root.querySelector('#g-avatar');
+    av.textContent = initial(info.name);
+    av.style.background = info.color;
+    av.style.color = textOn(info.color);
+    root.querySelector('#g-past').hidden = !info.past;
+    form.hidden = !!info.past;
+    const n = room === GENERAL ? groupMembers().size : info.past ? 0 : info.members.filter((u) => groupMembers().has(u)).length;
     statusEl.textContent = !groupOnline() ? 'بلا إنترنت · الرسائل تُرسل عند الاتصال'
-      : n === 1 ? 'عضو واحد' : n === 2 ? 'عضوان' : n ? `${n} ${n <= 10 ? 'أعضاء' : 'عضواً'}` : 'متصل';
+      : info.past ? '' : n === 1 ? 'عضو واحد' : n === 2 ? 'عضوان' : n ? `${n} ${n <= 10 ? 'أعضاء' : 'عضواً'}` : 'متصل';
   };
 
   // ---- عرض الرسائل ----
@@ -95,7 +115,6 @@ export async function mount(root) {
       m.mine ? '' : `<span class="msg__from" style="color:${colorFor(m.from)}">${esc(m.fromName)}</span>`,
       m.image ? `<img class="msg__img" src="${m.image}" alt="صورة" loading="lazy">` : '',
       m.text ? `<span class="msg__text">${esc(m.text)}</span>` : '',
-      m.tag ? `<span class="msg__tag">عن: ${esc(m.tag)}</span>` : '',
       `<span class="msg__time">${fmtTime.format(m.sentAt)}${m.mine ? ` <span class="tick tick--${m.status}">${TICKS[m.status] || ''}</span>` : ''}</span>`,
       m.mine && m.status === 'failed' ? '<button type="button" class="msg__retry">لم تُرسل · أعد المحاولة</button>' : '',
     ].join('');
@@ -123,7 +142,8 @@ export async function mount(root) {
     if (scroll && (stick || m.mine)) log.scrollTop = log.scrollHeight;
   }
   async function renderAll() {
-    const all = await getGroupMessages();
+    const all = (await getGroupMessages()).filter((m) => roomOf(m) === room);
+    pastName = all.find((m) => m.roomName)?.roomName || '';
     log.innerHTML = '';
     lastDay = '';
     if (!all.length) log.innerHTML = '<li class="wa-day">لا منشورات بعد. اكتب ما أنجزته من أعمال 👋</li>';
@@ -137,25 +157,6 @@ export async function mount(root) {
   }
 
   // ---- الإرسال ----
-  // الموظف يختار عمّا يكون منشوره (من كراته في عقل المؤسسة)؛ يبقى الاختيار للمنشورات التالية
-  let tag = '';
-  try { tag = sessionStorage.getItem('sm-post-tag') || ''; } catch { /* لا شيء */ }
-  const tagsEl = root.querySelector('#g-tags');
-  function renderTags() {
-    const places = groupPlaces();
-    if (!places.includes(tag)) tag = '';
-    tagsEl.hidden = !places.length;
-    tagsEl.innerHTML = places.length ? `<span class="g-tags__lead">عن:</span>${['', ...places].map((p) => `<button type="button" class="g-tag${p === tag ? ' is-on' : ''}" data-tag="${esc(p)}">${p ? esc(p) : 'عام'}</button>`).join('')}` : '';
-  }
-  tagsEl.addEventListener('click', (e) => {
-    const b = e.target.closest('[data-tag]');
-    if (!b) return;
-    tag = b.dataset.tag;
-    try { sessionStorage.setItem('sm-post-tag', tag); } catch { /* لا شيء */ }
-    renderTags();
-  });
-  renderTags();
-
   const syncComposer = () => form.classList.toggle('has-text', !!input.value.trim());
   const autosize = () => { input.style.height = 'auto'; input.style.height = `${Math.min(140, input.scrollHeight)}px`; };
   input.addEventListener('input', () => { autosize(); syncComposer(); });
@@ -168,7 +169,7 @@ export async function mount(root) {
     if (!text) return;
     input.value = ''; autosize(); syncComposer();
     if (log.querySelector('.wa-day') && !log.querySelector('.msg')) log.innerHTML = '';
-    try { await sendGroup({ text, tag }); } catch (err) { say(esc(err.message)); input.value = text; syncComposer(); }
+    try { await sendGroup({ text, room }); } catch (err) { say(esc(err.message)); input.value = text; syncComposer(); }
   });
 
   const file = root.querySelector('#g-file');
@@ -181,7 +182,7 @@ export async function mount(root) {
     try {
       const image = await compressImage(f);
       if (log.querySelector('.wa-day') && !log.querySelector('.msg')) log.innerHTML = '';
-      await sendGroup({ image, text: input.value.trim(), tag });
+      await sendGroup({ image, text: input.value.trim(), room });
       input.value = ''; autosize(); syncComposer();
       note.hidden = true;
     } catch (err) { say(`تعذّر إرسال الصورة: ${esc(err.message)}`); }
@@ -193,7 +194,7 @@ export async function mount(root) {
     onBusy: (on) => { if (on) say('أحوّل كلامك إلى نص…'); else note.hidden = true; },
     onText: async (text) => {
       if (log.querySelector('.wa-day') && !log.querySelector('.msg')) log.innerHTML = '';
-      try { await sendGroup({ text, tag }); } catch (err) { say(esc(err.message)); }
+      try { await sendGroup({ text, room }); } catch (err) { say(esc(err.message)); }
     },
   }) : null;
 
@@ -210,7 +211,7 @@ export async function mount(root) {
   view.addEventListener('click', () => { view.hidden = true; });
 
   // ---- الأحداث ----
-  const onMsg = (e) => { append(e.detail.msg); markSeen(); };
+  const onMsg = (e) => { if (roomOf(e.detail.msg) !== room) return; append(e.detail.msg); markSeen(room); };
   const onUpdate = (e) => {
     const li = log.querySelector(`[data-id="${CSS.escape(e.detail.msg.id)}"]`);
     if (li) fill(li, e.detail.msg);
@@ -221,24 +222,87 @@ export async function mount(root) {
   groupEvents.addEventListener('message', onMsg);
   groupEvents.addEventListener('update', onUpdate);
   groupEvents.addEventListener('members', renderStatus);
-  groupEvents.addEventListener('places', renderTags);
+  groupEvents.addEventListener('rooms', renderStatus);
   groupEvents.addEventListener('status', renderStatus);
   cleanup.push(() => {
     groupEvents.removeEventListener('message', onMsg);
     groupEvents.removeEventListener('update', onUpdate);
     groupEvents.removeEventListener('members', renderStatus);
-    groupEvents.removeEventListener('places', renderTags);
+    groupEvents.removeEventListener('rooms', renderStatus);
     groupEvents.removeEventListener('status', renderStatus);
     holdMic?.stop();
   });
 
-  // نبدأ المزامنة أولاً: هي التي تحدد أرشيف أي حساب يُعرض
-  await startGroupSync().catch((err) => say(esc(err.message)));
+  if (syncErr) say(esc(syncErr));
   await renderAll();
   renderStatus();
-  markSeen();
-  if (!groupMe()) renderStatus();
+  markSeen(room);
 }
+
+// ---- قائمة المجموعات ----
+const initial = (name) => String(name || 'م').trim().replace(/^(شعبة|وحدة|قسم|مشروع)\s+/, '').replace(/^ال(?=..)/, '').charAt(0) || 'م';
+// نص أسود على الألوان الفاتحة (القسم الأبيض والأصفر)
+const textOn = (hex) => {
+  const n = parseInt(String(hex).slice(1), 16);
+  const l = (0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) / 255;
+  return l > 0.65 ? '#111b21' : '#fff';
+};
+const KIND = { division: 'شعبة', unit: 'وحدة', section: 'قسم وحدة', custom: 'كرة' };
+
+async function mountList(root, s, syncErr) {
+  const orgName = s.org?.name || 'المؤسسة';
+  root.innerHTML = `
+    <section class="chat chat--wa chat--plain chat--group g-list">
+      <header class="wa-head">
+        <div class="wa-head__who"><span class="wa-head__text"><b>المجموعات</b><small id="g-status"></small></span></div>
+      </header>
+      <p class="wa-note" id="g-note" ${syncErr ? '' : 'hidden'} role="status">${esc(syncErr)}</p>
+      <ul class="g-rooms" id="g-rooms" aria-label="المجموعات"></ul>
+    </section>`;
+  const list = root.querySelector('#g-rooms');
+  const statusEl = root.querySelector('#g-status');
+
+  async function render() {
+    const [all, unread] = await Promise.all([getGroupMessages(), unreadByRoom()]);
+    const last = new Map(), names = new Map();
+    for (const m of all) {
+      last.set(roomOf(m), m);
+      if (m.roomName) names.set(roomOf(m), m.roomName);
+    }
+    const rooms = groupRooms();
+    const items = [{ id: GENERAL, name: orgName, color: '#00a884', kind: 'عامة · الجميع' }];
+    for (const [id, r] of rooms) items.push({ id, name: r.name, color: r.color, kind: KIND[r.kind] || '' });
+    // مجموعات غادرها (أو حُذفت كرتها) وما زالت رسائلها عنده
+    for (const id of last.keys()) if (id !== GENERAL && !rooms.has(id)) items.push({ id, name: names.get(id) || 'مجموعة سابقة', color: '#6b7c85', kind: 'سابقة', past: true });
+    // الأحدث نشاطاً أولاً، والعامة دائماً في الأعلى
+    const t = (it) => last.get(it.id)?.sentAt || 0;
+    const [general, ...rest] = items;
+    rest.sort((a, b) => (a.past - b.past) || (t(b) - t(a)) || a.name.localeCompare(b.name, 'ar'));
+    list.innerHTML = [general, ...rest].map((it) => {
+      const m = last.get(it.id);
+      const n = unread.get(it.id) || 0;
+      const preview = m ? `${m.mine ? 'أنت' : esc(m.fromName)}: ${m.text ? esc(m.text.slice(0, 80)) : '📷 صورة'}` : `<i>${esc(it.kind)}</i>`;
+      return `<li><a class="g-room${it.past ? ' is-past' : ''}" href="#/group?room=${encodeURIComponent(it.id)}">
+        <span class="wa-avatar wa-avatar--group" style="background:${esc(it.color)};color:${textOn(it.color)}" aria-hidden="true">${esc(initial(it.name))}</span>
+        <span class="g-room__body">
+          <span class="g-room__top"><b>${esc(it.name)}</b>${m ? `<small class="${n ? 'is-new' : ''}">${listTime(m.sentAt)}</small>` : ''}</span>
+          <span class="g-room__bottom"><span class="g-room__last">${preview}</span>${n ? `<span class="g-room__badge">${n > 99 ? '99+' : n}</span>` : ''}</span>
+        </span></a></li>`;
+    }).join('');
+    statusEl.textContent = !groupOnline() ? 'بلا إنترنت' : `${items.length} ${items.length === 1 ? 'مجموعة' : items.length === 2 ? 'مجموعتان' : items.length <= 10 ? 'مجموعات' : 'مجموعة'}`;
+  }
+  const onAny = () => { render().catch(() => {}); };
+  for (const ev of ['message', 'update', 'rooms', 'status', 'seen']) groupEvents.addEventListener(ev, onAny);
+  cleanup.push(() => { for (const ev of ['message', 'update', 'rooms', 'status', 'seen']) groupEvents.removeEventListener(ev, onAny); });
+  await render();
+}
+const listTime = (t) => {
+  const d = new Date(t), now = new Date();
+  if (d.toDateString() === now.toDateString()) return fmtTime.format(t);
+  const y = new Date(now); y.setDate(now.getDate() - 1);
+  if (d.toDateString() === y.toDateString()) return 'أمس';
+  return d.toLocaleDateString('ar', { day: 'numeric', month: 'numeric' });
+};
 
 export function unmount() {
   cleanup.forEach((f) => f());

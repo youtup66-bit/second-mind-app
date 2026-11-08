@@ -9,6 +9,7 @@ import {
   loadStructure, saveStructure, addNode, addCustom, placePerson, toggleLink,
 } from './org-structure.js';
 import { getWorks, addWork } from './points.js';
+import { publishRooms, roomIdOf, startGroupSync } from './group.js';
 
 const KEY = 'devAccounts'; // { manager: { username, password, name }, people: [{ name, username, password, uid }] }
 const DEMO_PASSWORD = 'demo12345';
@@ -19,6 +20,7 @@ const DEMO_PEOPLE = [
   { name: 'زينب جاسم', username: 'demo.zainab' },
   { name: 'مصطفى عادل', username: 'demo.mustafa' },
 ];
+// [موظف، نص، قبل كم يوم]؛ منشورات العامة (تصل للمدير) ثم منشورات مجموعات الكرات
 const DEMO_POSTS = [
   [0, 'خلصت تسليك ثلاث كاميرات بالمدخل الشمالي', 1],
   [1, 'صيانة الراوتر بغرفة الاجتماعات تمت، كان المنفذ محترق', 1],
@@ -27,6 +29,15 @@ const DEMO_POSTS = [
   [3, 'عندنا نقص بالكابلات، نحتاج طلبية جديدة', 3],
   [4, 'خلصت تمديد كابل الشبكة لقاعة التدريب', 4],
   [1, 'الكاميرا رقم ٧ ما تشتغل بعد الصيانة، أحتاج فحص', 5],
+];
+
+// [موظف، كرة (اسمها في الهيكل)، نص، قبل كم يوم]
+const DEMO_ROOM_POSTS = [
+  [0, 'وحدة الكاميرات', 'الكاميرات الجديدة وصلت، منو يساعدني بالتركيب؟', 1],
+  [2, 'وحدة الكاميرات', 'أني أجي بعد الظهر', 1],
+  [0, 'مشروع المبنى الجديد', 'خلصنا مخطط الكاميرات للطابق الأول', 2],
+  [3, 'مشروع المبنى الجديد', 'الكابلات للطابق الأول جاهزة', 2],
+  [4, 'شعبة الشبكات', 'تحديث برنامج الراوترات يوم الخميس', 3],
 ];
 
 export const devAccounts = () => getSetting(KEY, null);
@@ -51,12 +62,12 @@ async function createDemoEmployee(p, managerUid, sec) {
 }
 
 // منشورات تجريبية باسم الموظف، موجّهة للمدير (تصل كأي منشور حقيقي)
-async function demoPost(sec, uid, name, managerUid, text, daysAgo) {
+async function demoPost(sec, uid, name, managerUid, text, daysAgo, room = null) {
   const { db, F } = sec;
   const ref = F.doc(F.collection(db, 'relay'));
   await F.setDoc(ref, {
     mid: ref.id, from: uid, fromName: name, text, sentAt: Date.now() - daysAgo * 86400000 - Math.floor(Math.random() * 3600000),
-    createdAt: F.serverTimestamp(), pending: [managerUid],
+    createdAt: F.serverTimestamp(), pending: room ? room.members.filter((u) => u !== uid) : [managerUid], ...(room ? { room: room.id } : {}),
   });
 }
 
@@ -107,6 +118,29 @@ export async function seedDemoOrg({ managerPassword }, onStep = () => {}) {
     placePerson(st, zainab, cables.id); placePerson(st, zainab, project.id);
     placePerson(st, mustafa, power.id); placePerson(st, mustafa, net.id, true);
     await saveStructure(st);
+  }
+
+  // مجموعات الكرات: ينشرها هاتف المدير، ثم يكتب كل موظف فيها منشوراته التجريبية
+  onStep('أنشر مجموعات الكرات…');
+  await startGroupSync();
+  await publishRooms();
+  const st2 = await loadStructure();
+  const { roomsFromStructure } = await import('./group.js');
+  const rooms = roomsFromStructure(st2, managerUid);
+  if (!(await getSetting('devRoomPosts', false))) {
+    for (const [who, ballName, text, days] of DEMO_ROOM_POSTS) {
+      const node = st2.nodes.find((n) => n.name === ballName);
+      const r = node && rooms.get(roomIdOf(node.id));
+      const p = people[who];
+      if (!r || !r.members.includes(p.uid)) continue;
+      onStep(`منشور ${p.name} في ${ballName}…`);
+      try {
+        await sec.A.signInWithEmailAndPassword(sec.auth, usernameEmail(p.username), DEMO_PASSWORD);
+        await demoPost(sec, p.uid, p.name, managerUid, text, days, { id: roomIdOf(node.id), members: r.members });
+      } catch (e) { console.warn('demo room post', e); }
+      await sec.A.signOut(sec.auth).catch(() => {});
+    }
+    await setSetting('devRoomPosts', true);
   }
 
   onStep('أضيف الأعمال والنقاط…');

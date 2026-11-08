@@ -38,7 +38,7 @@ export async function makeReport(period = 'week') {
     org: st.nodes.find((n) => n.id === 'root')?.name || '',
     people,
     works: works.map((w) => `${w.name} (${w.points})`),
-    posts: inPeriod.slice(-150).map((x) => `[${fmtDay.format(x.sentAt)}] ${x.mine ? 'المدير' : name(x.from)}${x.tag ? ` (${x.tag})` : ''}: ${x.text.slice(0, 300)}`),
+    posts: inPeriod.slice(-150).map((x) => `[${fmtDay.format(x.sentAt)}] ${x.mine ? 'المدير' : name(x.from)}${x.roomName ? ` [${x.roomName}]` : x.tag ? ` (${x.tag})` : ''}: ${x.text.slice(0, 300)}`),
   };
   const r = await writeOrgReport(data);
   const report = { id: uid(), period, from, to: Date.now(), createdAt: Date.now(), ...r };
@@ -165,7 +165,7 @@ export async function insightsContext() {
   const name = (u) => emps.find(([id]) => id === u)?.[1].name || 'موظف سابق';
   const [w, mo, posts, al, tasks, rem] = await Promise.all([totals('week'), totals('month'), getGroupMessages(), alerts(), listTasks(), listReminders()]);
   const pts = emps.map(([u, m]) => `${m.name}: أسبوع ${w.get(u)?.points || 0}، شهر ${mo.get(u)?.points || 0}`);
-  const recent = posts.filter((x) => x.text).slice(-25).map((x) => `[${fmtDay.format(x.sentAt)}] ${x.mine ? 'المدير' : name(x.from)}${x.tag ? ` (${x.tag})` : ''}: ${x.text.slice(0, 160)}`);
+  const recent = posts.filter((x) => x.text).slice(-25).map((x) => `[${fmtDay.format(x.sentAt)}] ${x.mine ? 'المدير' : name(x.from)}${x.roomName ? ` [${x.roomName}]` : x.tag ? ` (${x.tag})` : ''}: ${x.text.slice(0, 160)}`);
   return `
 الوقت الآن: ${new Date().toISOString()} (المنطقة الزمنية للجهاز: ${Intl.DateTimeFormat().resolvedOptions().timeZone}).
 نقاط الموظفين: ${pts.join(' | ') || 'لا شيء'}

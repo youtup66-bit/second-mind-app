@@ -69,12 +69,22 @@ export async function mount(root) {
     while (grew) { grew = false; for (const x of st.nodes) if (!ids.has(x.id) && ids.has(x.parent)) { ids.add(x.id); grew = true; } }
     return Object.entries(st.people).filter(([, p]) => p.places.some((pl) => ids.has(pl.node))).map(([u]) => u);
   };
-  // node: الكرة المعروضة؛ المنشور الذي اختار له الموظف كرة يُحسب لتلك الكرة، وغيره يُحسب لكرات مرسله
+  // node: الكرة المعروضة؛ منشورات مجموعتها ومجموعات ما تحتها، ومنشورات العامة من موظفيها
+  const roomsUnder = (node) => {
+    if (node.type === 'custom') return new Set([`n_${node.id}`]);
+    const ids = new Set([node.id]);
+    let grew = true;
+    while (grew) { grew = false; for (const x of st.nodes) if (!ids.has(x.id) && ids.has(x.parent)) { ids.add(x.id); grew = true; } }
+    return new Set([...ids].map((i) => `n_${i}`));
+  };
   const statsLine = (users, node = null) => {
     const pts = users.reduce((a, u) => a + (month.get(u)?.points || 0), 0);
     const set = new Set(users);
+    const rs = node && node.id !== 'root' ? roomsUnder(node) : null;
     const n = posts.filter((m) => m.sentAt >= weekAgo() && (!node ? set.has(m.from)
-      : node.id === 'root' ? true : m.tag ? m.tag === node.name : set.has(m.from))).length;
+      : node.id === 'root' ? true
+        : m.room && m.room !== 'general' ? rs.has(m.room)
+          : m.tag ? m.tag === node.name : set.has(m.from))).length;
     return `<p class="struct-stats">نقاط هذا الشهر <b>${pts}</b> · منشورات هذا الأسبوع <b>${n}</b></p>`;
   };
   const fmtDay = new Intl.DateTimeFormat('ar', { day: 'numeric', month: 'short' });

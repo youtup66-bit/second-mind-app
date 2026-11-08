@@ -1037,13 +1037,22 @@ body.on-staffnav .topbar { display: none; }
 .page-tabs { gap: 18px; flex-wrap: wrap; }
 .toast--info { background: #1f2c34; color: #e9edef; border: 1px solid #00a884; }
 
-/* اختيار موضوع المنشور (كرة الموظف) */
-.g-tags { display: flex; gap: 14px; overflow-x: auto; padding: 6px 14px 2px; font-size: .86rem; white-space: nowrap; scrollbar-width: none; }
-.g-tags[hidden] { display: none; }
-.g-tags__lead { color: var(--wa-meta, var(--muted)); }
-.g-tag { background: none; border: 0; padding: 2px 0; color: var(--wa-meta, var(--muted)); font: inherit; cursor: pointer; }
-.g-tag.is-on { color: var(--wa-green, var(--accent)); font-weight: 700; border-bottom: 2px solid currentColor; }
-.msg__tag { display: block; font-size: .72rem; color: var(--wa-meta, var(--muted)); margin-top: 2px; }
+/* قائمة المجموعات (مثل واتساب) */
+.wa-head__back { color: var(--wa-text, #e9edef); text-decoration: none; font-size: 1.35rem; width: 32px; height: 40px; display: grid; place-items: center; margin-inline-end: -4px; }
+.g-rooms { list-style: none; margin: 0; padding: 0; flex: 1; overflow-y: auto; }
+.g-room { display: flex; align-items: center; gap: 12px; padding: 10px 14px; color: var(--wa-text, #e9edef); text-decoration: none; }
+.g-room:active { background: rgba(255,255,255,.05); }
+.g-room.is-past { opacity: .6; }
+.g-room__body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; padding-bottom: 10px; margin-bottom: -10px; border-bottom: 1px solid rgba(255,255,255,.06); }
+.g-room__top, .g-room__bottom { display: flex; align-items: center; gap: 8px; }
+.g-room__top b { flex: 1; font-size: 1rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.g-room__top small { font-size: .75rem; color: var(--wa-meta, #8696a0); }
+.g-room__top small.is-new { color: var(--wa-green, #00a884); }
+.g-room__last { flex: 1; font-size: .86rem; color: var(--wa-meta, #8696a0); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.g-room__last i { font-style: normal; }
+.g-room__badge { background: var(--wa-green, #00a884); color: #111b21; font-size: .72rem; font-weight: 700; min-width: 20px; height: 20px; border-radius: 10px; display: grid; place-items: center; padding: 0 6px; }
+.g-past { margin: 0; padding: 12px 16px calc(12px + env(safe-area-inset-bottom)); text-align: center; font-size: .85rem; color: var(--wa-meta, #8696a0); background: var(--wa-head, #202c33); }
+.g-past[hidden], .composer[hidden] { display: none; }
 
 /* ---- العقل الشخصي بأسلوب عقل المؤسسة ---- */
 body.on-mind .topbar { display: none; }
@@ -1095,6 +1104,6 @@ body.on-mind .topbar { display: none; }
 }
 .update-bar span { flex: 1; }
 .dev-tag {
-  position: fixed; top: calc(env(safe-area-inset-top) + 4px); inset-inline-start: 6px; z-index: 50; pointer-events: none;
+  position: fixed; top: calc(env(safe-area-inset-top) + 4px); inset-inline-end: 6px; z-index: 50; pointer-events: none;
   padding: 2px 8px; border-radius: 8px; background: #b45309; color: #fff; font-size: .7rem; font-weight: 700; opacity: .9;
 }

@@ -1,10 +1,11 @@
 // مجموعة المؤسسة: الإرسال والاستلام عبر Firebase، والأرشيف على الجهاز.
 // السحابة تنقل فقط: كل جهاز يحذف نفسه من قائمة المنتظرين عند الاستلام، وآخر مستلم يحذف الرسالة.
 // المدير يحتفظ بالأرشيف كاملاً، ويرسله لكل موظف جديد مرة واحدة.
+// المجموعات: «العامة» للجميع، ولكل كرة في عقل المؤسسة مجموعة (rooms/n_<كرة>) أعضاؤها ينشرهم المدير من هيكله.
 import { api, session } from './cloud.js';
 import { putGroupMessage, getGroupMessage, getGroupMessages, getSetting, setSetting, setGroupAccount } from './storage.js';
 
-export const groupEvents = new EventTarget(); // message {msg} · update {msg} · members · status
+export const groupEvents = new EventTarget(); // message {msg} · update {msg} · members · rooms · status · seen
 const emit = (type, detail) => groupEvents.dispatchEvent(new CustomEvent(type, { detail }));
 
 let me = null; // { uid, name, role }
@@ -13,13 +14,18 @@ let unsubs = [];
 let starting = null;
 let online = false;
 // أول قائمة أعضاء: لا نرسل قبلها حتى لا تُرسل رسالة "لا أحد"
-let membersReady = null, resolveMembers = null;
-const resetMembersReady = () => { membersReady = new Promise((r) => { resolveMembers = r; }); };
+let membersReady = null, resolveMembers = null, roomsReady = null, resolveRooms = null;
+const resetMembersReady = () => {
+  membersReady = new Promise((r) => { resolveMembers = r; });
+  roomsReady = new Promise((r) => { resolveRooms = r; });
+};
 resetMembersReady();
 
-let myPlaces = [];
+export const GENERAL = 'general';
+let rooms = new Map(); // id ← { name, color, members[], kind }
 export const groupMe = () => me;
-export const groupPlaces = () => myPlaces;
+export const groupRooms = () => rooms;
+export const roomOf = (m) => m?.room || GENERAL;
 export const groupMembers = () => members;
 export const groupOnline = () => online;
 
@@ -40,17 +46,20 @@ export async function startGroupSync() {
       emit('members');
       if (me?.role === 'manager') {
         managerChores().catch((e) => console.warn('group chores', e));
-        publishPlacesSoon();
+        publishRoomsSoon();
       }
     }, (err) => emit('status', { error: err })));
 
-    // الموظف: أسماء كراته في عقل المؤسسة (يختار منها عند النشر)
-    if (me.role === 'employee') {
-      unsubs.push(F.onSnapshot(F.doc(db, 'places', me.uid), (d) => {
-        myPlaces = d.exists() ? (d.data().places || []).map(String) : [];
-        emit('places');
-      }, () => {}));
-    }
+    // مجموعات الكرات: المدير يرى كلها، والموظف ما هو عضو فيه فقط
+    const roomsQuery = me.role === 'manager' ? F.collection(db, 'rooms')
+      : F.query(F.collection(db, 'rooms'), F.where('members', 'array-contains', me.uid));
+    unsubs.push(F.onSnapshot(roomsQuery, (snap) => {
+      rooms = new Map(snap.docs.map((d) => [d.id, {
+        name: d.data().name, color: d.data().color || '#c084fc', members: d.data().members || [], kind: d.data().kind || 'custom',
+      }]));
+      resolveRooms();
+      emit('rooms');
+    }, () => { resolveRooms(); }));
 
     unsubs.push(F.onSnapshot(
       F.query(F.collection(db, 'relay'), F.where('pending', 'array-contains', me.uid)),
@@ -73,8 +82,8 @@ export function stopGroupSync() {
   unsubs.forEach((u) => { try { u(); } catch { /* لا شيء */ } });
   unsubs = [];
   me = null;
-  myPlaces = [];
-  published.clear();
+  rooms = new Map();
+  published = null;
   members = new Map();
   resetMembersReady();
 }
@@ -87,6 +96,7 @@ async function receive(d, F) {
   if (!(await getGroupMessage(id))) {
     const m = {
       id, from: x.from, fromName: x.fromName, text: x.text || '', image: x.image || null, ...(x.tag ? { tag: x.tag } : {}),
+      room: x.room || GENERAL, ...(x.roomName ? { roomName: x.roomName } : {}),
       sentAt: x.sentAt, mine: x.from === me.uid, status: 'received', receivedAt: Date.now(),
     };
     await putGroupMessage(m);
@@ -98,14 +108,23 @@ async function receive(d, F) {
 }
 
 // ---- الإرسال ----
-export async function sendGroup({ text = '', image = null, tag = '' }) {
+export async function sendGroup({ text = '', image = null, tag = '', room = GENERAL }) {
   if (!me) throw new Error('لم تدخل إلى المؤسسة بعد.');
   text = String(text).trim().slice(0, 4000);
   if (!text && !image) return null;
   const { db, F } = await api();
   const ref = F.doc(F.collection(db, 'relay'));
   tag = String(tag || '').trim().slice(0, 60);
-  const m = { id: ref.id, from: me.uid, fromName: me.name, text, image, sentAt: Date.now(), mine: true, status: 'queued', ...(tag ? { tag } : {}) };
+  room = String(room || GENERAL);
+  if (room !== GENERAL) {
+    await roomsReady;
+    if (!rooms.has(room)) throw new Error('لست عضواً في هذه المجموعة.');
+  }
+  const roomName = room === GENERAL ? '' : rooms.get(room).name;
+  const m = {
+    id: ref.id, from: me.uid, fromName: me.name, text, image, sentAt: Date.now(), mine: true, status: 'queued', room,
+    ...(roomName ? { roomName } : {}), ...(tag ? { tag } : {}),
+  };
   await putGroupMessage(m);
   emit('message', { msg: m });
   deliver(m).catch(() => {});
@@ -115,17 +134,23 @@ export async function sendGroup({ text = '', image = null, tag = '' }) {
 async function deliver(m) {
   const { db, F } = await api();
   await membersReady;
-  const pending = [...members.keys()].filter((u) => u !== me.uid);
+  const room = roomOf(m);
+  if (room !== GENERAL) await roomsReady;
+  const r = room === GENERAL ? null : rooms.get(room);
+  // مجموعة كرة: لأعضائها الحاليين فقط (ومن غادر الشركة لا يُرسل له)
+  const pending = (r ? r.members : [...members.keys()]).filter((u) => u !== me.uid && members.has(u));
   const done = async (status, error) => {
     const fresh = { ...m, status, ...(error ? { error } : {}) };
     if (!error) delete fresh.error;
     await putGroupMessage(fresh);
     emit('update', { msg: fresh });
   };
-  if (!pending.length) return done('sent'); // لا أحد غيرك في المؤسسة بعد
+  if (room !== GENERAL && !r) return done('failed', 'لم تعد عضواً في هذه المجموعة.');
+  if (!pending.length) return done('sent'); // لا أحد غيرك في المجموعة بعد
   try {
     await F.setDoc(F.doc(db, 'relay', m.id), {
       mid: m.id, from: me.uid, fromName: me.name, sentAt: m.sentAt, createdAt: F.serverTimestamp(), pending,
+      ...(room !== GENERAL ? { room } : {}),
       ...(m.text ? { text: m.text } : {}), ...(m.image ? { image: m.image } : {}), ...(m.tag ? { tag: m.tag } : {}),
     });
     await done('sent');
@@ -162,51 +187,125 @@ async function managerChores() {
     if (!fresh.length) return;
     const archive = await getGroupMessages();
     for (const [uid, m] of fresh) {
-      // كل ما سبق انضمامه (مع هامش)؛ ما بعده يصله مباشرة، والتكرار يُتجاهل عنده
-      const old = archive.filter((x) => x.sentAt < (m.joinedAt || Date.now()) + 10 * 60_000 && x.from !== uid);
-      let batch = F.writeBatch(db), ops = 0, bytes = 0;
-      for (const x of old) {
-        const size = (x.text?.length || 0) * 2 + (x.image?.length || 0) + 500;
-        if (ops >= 400 || bytes + size > 8_000_000) { await batch.commit(); batch = F.writeBatch(db); ops = 0; bytes = 0; }
-        batch.set(F.doc(db, 'relay', `h_${uid}_${x.id}`.slice(0, 1400)), {
-          mid: x.id, from: x.from, fromName: x.fromName, sentAt: x.sentAt, createdAt: F.serverTimestamp(),
-          pending: [uid], history: true, ...(x.text ? { text: x.text } : {}), ...(x.image ? { image: x.image } : {}), ...(x.tag ? { tag: x.tag } : {}),
-        });
-        ops++; bytes += size;
-      }
-      if (ops) await batch.commit();
+      // المجموعة العامة: كل ما سبق انضمامه (مع هامش)؛ ما بعده يصله مباشرة، والتكرار يُتجاهل عنده.
+      // مجموعات الكرات يصله أرشيفها حين يضعه المدير فيها (sendRoomHistory)
+      const old = archive.filter((x) => roomOf(x) === GENERAL && x.sentAt < (m.joinedAt || Date.now()) + 10 * 60_000 && x.from !== uid);
+      await sendHistory(uid, old);
       await F.setDoc(F.doc(db, 'handoffs', uid), { count: old.length, at: F.serverTimestamp() });
     }
   } finally { choresRunning = false; }
 }
 
-// ---- المدير: نشر أسماء كرات كل موظف له ----
-let placesTimer = 0;
-const published = new Map(); // موظف ← آخر ما نُشر
-function publishPlacesSoon() { clearTimeout(placesTimer); placesTimer = setTimeout(() => publishPlaces().catch((e) => console.warn('places', e)), 1500); }
-window.addEventListener('sm:structure', () => { if (me?.role === 'manager') publishPlacesSoon(); });
-async function publishPlaces() {
-  if (me?.role !== 'manager') return;
-  const { loadStructure, placesOf, nodeById } = await import('./org-structure.js');
-  const st = await loadStructure();
+// يرسل رسائل قديمة من أرشيف المدير لعضو واحد (يحفظ اسم المرسل الأصلي ومجموعتها)
+async function sendHistory(uid, old) {
+  if (!old.length) return;
   const { db, F } = await api();
-  for (const [uid, m] of members) {
-    if (m.role !== 'employee') continue;
-    const names = [...new Set(placesOf(st, uid).map((x) => nodeById(st, x.node)?.name).filter(Boolean))].slice(0, 30);
-    const sig = JSON.stringify(names);
-    if (published.get(uid) === sig) continue;
-    await F.setDoc(F.doc(db, 'places', uid), { places: names, at: F.serverTimestamp() });
-    published.set(uid, sig);
+  let batch = F.writeBatch(db), ops = 0, bytes = 0;
+  for (const x of old) {
+    const size = (x.text?.length || 0) * 2 + (x.image?.length || 0) + 500;
+    if (ops >= 400 || bytes + size > 8_000_000) { await batch.commit(); batch = F.writeBatch(db); ops = 0; bytes = 0; }
+    batch.set(F.doc(db, 'relay', `h_${uid}_${x.id}`.slice(0, 1400)), {
+      mid: x.id, from: x.from, fromName: x.fromName, sentAt: x.sentAt, createdAt: F.serverTimestamp(),
+      pending: [uid], history: true, ...(roomOf(x) !== GENERAL ? { room: x.room } : {}),
+      ...(x.text ? { text: x.text } : {}), ...(x.image ? { image: x.image } : {}), ...(x.tag ? { tag: x.tag } : {}),
+    });
+    ops++; bytes += size;
   }
+  if (ops) await batch.commit();
 }
 
-// ---- غير المقروء ----
-export async function unreadCount() {
-  const seen = await getSetting('groupSeenAt', 0);
-  return (await getGroupMessages()).filter((m) => !m.mine && (m.receivedAt || m.sentAt) > seen).length;
+// ---- المدير: نشر مجموعات الكرات من هيكله ----
+// كل كرة (عدا القسم نفسه، فهو المجموعة العامة) مجموعة. الأعضاء: المدير، ومن في الكرة وما تحتها؛
+// والكرة المخصصة (مشروع مثلاً) لمن وُضعوا فيها فقط. من يُضاف لمجموعة يصله أرشيفها.
+export const roomIdOf = (nodeId) => (nodeId === 'root' ? GENERAL : `n_${nodeId}`);
+const ROOMS_KEY = 'roomsPublished'; // id ← توقيع ما نُشر (أعضاء، اسم، لون)
+let published = null;
+let roomsTimer = 0, roomsRun = Promise.resolve();
+function publishRoomsSoon() { clearTimeout(roomsTimer); roomsTimer = setTimeout(() => publishRooms().catch((e) => console.warn('rooms', e)), 1500); }
+window.addEventListener('sm:structure', () => { if (me?.role === 'manager') publishRoomsSoon(); });
+
+export function roomsFromStructure(st, managerUid, isMember = () => true) {
+  const under = (id) => {
+    const ids = new Set([id]);
+    let grew = true;
+    while (grew) { grew = false; for (const n of st.nodes) if (!ids.has(n.id) && ids.has(n.parent)) { ids.add(n.id); grew = true; } }
+    return ids;
+  };
+  const out = new Map();
+  for (const n of st.nodes) {
+    if (n.id === 'root') continue;
+    const ids = n.type === 'custom' ? new Set([n.id]) : under(n.id);
+    const people = Object.entries(st.people || {})
+      .filter(([u, p]) => isMember(u) && (p.places || []).some((pl) => ids.has(pl.node))).map(([u]) => u);
+    out.set(roomIdOf(n.id), {
+      name: String(n.name).slice(0, 60), color: (n.type === 'custom' && n.color) || COLORS[n.type] || '#c084fc',
+      kind: n.type, members: [...new Set([managerUid, ...people])].slice(0, 500),
+    });
+  }
+  return out;
 }
-export async function markSeen() {
-  await setSetting('groupSeenAt', Date.now());
+const COLORS = { division: '#5aa7ff', unit: '#ff9a3d', section: '#ffd23f', custom: '#c084fc' };
+
+// تُنتظر (مثلاً قبل منشورات تجريبية في مجموعة)
+export function publishRooms() {
+  roomsRun = roomsRun.catch(() => {}).then(doPublishRooms);
+  return roomsRun;
+}
+async function doPublishRooms() {
+  if (me?.role !== 'manager') return;
+  await membersReady;
+  const { loadStructure } = await import('./org-structure.js');
+  const st = await loadStructure();
+  const want = roomsFromStructure(st, me.uid, (u) => members.has(u));
+  const { db, F } = await api();
+  published ||= await getSetting(ROOMS_KEY, {}) || {};
+  let msgs = null;
+  for (const [id, r] of want) {
+    const sig = JSON.stringify([r.name, r.color, [...r.members].sort()]);
+    const before = published[id] ? JSON.parse(published[id])[2] : [];
+    if (published[id] === sig) continue;
+    await F.setDoc(F.doc(db, 'rooms', id), { ...r, at: F.serverTimestamp() });
+    published[id] = sig;
+    await setSetting(ROOMS_KEY, published);
+    // من أُضيف للمجموعة الآن يصله أرشيفها
+    const added = r.members.filter((u) => u !== me.uid && !before.includes(u));
+    if (added.length) {
+      msgs ||= await getGroupMessages();
+      const old = msgs.filter((x) => roomOf(x) === id);
+      for (const u of added) await sendHistory(u, old.filter((x) => x.from !== u)).catch((e) => console.warn('room history', e));
+    }
+  }
+  // كرات حُذفت من الهيكل
+  for (const d of (await F.getDocs(F.collection(db, 'rooms'))).docs) {
+    if (!want.has(d.id)) await F.deleteDoc(d.ref).catch(() => {});
+  }
+  for (const id of Object.keys(published)) if (!want.has(id)) delete published[id];
+  await setSetting(ROOMS_KEY, published);
+}
+
+// ---- غير المقروء (لكل مجموعة) ----
+const SEEN_KEY = 'groupSeenRooms'; // مجموعة ← آخر مشاهدة
+async function seenMap() {
+  const m = await getSetting(SEEN_KEY, null);
+  if (m) return m;
+  const old = await getSetting('groupSeenAt', 0); // قبل المجموعات: مشاهدة واحدة للكل
+  return { [GENERAL]: old, '*': old };
+}
+const isUnread = (m, seen) => !m.mine && (m.receivedAt || m.sentAt) > (seen[roomOf(m)] ?? seen['*'] ?? 0);
+export async function unreadCount(room = null) {
+  const seen = await seenMap();
+  return (await getGroupMessages()).filter((m) => (room == null || roomOf(m) === room) && isUnread(m, seen)).length;
+}
+export async function unreadByRoom() {
+  const seen = await seenMap();
+  const out = new Map();
+  for (const m of await getGroupMessages()) if (isUnread(m, seen)) out.set(roomOf(m), (out.get(roomOf(m)) || 0) + 1);
+  return out;
+}
+export async function markSeen(room = GENERAL) {
+  const seen = await seenMap();
+  seen[room] = Date.now();
+  await setSetting(SEEN_KEY, seen);
   emit('seen');
 }
 

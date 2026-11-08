@@ -18,6 +18,7 @@ service cloud.firestore {
     function me() { return /databases/$(database)/documents/members/$(request.auth.uid); }
     function orgDoc() { return /databases/$(database)/documents/orgs/main; }
     function invite(code) { return /databases/$(database)/documents/invites/$(code); }
+    function room(id) { return /databases/$(database)/documents/rooms/$(id); }
     function isMember() { return signedIn() && exists(me()); }
     function isManager() { return isMember() && get(me()).data.role == 'manager'; }
     function text(v, max) { return v is string && v.size() > 0 && v.size() <= max; }
@@ -96,8 +97,9 @@ service cloud.firestore {
     // وآخر مستلم يحذف الرسالة من السحابة. الأرشيف الدائم على جوال المدير، وكل موظف يحتفظ بما وصله.
     match /relay/{id} {
       function validMsg(d) {
-        return d.keys().hasOnly(['mid', 'from', 'fromName', 'text', 'image', 'tag', 'sentAt', 'createdAt', 'pending', 'history'])
+        return d.keys().hasOnly(['mid', 'from', 'fromName', 'text', 'image', 'tag', 'room', 'sentAt', 'createdAt', 'pending', 'history'])
           && (!('tag' in d) || text(d.tag, 60))
+          && (!('room' in d) || (d.room is string && d.room.size() <= 64))
           && d.mid is string && d.mid.size() <= 64
           && d.from is string && text(d.fromName, 60)
           && (!('text' in d) || (d.text is string && d.text.size() <= 4000))
@@ -115,7 +117,11 @@ service cloud.firestore {
         && request.resource.data.mid == id
         && request.resource.data.from == request.auth.uid
         && request.resource.data.fromName == get(me()).data.displayName
-        && !(request.auth.uid in request.resource.data.pending);
+        && !(request.auth.uid in request.resource.data.pending)
+        // مجموعة كرة: المرسل من أعضائها، ولا تصل إلا لأعضائها
+        && (!('room' in request.resource.data) || request.resource.data.room == 'general'
+            || (request.auth.uid in get(room(request.resource.data.room)).data.members
+                && get(room(request.resource.data.room)).data.members.toSet().hasAll(request.resource.data.pending.toSet())));
       // أرشيف المجموعة القديم: يرسله المدير لموظف جديد (يحفظ اسم المرسل الأصلي)
       allow create: if isManager() && validMsg(request.resource.data)
         && request.resource.data.history == true
@@ -137,6 +143,17 @@ service cloud.firestore {
       allow create, update: if isManager()
         && request.resource.data.keys().hasOnly(['count', 'at'])
         && request.resource.data.count is int && request.resource.data.at == request.time;
+      allow delete: if isManager();
+    }
+
+    // مجموعات الكرات: كل كرة في عقل المؤسسة مجموعة، أعضاؤها ينشرهم المدير من هيكله
+    match /rooms/{roomId} {
+      allow get, list: if isManager() || (isMember() && request.auth.uid in resource.data.members);
+      allow create, update: if isManager()
+        && request.resource.data.keys().hasOnly(['name', 'color', 'members', 'kind', 'at'])
+        && text(request.resource.data.name, 60)
+        && request.resource.data.members is list && request.resource.data.members.size() <= 500
+        && request.resource.data.at == request.time;
       allow delete: if isManager();
     }
 
