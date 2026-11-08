@@ -92,11 +92,13 @@ window.addEventListener('sm:signout', stopGroupSync);
 // ---- الاستلام ----
 async function receive(d, F) {
   const x = d.data();
+  if (x.room && x.room !== GENERAL) await roomsReady;
   const id = x.mid || d.id;
   if (!(await getGroupMessage(id))) {
     const m = {
       id, from: x.from, fromName: x.fromName, text: x.text || '', image: x.image || null, ...(x.tag ? { tag: x.tag } : {}),
-      room: x.room || GENERAL, ...(x.roomName ? { roomName: x.roomName } : {}),
+      // اسم المجموعة يُحفظ مع الرسالة (يبقى ظاهراً لو غادرها أو حُذفت)
+      room: x.room || GENERAL, ...(x.room && rooms.get(x.room)?.name ? { roomName: rooms.get(x.room).name } : {}),
       sentAt: x.sentAt, mine: x.from === me.uid, status: 'received', receivedAt: Date.now(),
     };
     await putGroupMessage(m);
@@ -257,6 +259,12 @@ async function doPublishRooms() {
   const { loadStructure } = await import('./org-structure.js');
   const st = await loadStructure();
   const want = roomsFromStructure(st, me.uid, (u) => members.has(u));
+  for (const g of await chatGroups()) {
+    want.set(g.id, {
+      name: String(g.name).slice(0, 60), color: g.color || '#c084fc', kind: 'chat',
+      members: [...new Set([me.uid, ...g.members.filter((u) => members.has(u))])].slice(0, 500),
+    });
+  }
   const { db, F } = await api();
   published ||= await getSetting(ROOMS_KEY, {}) || {};
   let msgs = null;
@@ -281,6 +289,34 @@ async function doPublishRooms() {
   }
   for (const id of Object.keys(published)) if (!want.has(id)) delete published[id];
   await setSetting(ROOMS_KEY, published);
+}
+
+// ---- مجموعات المحادثة: ينشئها المدير ويختار أعضاءها (تُحفظ على جهازه، وتُنشر أعضاؤها فقط) ----
+// المنشورات فيها لا تُحسب منها النقاط إلا إن فعّل المدير ذلك للمجموعة.
+const CHATS_KEY = 'chatGroups'; // [{ id, name, color, members: [uid], points }]
+export const chatGroups = async () => (await getSetting(CHATS_KEY, [])) || [];
+export async function saveChatGroup({ id, name, color, members: who, points }) {
+  if (me?.role !== 'manager') throw new Error('إنشاء المجموعات للمدير.');
+  name = String(name || '').trim().slice(0, 60);
+  if (!name) throw new Error('اكتب اسم المجموعة.');
+  const list = await chatGroups();
+  const g = { id: id || `c_${Math.random().toString(36).slice(2, 10)}`, name, color: color || '#c084fc', members: [...new Set(who || [])].filter((u) => u !== me.uid), points: !!points };
+  const i = list.findIndex((x) => x.id === g.id);
+  if (i >= 0) list[i] = g; else list.push(g);
+  await setSetting(CHATS_KEY, list);
+  await publishRooms();
+  return g;
+}
+export async function deleteChatGroup(id) {
+  if (me?.role !== 'manager') return;
+  await setSetting(CHATS_KEY, (await chatGroups()).filter((x) => x.id !== id));
+  await publishRooms();
+}
+// هل تُحسب نقاط من منشورات هذه المجموعة؟ (العامة والكرات نعم؛ المحادثة حسب اختيار المدير)
+export async function pointsRoomFilter() {
+  const on = new Set((await chatGroups()).filter((g) => g.points).map((g) => g.id));
+  // مجموعة محادثة حُذفت أو لم تُفعّل فيها النقاط: لا نقاط منها
+  return (m) => !String(roomOf(m)).startsWith('c_') || on.has(roomOf(m));
 }
 
 // ---- غير المقروء (لكل مجموعة) ----

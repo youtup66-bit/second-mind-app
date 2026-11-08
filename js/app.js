@@ -142,7 +142,9 @@ window.addEventListener('sm:setting', (e) => {
 });
 
 window.addEventListener('hashchange', navigate);
-loadCategories().catch(() => {}).then(navigate).finally(() => { window.__appReady = true; });
+// وصلنا هنا = حُمّلت كل الملفات؛ فحص الإقلاع لا ينتظر الشاشة الأولى (قد تنتظر الإنترنت)
+window.__appReady = true;
+loadCategories().catch(() => {}).then(navigate);
 
 // ---- التذكيرات: نفحصها عند الفتح وكل نصف دقيقة ----
 function notice(text) {

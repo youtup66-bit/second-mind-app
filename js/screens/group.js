@@ -2,8 +2,9 @@
 // وكل مجموعة محادثة مستقلة (نصوص وصور وكلام يتحول إلى نص). ‎#/group‎ القائمة · ‎#/group?room=…‎ المحادثة
 import {
   startGroupSync, groupEvents, groupMembers, groupOnline, groupRooms, sendGroup, resend, markSeen, compressImage,
-  GENERAL, roomOf, unreadByRoom,
+  GENERAL, roomOf, unreadByRoom, chatGroups, saveChatGroup, deleteChatGroup,
 } from '../group.js';
+import { PALETTE } from '../org-structure.js';
 import { getGroupMessages } from '../storage.js';
 import { session } from '../cloud.js';
 import { attachHoldMic } from '../hold-mic.js';
@@ -58,6 +59,7 @@ export async function mount(root) {
           <span class="wa-avatar wa-avatar--group" id="g-avatar" aria-hidden="true"></span>
           <span class="wa-head__text"><b id="g-name"></b><small id="g-status"></small></span>
         </div>
+        ${manager && room.startsWith('c_') ? '<button type="button" class="text-btn g-edit" id="g-edit">تعديل</button>' : ''}
       </header>
       <p class="wa-note" id="g-note" hidden role="status"></p>
       <ol class="chat__log" id="g-log" aria-label="رسائل المجموعة"></ol>
@@ -233,6 +235,10 @@ export async function mount(root) {
     holdMic?.stop();
   });
 
+  root.querySelector('#g-edit')?.addEventListener('click', async () => {
+    const g = (await chatGroups()).find((x) => x.id === room);
+    if (g) openEditor(root, g);
+  });
   if (syncErr) say(esc(syncErr));
   await renderAll();
   renderStatus();
@@ -247,7 +253,72 @@ const textOn = (hex) => {
   const l = (0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) / 255;
   return l > 0.65 ? '#111b21' : '#fff';
 };
-const KIND = { division: 'شعبة', unit: 'وحدة', section: 'قسم وحدة', custom: 'كرة' };
+const KIND = { division: 'شعبة', unit: 'وحدة', section: 'قسم وحدة', custom: 'كرة', chat: 'محادثة' };
+
+// ---- إنشاء مجموعة محادثة أو تعديلها (المدير) ----
+function openEditor(root, g = null) {
+  root.querySelector('.g-sheet')?.remove();
+  const people = [...groupMembers()].filter(([, m]) => m.role !== 'manager').sort((a, b) => a[1].name.localeCompare(b[1].name, 'ar'));
+  let color = g?.color || PALETTE[Math.floor(Math.random() * PALETTE.length)];
+  const chosen = new Set(g?.members || []);
+  const el = document.createElement('div');
+  el.className = 'sheet g-sheet';
+  el.innerHTML = `
+    <form class="sheet__panel sheet__panel--tall" role="dialog" aria-label="${g ? 'تعديل المجموعة' : 'مجموعة جديدة'}">
+      <p class="sheet__title">${g ? 'تعديل المجموعة' : 'مجموعة محادثة جديدة'}</p>
+      <input id="ge-name" maxlength="60" required placeholder="اسم المجموعة، مثل: فريق المناوبة" value="${esc(g?.name || '')}">
+      <div class="g-colors" role="radiogroup" aria-label="اللون">${PALETTE.map((c) => `<button type="button" class="g-color" data-c="${c}" style="background:${c}" aria-label="لون" aria-checked="${c === color}" role="radio"></button>`).join('')}</div>
+      <p class="g-sub">الأعضاء <small id="ge-count"></small></p>
+      <ul class="g-pick">${people.length ? people.map(([u, m]) => `<li><label><input type="checkbox" value="${esc(u)}" ${chosen.has(u) ? 'checked' : ''}><span>${esc(m.name)}</span></label></li>`).join('') : '<li class="muted">لا موظفين بعد.</li>'}</ul>
+      <label class="switch"><input type="checkbox" id="ge-points" ${g?.points ? 'checked' : ''}><span>تُحسب النقاط من منشوراتها</span></label>
+      <p class="wa-note" id="ge-msg" hidden></p>
+      <div class="g-sheet__actions">
+        <button class="btn" type="submit">${g ? 'حفظ' : 'إنشاء'}</button>
+        <button class="btn btn--ghost" type="button" data-a="close">إلغاء</button>
+        ${g ? '<button class="text-btn is-danger" type="button" data-a="delete">حذف المجموعة</button>' : ''}
+      </div>
+    </form>`;
+  root.append(el);
+  const count = () => { el.querySelector('#ge-count').textContent = `(${el.querySelectorAll('.g-pick input:checked').length})`; };
+  count();
+  el.querySelector('.g-pick').addEventListener('change', count);
+  el.querySelector('.g-colors').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-c]');
+    if (!b) return;
+    color = b.dataset.c;
+    el.querySelectorAll('.g-color').forEach((x) => x.setAttribute('aria-checked', String(x === b)));
+  });
+  const close = () => el.remove();
+  el.addEventListener('click', async (e) => {
+    if (e.target === el || e.target.closest('[data-a="close"]')) return close();
+    if (e.target.closest('[data-a="delete"]')) {
+      if (!confirm(`حذف «${g.name}»؟ تبقى رسائلها السابقة عند كل عضو للقراءة.`)) return;
+      await deleteChatGroup(g.id);
+      close();
+      location.hash = '#/group';
+    }
+  });
+  el.querySelector('form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const msg = el.querySelector('#ge-msg');
+    const btn = el.querySelector('[type="submit"]');
+    btn.disabled = true;
+    try {
+      const saved = await saveChatGroup({
+        id: g?.id, name: el.querySelector('#ge-name').value, color,
+        members: [...el.querySelectorAll('.g-pick input:checked')].map((x) => x.value),
+        points: el.querySelector('#ge-points').checked,
+      });
+      close();
+      location.hash = `#/group?room=${encodeURIComponent(saved.id)}`;
+    } catch (err) {
+      msg.textContent = /permission/i.test(String(err?.code || err?.message)) ? 'تعذّر النشر: انشر قواعد الحماية الجديدة في Firebase.' : err.message;
+      msg.hidden = false;
+      btn.disabled = false;
+    }
+  });
+  el.querySelector('#ge-name').focus();
+}
 
 async function mountList(root, s, syncErr) {
   const orgName = s.org?.name || 'المؤسسة';
@@ -258,7 +329,9 @@ async function mountList(root, s, syncErr) {
       </header>
       <p class="wa-note" id="g-note" ${syncErr ? '' : 'hidden'} role="status">${esc(syncErr)}</p>
       <ul class="g-rooms" id="g-rooms" aria-label="المجموعات"></ul>
+      ${s.member.role === 'manager' ? '<button type="button" class="g-new" id="g-new">مجموعة محادثة جديدة</button>' : ''}
     </section>`;
+  root.querySelector('#g-new')?.addEventListener('click', () => openEditor(root));
   const list = root.querySelector('#g-rooms');
   const statusEl = root.querySelector('#g-status');
 
