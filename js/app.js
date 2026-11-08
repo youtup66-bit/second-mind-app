@@ -7,6 +7,7 @@ import * as org from './screens/org.js';
 import * as staff from './screens/staff.js';
 import * as group from './screens/group.js';
 import * as chats from './screens/chats.js';
+import * as branch from './screens/branch.js';
 import * as structure from './screens/structure.js';
 import * as points from './screens/points.js';
 import * as reports from './screens/reports.js';
@@ -14,13 +15,13 @@ import { checkReminders } from './org-insights.js';
 import { scanSoon } from './points.js';
 import { enrichSoon } from './org-mind.js';
 import { setOrbVisible } from './orb-float.js';
-import { startGroupSync, groupEvents, unreadCount } from './group.js';
+import { startGroupSync, groupEvents, unreadCount, groupBranch } from './group.js';
 import { autoSnapshot } from './backup.js';
 import { getSetting } from './storage.js';
 import { IS_DEV } from './env.js';
 import { loadCategories } from './categories.js';
 
-const routes = { home, mind, folder, settings, org, join: org, staff, group, chats, structure, points, reports };
+const routes = { home, mind, folder, settings, org, join: org, staff, group, chats, branch, structure, points, reports };
 const app = document.getElementById('app');
 const titleEl = document.getElementById('screen-title');
 
@@ -28,7 +29,7 @@ let current = null;
 let navId = 0;
 
 // الموظف: منشورات الأعمال والإعدادات فقط (لا عقل ولا رفيقة ولا ذكاء)
-const EMPLOYEE_ROUTES = new Set(['group', 'chats', 'settings', 'org', 'join']);
+const EMPLOYEE_ROUTES = new Set(['group', 'chats', 'branch', 'settings', 'org', 'join']);
 let role = null;
 
 async function navigate() {
@@ -49,13 +50,13 @@ async function navigate() {
   titleEl.textContent = screen.title;
   document.body.classList.toggle('on-home', screen === home);
   document.body.classList.toggle('on-group', screen === group || screen === chats);
-  document.body.classList.toggle('on-structure', screen === structure);
+  document.body.classList.toggle('on-structure', screen === structure || screen === branch);
   document.body.classList.toggle('on-mind', screen === mind);
   document.body.classList.toggle('on-staffnav', screen === staff || screen === points || screen === reports);
   document.title = `${screen.title} · عقلي الثاني`;
 
   document.querySelectorAll('.tabbar__item').forEach((a) => {
-    const tabOf = { join: 'org', structure: 'mind', points: 'staff', reports: 'staff', ...(role ? { home: 'chats' } : {}) };
+    const tabOf = { join: 'org', structure: 'mind', branch: 'mind', points: 'staff', reports: 'staff', ...(role ? { home: 'chats' } : {}) };
     const active = a.dataset.route === (tabOf[name] || (routes[name] ? name : 'home'));
     a.classList.toggle('is-active', active);
     if (active) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
@@ -115,8 +116,11 @@ function syncMindTab() {
   if (!t) return;
   let view = 'structure';
   try { view = localStorage.getItem('sm-mind-view') || 'structure'; } catch { /* لا شيء */ }
-  t.setAttribute('href', role === 'manager' ? `#/${view === 'mind' ? 'mind' : 'structure'}` : '#/mind');
+  t.setAttribute('href', role === 'manager' ? `#/${view === 'mind' ? 'mind' : 'structure'}` : role === 'employee' ? '#/branch' : '#/mind');
+  // المسؤول: يظهر له تبويب العقل (فرعه في «الأقسام») إن سمح له رئيس القسم
+  if (role === 'employee') t.hidden = !groupBranch()?.perms?.sections;
 }
+groupEvents.addEventListener('branch', syncMindTab);
 window.addEventListener('sm:mindview', syncMindTab);
 
 // عدد رسائل المجموعة غير المقروءة على التبويب

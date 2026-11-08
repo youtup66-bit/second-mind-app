@@ -237,12 +237,15 @@ function randomCode() {
   return [...b].map((x) => abc[x % abc.length]).join('');
 }
 
-export async function createInvite({ name, username }) {
+// node/title: الكرة والمنصب (يوضع فيهما عند انضمامه) · replaces: حساب يستعيده (نسي كلمة مروره)
+// المدير يدعو لأي كرة؛ والمسؤول لكرات فرعه التي يدير حساباتها فقط (تفرضه القواعد)
+export async function createInvite({ name, username, node, title, replaces }) {
   if (!String(name || '').trim()) throw new CloudError('اكتب اسم الموظف.', 'BAD_INPUT');
   const u = checkUsername(username);
   const s = await session();
-  if (s?.member?.role !== 'manager') throw new CloudError('هذا للمدير فقط.', 'FORBIDDEN');
-  const [members, invites] = await Promise.all([listMembers(), listInvites()]);
+  const manager = s?.member?.role === 'manager';
+  if (!manager && !node) throw new CloudError('هذا للمدير فقط.', 'FORBIDDEN');
+  const [members, invites] = await Promise.all([listMembers(), manager ? listInvites() : []]);
   if (members.some((m) => m.username === u) || invites.some((i) => i.username === u)) {
     throw new CloudError('يوجد موظف أو دعوة بهذا الاسم من قبل.', 'TAKEN');
   }
@@ -250,6 +253,7 @@ export async function createInvite({ name, username }) {
   const code = randomCode();
   await run(() => F.setDoc(F.doc(db, 'invites', code), {
     displayName: name.trim(), username: u, createdBy: s.user.id, createdAt: F.serverTimestamp(),
+    ...(node ? { node } : {}), ...(title ? { title } : {}), ...(replaces ? { replaces } : {}),
   }));
   return code;
 }
@@ -290,7 +294,11 @@ export async function readInvite(params) {
   const { db, F } = await api();
   const [inv, org] = await run(() => Promise.all([F.getDoc(F.doc(db, 'invites', code)), F.getDoc(F.doc(db, 'orgs', 'main'))]));
   if (!inv.exists()) throw bad;
-  return { code, org_name: org.exists() ? org.data().name : '', display_name: inv.data().displayName, username: inv.data().username };
+  const d = inv.data();
+  return {
+    code, org_name: org.exists() ? org.data().name : '', display_name: d.displayName, username: d.username,
+    extra: { ...(d.node ? { node: d.node } : {}), ...(d.title ? { title: d.title } : {}), ...(d.replaces ? { replaces: d.replaces } : {}) },
+  };
 }
 
 export async function joinWithInvite({ code, username, password }) {
@@ -302,7 +310,7 @@ export async function joinWithInvite({ code, username, password }) {
     if ((await F.getDoc(F.doc(db, 'members', uid))).exists()) throw new CloudError('هذا الحساب منضم إلى المؤسسة من قبل.', 'ALREADY');
     const b = F.writeBatch(db);
     b.set(F.doc(db, 'members', uid), {
-      role: 'employee', displayName: inv.display_name, username: inv.username, invite: code, createdAt: F.serverTimestamp(),
+      role: 'employee', displayName: inv.display_name, username: inv.username, invite: code, createdAt: F.serverTimestamp(), ...inv.extra,
     });
     b.delete(F.doc(db, 'invites', code));
     await b.commit();

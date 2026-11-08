@@ -1,7 +1,7 @@
 // شاشة "عقل المؤسسة" (للمدير فقط): القسم والشعب والوحدات وأقسامها، وكرات مخصصة (مشاريع...)
 // يسمّيها المدير ويلوّنها ويربطها بأكثر من فرع، ومكان كل موظف ومعاون (وقد يكون في أكثر من كرة)
 import { session, listMembers, inviteLink, removeMember, changePassword, linkRecoveryEmail, currentEmail } from '../cloud.js';
-import { inviteToBall, cancelBallInvite, ballInvites, TITLES } from '../org-accounts.js';
+import { inviteToBall, cancelBallInvite, ballInvites, recoveryInvite, TITLES } from '../org-accounts.js';
 import {
   TYPES, PERSON, ASSISTANT, PALETTE, canHaveAssistant, colorOf, loadStructure, saveStructure, nodeById, childrenOf,
   addNode, addCustom, setColor, toggleLink, renameNode, removeNode, placesOf, placePerson, removePlace, unplacePerson,
@@ -466,6 +466,7 @@ export async function mount(root) {
         <button type="button" data-a="add-place">إضافة إلى كرة أخرى</button>
         <a href="#/staff?id=${encodeURIComponent(u)}">صفحة الموظف</a>
         <button type="button" data-a="unplace" class="is-danger">إخراج من الهيكل</button>
+        <button type="button" data-a="recover">رابط استعادة (نسي كلمة المرور)</button>
         <button type="button" data-a="delete-account" class="is-danger">حذف الحساب</button>
       </div>`}`;
     panel.querySelectorAll('[data-head]').forEach((b) => b.addEventListener('click', async () => {
@@ -489,6 +490,18 @@ export async function mount(root) {
     panel.querySelectorAll('[data-a]').forEach((b) => b.addEventListener('click', async () => {
       const a = b.dataset.a;
       if (a === 'cancel') { mode = null; renderPanel(); return; }
+      if (a === 'recover') {
+        const m = members.find((x) => x.user_id === u);
+        const pl = places[0];
+        try {
+          const r = await recoveryInvite({ uid: u, name: nameOf(u), username: m?.username || 'user', node: pl.node, title: pl.head ? 'head' : pl.assistant ? 'assistant' : 'member' });
+          lastInvite = { code: r.code, name: `${nameOf(u)} (اسم مستخدمه الجديد: ${r.username})`, link: await inviteLink(r.code) };
+          graph.select(pl.node);
+          mode = 'invite-out';
+          renderPanel();
+        } catch (err) { alert(err.message); }
+        return;
+      }
       if (a === 'delete-account') {
         if (!confirm(`حذف حساب ${nameOf(u)} من المؤسسة؟ لا يستطيع الدخول بعدها، ويُخرج من كل الكرات. تبقى منشوراته ونقاطه السابقة.`)) return;
         try { await removeMember(u); } catch (err) { alert(err.message); return; }

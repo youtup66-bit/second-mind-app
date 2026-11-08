@@ -69,6 +69,20 @@ export async function saveStructure(s) {
   window.dispatchEvent(new Event('sm:structure'));
 }
 
+// تعديل الهيكل في الخلفية بالدور: يُقرأ ثم يُعدَّل ثم يُحفظ، فلا يكتب تعديلٌ فوق آخر
+// (انضمام موظف وطلبات المسؤولين قد تصل في اللحظة نفسها). fn(st) تعيد true إن غيّرت شيئاً.
+let queue = Promise.resolve();
+export function withStructure(fn) {
+  const run = queue.then(async () => {
+    const st = await loadStructure();
+    const changed = await fn(st);
+    if (changed) { await saveStructure(st); window.dispatchEvent(new Event('sm:placed')); }
+    return changed;
+  });
+  queue = run.catch(() => {});
+  return run;
+}
+
 export const nodeById = (s, id) => s.nodes.find((n) => n.id === id) || null;
 export const childrenOf = (s, id) => s.nodes.filter((n) => n.parent === id);
 

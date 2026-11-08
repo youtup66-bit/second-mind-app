@@ -25,6 +25,8 @@ export const GENERAL = 'general';
 let rooms = new Map(); // id ← { name, color, members[], invited[], kind, owner? }
 let invites = new Map(); // مجموعات محادثة دُعيت إليها ولم تنضم بعد
 let contacts = []; // من يستطيع إضافتهم مباشرة لمجموعة محادثة (من في وحدته وما تحتها)
+let myBranch = null; // المسؤول: فرعه كما نشره هاتف رئيس القسم (آخر نسخة تبقى على الجهاز)
+export const groupBranch = () => myBranch;
 export const groupMe = () => me;
 export const groupRooms = () => rooms;
 export const groupInvites = () => invites;
@@ -46,7 +48,8 @@ export async function startGroupSync() {
 
     unsubs.push(F.onSnapshot(F.collection(db, 'members'), (snap) => {
       members = new Map(snap.docs.map((d) => [d.id, {
-        name: d.data().displayName, role: d.data().role, joinedAt: d.data().createdAt?.toMillis?.() || 0, invite: d.data().invite || null,
+        name: d.data().displayName, username: d.data().username, role: d.data().role, joinedAt: d.data().createdAt?.toMillis?.() || 0, invite: d.data().invite || null,
+        node: d.data().node || null, title: d.data().title || null, replaces: d.data().replaces || null,
       }]));
       resolveMembers();
       emit('members');
@@ -80,13 +83,26 @@ export async function startGroupSync() {
       invites = new Map(snap.docs.map((d) => [d.id, asRoom(d)]));
       emit('rooms');
     }, () => {}));
-    // الموظف: من يستطيع إضافتهم مباشرة (ينشرها المدير من هيكله)
+    // الموظف: من يستطيع إضافتهم مباشرة (ينشرها المدير من هيكله)، وفرعه إن كان مسؤولاً
     if (me.role !== 'manager') {
       unsubs.push(F.onSnapshot(F.doc(db, 'places', me.uid), (d) => {
         contacts = d.exists() ? (d.data().contacts || []).map(String) : [];
         emit('contacts');
       }, () => {}));
-    } else migrateOldChats().catch((e) => console.warn('chats migrate', e));
+      unsubs.push(F.onSnapshot(F.doc(db, 'branches', me.uid), (d) => {
+        myBranch = d.exists() ? { ...d.data(), at: d.data().at?.toMillis?.() || Date.now(), fromCache: d.metadata.fromCache } : null;
+        emit('branch');
+      }, () => {}));
+    } else {
+      migrateOldChats().catch((e) => console.warn('chats migrate', e));
+      // طلبات المسؤولين: يطبّقها هذا الهاتف بعد التحقق
+      unsubs.push(F.onSnapshot(F.collection(db, 'requests'), async (snap) => {
+        if (!snap.size) return;
+        await membersReady;
+        const { handleRequests } = await import('./org-branches.js');
+        handleRequests(snap.docs.map((d) => ({ id: d.id, data: d.data() })), members).catch((e) => console.warn('requests', e));
+      }, () => {}));
+    }
 
     unsubs.push(F.onSnapshot(
       F.query(F.collection(db, 'relay'), F.where('pending', 'array-contains', me.uid)),
@@ -112,6 +128,7 @@ export function stopGroupSync() {
   rooms = new Map();
   invites = new Map();
   contacts = [];
+  myBranch = null;
   published = null;
   members = new Map();
   resetMembersReady();
@@ -341,6 +358,9 @@ async function doPublishRooms() {
     published[`p_${uid}`] = sig;
   }
   await setSetting(ROOMS_KEY, published);
+  // فرع كل مسؤول
+  const { publishBranches } = await import('./org-branches.js');
+  await publishBranches(st, members).catch((e) => console.warn('branches', e));
 }
 
 // ---- مجموعات المحادثة: ينشئها أي عضو (لا نقاط منها، ولا تصل للمدير إن لم يكن فيها) ----

@@ -1,7 +1,7 @@
 rules_version = '2';
 
 // عقلي الثاني: قواعد حماية المؤسسة على Firestore
-// إصدار القواعد: 7 (إثراء عقل المؤسسة بإذن)
+// إصدار القواعد: 8 (فروع المسؤولين وطلباتهم ودعواتهم)
 // المرحلة ١: الحسابات (المدير، والموظفون، والدعوات)
 //
 // انسخ هذا الملف كاملاً في Firebase ← Firestore Database ← Rules، ثم اضغط Publish.
@@ -20,6 +20,15 @@ service cloud.firestore {
     function orgDoc() { return /databases/$(database)/documents/orgs/main; }
     function invite(code) { return /databases/$(database)/documents/invites/$(code); }
     function room(id) { return /databases/$(database)/documents/rooms/$(id); }
+    function branch(uid) { return /databases/$(database)/documents/branches/$(uid); }
+    // مسؤول له فرع يدير حساباته (ينشره له هاتف رئيس القسم): manage = كرات يستطيع إضافة حسابات فيها
+    function canManage(node) { return isMember() && exists(branch(request.auth.uid)) && node in get(branch(request.auth.uid)).data.manage; }
+    function inviteKeys(d) {
+      return d.keys().hasOnly(['displayName', 'username', 'createdBy', 'createdAt', 'node', 'title', 'replaces'])
+        && (!('node' in d) || (d.node is string && d.node.size() <= 40))
+        && (!('title' in d) || d.title in ['head', 'assistant', 'member'])
+        && (!('replaces' in d) || (d.replaces is string && d.replaces.size() <= 128));
+    }
     function isMember() { return signedIn() && exists(me()); }
     function isManager() { return isMember() && get(me()).data.role == 'manager'; }
     function text(v, max) { return v is string && v.size() > 0 && v.size() <= max; }
@@ -60,8 +69,11 @@ service cloud.firestore {
             && getAfter(orgDoc()).data.owner == request.auth.uid)
           ||
           // الموظف: بدعوة صالحة باسمه، تُحذف في الدفعة نفسها (فلا تُستخدم مرتين)
-          (request.resource.data.keys().hasOnly(['role', 'displayName', 'username', 'createdAt', 'invite'])
+          (request.resource.data.keys().hasOnly(['role', 'displayName', 'username', 'createdAt', 'invite', 'node', 'title', 'replaces'])
             && request.resource.data.role == 'employee'
+            && (!('node' in request.resource.data) || request.resource.data.node == get(invite(request.resource.data.invite)).data.node)
+            && (!('title' in request.resource.data) || request.resource.data.title == get(invite(request.resource.data.invite)).data.title)
+            && (!('replaces' in request.resource.data) || request.resource.data.replaces == get(invite(request.resource.data.invite)).data.replaces)
             && request.resource.data.invite is string
             && exists(invite(request.resource.data.invite))
             && get(invite(request.resource.data.invite)).data.username == request.resource.data.username
@@ -79,8 +91,9 @@ service cloud.firestore {
       // الرمز سري (١٠ أحرف عشوائية)؛ يكفي لعرض اسم المدعو قبل التسجيل
       allow get: if true;
       allow list: if isManager();
-      allow create: if isManager() && code.size() >= 10
-        && request.resource.data.keys().hasOnly(['displayName', 'username', 'createdBy', 'createdAt'])
+      // المدير، أو مسؤول يدير حسابات تلك الكرة من فرعه
+      allow create: if code.size() >= 10 && inviteKeys(request.resource.data)
+        && (isManager() || ('node' in request.resource.data && canManage(request.resource.data.node)))
         && text(request.resource.data.displayName, 60)
         && validUsername(request.resource.data.username)
         && request.resource.data.createdBy == request.auth.uid
@@ -88,6 +101,7 @@ service cloud.firestore {
       allow update: if false;
       // يلغيها المدير، أو يستهلكها المدعو نفسه وهو ينضم
       allow delete: if isManager()
+        || (isMember() && resource.data.createdBy == request.auth.uid)
         || (signedIn() && !exists(me())
             && getAfter(me()).data.role == 'employee'
             && getAfter(me()).data.invite == code);
@@ -197,6 +211,27 @@ service cloud.firestore {
             && resource.data.owner != request.auth.uid)
         );
       allow delete: if isMember() && resource.data.kind == 'chat' && resource.data.owner == request.auth.uid;
+    }
+
+    // فرع كل مسؤول: كراته وأسماء من فيها وخيارات إظهاره؛ ينشره هاتف رئيس القسم، ويقرؤه صاحبه فقط
+    match /branches/{uid} {
+      allow get: if signedIn() && (uid == request.auth.uid || isManager());
+      allow list: if isManager();
+      allow create, update: if isManager()
+        && request.resource.data.keys().hasOnly(['heads', 'nodes', 'people', 'perms', 'manage', 'at'])
+        && request.resource.data.manage is list && request.resource.data.manage.size() <= 500
+        && request.resource.data.at == request.time;
+      allow delete: if isManager();
+    }
+    // طلبات المسؤولين لتعديل فروعهم (إضافة كرة، تسمية، حذف حساب...): يطبّقها هاتف رئيس القسم بعد التحقق ثم يحذفها
+    match /requests/{id} {
+      allow create: if isMember() && !isManager()
+        && request.resource.data.keys().hasOnly(['from', 'op', 'payload', 'at'])
+        && request.resource.data.from == request.auth.uid
+        && text(request.resource.data.op, 30)
+        && request.resource.data.payload is map
+        && request.resource.data.at == request.time;
+      allow get, list, delete: if isManager();
     }
 
     // أماكن الموظف في عقل المؤسسة: أسماء كراته، ومن يستطيع إضافتهم مباشرة لمجموعة محادثة (من في وحدته وما تحتها)
