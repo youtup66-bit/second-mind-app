@@ -195,9 +195,18 @@ export async function mount(root) {
       <p class="muted">على الجهاز يعمل: المحادثة والتصنيف. وتبقى من Gemini: الملخصات، وأسماء المجموعات، وتحويل 🎙 إلى نص (استخدم مايك لوحة المفاتيح دون إنترنت)، وصوت Gemini (صوت Piper يعمل دون إنترنت).</p>
     </section>
 
-    <section class="card">
+    <section class="card" id="gemini">
       <h2>مفتاح Gemini API</h2>
       <p class="muted">يُحفظ المفتاح على جهازك فقط، ويُستخدم للمحادثة والتصنيف.</p>
+      <div class="key-official" id="key-official" hidden>
+        <p><b>للمسؤول:</b> سمح لك رئيس القسم بالمساعد. ضع هنا <b>مفتاحك الخاص</b> من حساب Google الخاص بك (لا مفتاح المؤسسة)، فيعمل المساعد على جوالك مباشرة:</p>
+        <ol>
+          <li>افتح <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Google AI Studio</a> وادخل بحساب Google.</li>
+          <li>اضغط <b>Create API key</b> ثم انسخ المفتاح (يبدأ بـ AIza).</li>
+          <li>الصقه في الخانة أدناه واضغط <b>اختبار</b>.</li>
+        </ol>
+        <p class="muted">مجاني ضمن حد يومي. إن فقدت جوالك فألغِ المفتاح من الصفحة نفسها بلمسة. لاحقاً يمكن أن يعطيك خادم المؤسسة مفتاحاً بدله.</p>
+      </div>
       <label for="api-key">المفتاح</label>
       <input id="api-key" type="password" dir="ltr" autocomplete="off" spellcheck="false"
              placeholder="AIza..." value="${key.replace(/"/g, '&quot;')}">
@@ -305,6 +314,10 @@ export async function mount(root) {
   // الموظف: لا رفيقة ولا عقل ولا ذكاء؛ نُبقي الحساب والمظهر والتثبيت والخصوصية فقط
   if (await getSetting('orgRole', null) === 'employee') {
     const keep = new Set(['org', 'look', 'install', 'privacy', 'dev']); // dev: أدوات المطوّر في نسخة التجربة
+    // المسؤول المسموح له بالمساعد: يضع مفتاحه الخاص (الموظف العادي لا مفتاح على جواله)
+    const { startGroupSync, waitBranch } = await import('../group.js');
+    await startGroupSync().catch(() => {});
+    if ((await waitBranch())?.perms?.assistant) { keep.add('gemini'); root.querySelector('#key-official').hidden = false; }
     root.querySelectorAll(':scope > section.card').forEach((sec) => { if (!keep.has(sec.id)) sec.hidden = true; });
   }
   const openGroup = groupSettings(root);

@@ -1,7 +1,7 @@
 // شاشة «الأقسام» للمسؤول (A40، المرحلة ٢): فرعه فقط كما نشره هاتف رئيس القسم، ويبقى آخر تحديث على جهازه.
 // بحسب خيارات إظهاره: ينشئ كرات وحسابات لما تحته، وكرات مشاريع، ويرسل روابط الاستعادة.
 // الحسابات تُنشأ مباشرة (رابط دعوة)، وتعديل الكرات طلبٌ يطبّقه هاتف رئيس القسم حين يتصل.
-import { startGroupSync, groupEvents, groupBranch, groupMembers, groupMe } from '../group.js';
+import { startGroupSync, groupEvents, groupBranch, groupMembers, groupMe, waitBranch } from '../group.js';
 import { TYPES, PERSON, ASSISTANT, PALETTE, colorOf, nodeById, toGraph, canHaveHead, projOf, projectLine, projectLate } from '../org-structure.js';
 import { createOrgGraph } from '../org-graph.js';
 import { createInvite, inviteLink } from '../cloud.js';
@@ -23,6 +23,7 @@ export async function mount(root) {
   alive = true;
   root.innerHTML = '<p class="muted org-wait">لحظة…</p>';
   await startGroupSync().catch(() => {});
+  await waitBranch();
   if (!alive) return;
   let b = groupBranch();
   if (!b?.perms?.sections) {

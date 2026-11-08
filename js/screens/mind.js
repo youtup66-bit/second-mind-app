@@ -16,7 +16,7 @@ import { findOldNotesFor } from '../suggest.js';
 import { setCategory } from '../classifier.js';
 import { mindTabs } from '../staff-nav.js';
 import { mindPosts, mindRooms, hasOrgMind } from '../org-mind.js';
-import { groupEvents, groupBranch, startGroupSync } from '../group.js';
+import { groupEvents, groupBranch, startGroupSync, waitBranch } from '../group.js';
 
 export const title = 'العقل';
 
@@ -158,6 +158,7 @@ export async function mount(root) {
   const head = true;
   const role = await getSetting('orgRole', null);
   if (role) await startGroupSync().catch(() => {});
+  if (role === 'employee') await waitBranch();
   // رئيس القسم، أو مسؤول سمح له رئيس القسم بعقل المؤسسة (يرى عقل فرعه)
   const isHead = role === 'manager' || (role === 'employee' && hasOrgMind());
   const sectionsRoute = role === 'manager' ? 'structure' : groupBranch()?.perms?.sections ? 'branch' : null;

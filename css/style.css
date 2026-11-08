@@ -1175,3 +1175,7 @@ body.on-mind .topbar { display: none; }
   position: fixed; top: calc(env(safe-area-inset-top) + 4px); inset-inline-end: 6px; z-index: 50; pointer-events: none;
   padding: 2px 8px; border-radius: 8px; background: #b45309; color: #fff; font-size: .7rem; font-weight: 700; opacity: .9;
 }
+
+.key-official { background: rgba(0,168,132,.08); border-radius: 10px; padding: 10px 12px; margin: 8px 0; font-size: .9rem; }
+.key-official ol { margin: 6px 0; padding-inline-start: 20px; }
+.key-official li { margin: 3px 0; }

@@ -15,7 +15,7 @@ import { checkReminders } from './org-insights.js';
 import { scanSoon } from './points.js';
 import { enrichSoon } from './org-mind.js';
 import { setOrbVisible } from './orb-float.js';
-import { startGroupSync, groupEvents, unreadCount, groupBranch } from './group.js';
+import { startGroupSync, groupEvents, unreadCount, groupBranch, waitBranch } from './group.js';
 import { autoSnapshot } from './backup.js';
 import { getSetting } from './storage.js';
 import { IS_DEV } from './env.js';
@@ -41,6 +41,11 @@ async function navigate() {
   const myNav = ++navId;
   // رئيس القسم يبدأ من المحادثات (المساعد كرة فيها)، والموظف من الأعمال
   let name = location.hash.replace(/^#\//, '').split('?')[0] || (role === 'employee' ? 'group' : role === 'manager' ? 'chats' : 'home');
+  // المسؤول عند فتح التطبيق: ننتظر فرعه لحظة قبل الحكم على المساعد والعقل
+  if (role === 'employee' && (name === 'home' || name === 'mind') && !groupBranch()) {
+    await waitBranch();
+    if (myNav !== navId) return;
+  }
   if (role === 'employee' && !EMPLOYEE_ROUTES.has(name) && !officialAllows(name)) {
     name = 'group';
     history.replaceState(null, '', '#/group');

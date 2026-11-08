@@ -27,6 +27,11 @@ let invites = new Map(); // مجموعات محادثة دُعيت إليها و
 let contacts = []; // من يستطيع إضافتهم مباشرة لمجموعة محادثة (من في وحدته وما تحتها)
 let myBranch = null; // المسؤول: فرعه كما نشره هاتف رئيس القسم (آخر نسخة تبقى على الجهاز)
 export const groupBranch = () => myBranch;
+// أول نسخة من الفرع (من الذاكرة أو السحابة)؛ لا تنتظر أكثر من ٤ ثوانٍ
+let branchReady = null, resolveBranch = () => {};
+const resetBranchReady = () => { branchReady = new Promise((r) => { resolveBranch = r; }); };
+resetBranchReady();
+export const waitBranch = () => Promise.race([branchReady, new Promise((r) => setTimeout(r, 4000))]).then(() => myBranch);
 export const groupMe = () => me;
 export const groupRooms = () => rooms;
 // أسماء المجموعات تُحفظ على الجهاز: تبقى ظاهرة بعد مغادرتها أو إغلاقها
@@ -101,8 +106,9 @@ export async function startGroupSync() {
       }, () => {}));
       unsubs.push(F.onSnapshot(F.doc(db, 'branches', me.uid), (d) => {
         myBranch = d.exists() ? { ...d.data(), at: d.data().at?.toMillis?.() || Date.now(), fromCache: d.metadata.fromCache } : null;
+        resolveBranch();
         emit('branch');
-      }, () => {}));
+      }, () => resolveBranch()));
     } else {
       migrateOldChats().catch((e) => console.warn('chats migrate', e));
       // طلبات المسؤولين: يطبّقها هذا الهاتف بعد التحقق
@@ -139,6 +145,7 @@ export function stopGroupSync() {
   invites = new Map();
   contacts = [];
   myBranch = null;
+  resetBranchReady();
   published = null;
   members = new Map();
   resetMembersReady();
