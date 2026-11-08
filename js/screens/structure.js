@@ -9,7 +9,7 @@ import {
 import { createOrgGraph } from '../org-graph.js';
 import { totals, pointsEvents } from '../points.js';
 import { getGroupMessages } from '../storage.js';
-import { groupEvents, groupMembers } from '../group.js';
+import { groupEvents, groupMembers, countsForPoints } from '../group.js';
 import { staffTabs } from '../staff-nav.js';
 
 export const title = 'عقل المؤسسة';
@@ -59,7 +59,7 @@ export async function mount(root) {
 
   // ---- الفرز: نقاط الشهر ومنشورات الأسبوع لكل كرة ----
   let month = new Map(), posts = [];
-  const loadStats = async () => { [month, posts] = await Promise.all([totals('month'), getGroupMessages()]); };
+  const loadStats = async () => { [month, posts] = await Promise.all([totals('month'), getGroupMessages().then((l) => l.filter(countsForPoints))]); };
   await loadStats();
   const weekAgo = () => Date.now() - 7 * 86400000;
   // الموظفون في الكرة وما تحتها

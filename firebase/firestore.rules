@@ -146,24 +146,65 @@ service cloud.firestore {
       allow delete: if isManager();
     }
 
-    // مجموعات الكرات: كل كرة في عقل المؤسسة مجموعة، أعضاؤها ينشرهم المدير من هيكله
+    // المجموعات:
+    // • مجموعات الكرات (n_…): كل كرة في عقل المؤسسة مجموعة، أعضاؤها ينشرهم المدير من هيكله.
+    // • مجموعات المحادثة (c_…): ينشئها أي عضو. يضيف مباشرة من في وحدته وما تحتها (contacts التي ينشرها المدير له)،
+    //   ومن هو أعلى منه تصله دعوة (invited) فينضم بنفسه أو يرفض. المدير يضيف أي أحد.
     match /rooms/{roomId} {
-      allow get, list: if isManager() || (isMember() && request.auth.uid in resource.data.members);
-      allow create, update: if isManager()
+      function contactsOk(added) {
+        return added.size() == 0 || isManager() || get(/databases/$(database)/documents/places/$(request.auth.uid)).data.contacts.toSet().hasAll(added);
+      }
+      function chatOk(d) {
+        return roomId.matches('c_[a-z0-9]{6,20}')
+          && d.keys().hasOnly(['name', 'color', 'members', 'invited', 'kind', 'owner', 'at'])
+          && d.kind == 'chat' && text(d.name, 60) && d.color is string && d.color.size() <= 9
+          && d.owner == request.auth.uid && request.auth.uid in d.members
+          && d.members is list && d.members.size() <= 256
+          && d.invited is list && d.invited.size() <= 50
+          && !d.members.toSet().hasAny(d.invited)
+          && d.at == request.time;
+      }
+      // كرات المؤسسة يقرؤها المدير؛ ومجموعة المحادثة لأعضائها ومدعوّيها فقط (ولا يراها المدير إن لم يكن فيها)
+      allow get, list: if isMember() && (
+        request.auth.uid in resource.data.members
+        || request.auth.uid in resource.data.get('invited', [])
+        || (isManager() && resource.data.kind != 'chat'));
+
+      allow create, update: if isManager() && roomId.matches('n_.*')
         && request.resource.data.keys().hasOnly(['name', 'color', 'members', 'kind', 'at'])
+        && request.resource.data.kind != 'chat'
         && text(request.resource.data.name, 60)
         && request.resource.data.members is list && request.resource.data.members.size() <= 500
         && request.resource.data.at == request.time;
-      allow delete: if isManager();
+      allow delete: if isManager() && roomId.matches('n_.*');
+
+      // مجموعة محادثة جديدة
+      allow create: if isMember() && chatOk(request.resource.data)
+        && contactsOk(request.resource.data.members.toSet().difference([request.auth.uid].toSet()));
+      // صاحبها يعدّلها: من يضيفه مباشرة من جهاته، أو كان عضواً قبلاً
+      allow update: if isMember() && resource.data.owner == request.auth.uid && chatOk(request.resource.data)
+        && contactsOk(request.resource.data.members.toSet().difference(resource.data.members.toSet()));
+      // المدعو ينضم (ينتقل من المدعوين إلى الأعضاء) أو يرفض، والعضو يغادر
+      allow update: if isMember() && resource.data.kind == 'chat'
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['members', 'invited'])
+        && request.resource.data.invited.toSet() == resource.data.invited.toSet().difference([request.auth.uid].toSet())
+        && (
+          (request.auth.uid in resource.data.invited
+            && request.resource.data.members.toSet() == resource.data.members.toSet().union([request.auth.uid].toSet()))
+          || (request.resource.data.members.toSet() == resource.data.members.toSet().difference([request.auth.uid].toSet())
+            && resource.data.owner != request.auth.uid)
+        );
+      allow delete: if isMember() && resource.data.kind == 'chat' && resource.data.owner == request.auth.uid;
     }
 
-    // أماكن الموظف في عقل المؤسسة (أسماء كراته فقط): ينشرها المدير، ويقرؤها الموظف ليختار منها عند النشر
+    // أماكن الموظف في عقل المؤسسة: أسماء كراته، ومن يستطيع إضافتهم مباشرة لمجموعة محادثة (من في وحدته وما تحتها)
     match /places/{uid} {
       allow get: if signedIn() && (uid == request.auth.uid || isManager());
       allow list: if isManager();
       allow create, update: if isManager()
-        && request.resource.data.keys().hasOnly(['places', 'at'])
+        && request.resource.data.keys().hasOnly(['places', 'contacts', 'at'])
         && request.resource.data.places is list && request.resource.data.places.size() <= 30
+        && (!('contacts' in request.resource.data) || (request.resource.data.contacts is list && request.resource.data.contacts.size() <= 1000))
         && request.resource.data.at == request.time;
       allow delete: if isManager();
     }

@@ -5,7 +5,7 @@ import {
 } from './storage.js';
 import { totals, periodStart, getWorks, addManual, suggestions } from './points.js';
 import { loadStructure, nodeById, placesOf } from './org-structure.js';
-import { groupMembers, sendGroup, startGroupSync } from './group.js';
+import { groupMembers, sendGroup, startGroupSync, countsForPoints } from './group.js';
 import { writeOrgReport } from './gemini.js';
 
 export const insightsEvents = new EventTarget(); // change
@@ -22,7 +22,7 @@ export const listReports = () => getSetting('orgReports', []);
 
 export async function makeReport(period = 'week') {
   const from = periodStart(period);
-  const [t, posts, st, works] = await Promise.all([totals(period), getGroupMessages(), loadStructure(), getWorks()]);
+  const [t, posts, st, works] = await Promise.all([totals(period), getGroupMessages().then((l) => l.filter(countsForPoints)), loadStructure(), getWorks()]);
   const emps = employees();
   const name = (u) => emps.find(([id]) => id === u)?.[1].name || 'موظف سابق';
   const inPeriod = posts.filter((m) => m.sentAt >= from && m.text);
@@ -63,7 +63,7 @@ export function reportText(r) {
 // ---- التنبيهات ----
 export async function alerts() {
   const out = [];
-  const posts = await getGroupMessages();
+  const posts = (await getGroupMessages()).filter(countsForPoints);
   const now = Date.now();
   for (const [u, m] of employees()) {
     if (m.joinedAt && now - m.joinedAt < 5 * DAY) continue;
@@ -163,7 +163,7 @@ export async function restoreUndoSnapshot(snap) {
 export async function insightsContext() {
   const emps = employees();
   const name = (u) => emps.find(([id]) => id === u)?.[1].name || 'موظف سابق';
-  const [w, mo, posts, al, tasks, rem] = await Promise.all([totals('week'), totals('month'), getGroupMessages(), alerts(), listTasks(), listReminders()]);
+  const [w, mo, posts, al, tasks, rem] = await Promise.all([totals('week'), totals('month'), getGroupMessages().then((l) => l.filter(countsForPoints)), alerts(), listTasks(), listReminders()]);
   const pts = emps.map(([u, m]) => `${m.name}: أسبوع ${w.get(u)?.points || 0}، شهر ${mo.get(u)?.points || 0}`);
   const recent = posts.filter((x) => x.text).slice(-25).map((x) => `[${fmtDay.format(x.sentAt)}] ${x.mine ? 'المدير' : name(x.from)}${x.roomName ? ` [${x.roomName}]` : x.tag ? ` (${x.tag})` : ''}: ${x.text.slice(0, 160)}`);
   return `

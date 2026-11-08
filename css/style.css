@@ -1069,6 +1069,17 @@ body.on-staffnav .topbar { display: none; }
 .g-pick input { width: 20px; height: 20px; accent-color: var(--wa-green, #00a884); }
 .g-sheet__actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .g-sheet__actions .is-danger { color: var(--danger); margin-inline-start: auto; }
+.g-scroll { flex: 1; overflow-y: auto; min-height: 120px; display: flex; flex-direction: column; gap: 8px; }
+.g-scroll .g-pick { flex: none; overflow: visible; min-height: 0; }
+.g-found, .g-invited { list-style: none; margin: 0; padding: 0; }
+.g-found li, .g-invited li { display: flex; align-items: center; gap: 8px; padding: 8px 2px; border-bottom: 1px solid rgba(255,255,255,.06); }
+.g-found li span { flex: 1; }
+.g-found small { color: var(--wa-meta, #8696a0); }
+.g-invited li { color: var(--wa-meta, #8696a0); font-size: .9rem; }
+.g-invited li b { color: var(--wa-text, #e9edef); flex: 1; }
+.g-invite { display: flex; align-items: center; gap: 10px; padding: 10px 14px; background: rgba(0,168,132,.08); }
+.g-invite .g-room__body { border: 0; padding: 0; margin: 0; }
+.g-invite small { color: var(--wa-meta, #8696a0); font-size: .8rem; }
 
 /* ---- العقل الشخصي بأسلوب عقل المؤسسة ---- */
 body.on-mind .topbar { display: none; }

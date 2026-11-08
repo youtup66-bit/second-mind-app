@@ -3,7 +3,7 @@
 // أو تُحتسب تلقائياً إن فعّل ذلك.
 import { getPoints, putPoint, deletePoint, getSetting, setSetting, getGroupMessages, putGroupMessage } from './storage.js';
 import { detectWorks } from './gemini.js';
-import { groupEvents, groupMe, groupMembers, pointsRoomFilter } from './group.js';
+import { groupEvents, groupMe, groupMembers, countsForPoints } from './group.js';
 
 export const pointsEvents = new EventTarget(); // change
 const changed = () => pointsEvents.dispatchEvent(new Event('change'));
@@ -113,9 +113,8 @@ export async function scan() {
     const since = await getSetting('pointsSince', Date.now());
     const auto = await isAuto();
     const members = groupMembers();
-    const counts = await pointsRoomFilter();
     const queue = (await getGroupMessages()).filter((m) => !m.mine && !m.pointsChecked && m.text && m.sentAt >= since
-      && members.get(m.from)?.role !== 'manager' && counts(m));
+      && members.get(m.from)?.role !== 'manager' && countsForPoints(m));
     let found = 0;
     for (const m of queue) {
       try {

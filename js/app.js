@@ -6,6 +6,7 @@ import * as settings from './screens/settings.js';
 import * as org from './screens/org.js';
 import * as staff from './screens/staff.js';
 import * as group from './screens/group.js';
+import * as chats from './screens/chats.js';
 import * as structure from './screens/structure.js';
 import * as points from './screens/points.js';
 import * as reports from './screens/reports.js';
@@ -17,7 +18,7 @@ import { getSetting } from './storage.js';
 import { IS_DEV } from './env.js';
 import { loadCategories } from './categories.js';
 
-const routes = { home, mind, folder, settings, org, join: org, staff, group, structure, points, reports };
+const routes = { home, mind, folder, settings, org, join: org, staff, group, chats, structure, points, reports };
 const app = document.getElementById('app');
 const titleEl = document.getElementById('screen-title');
 
@@ -25,7 +26,7 @@ let current = null;
 let navId = 0;
 
 // الموظف: منشورات الأعمال والإعدادات فقط (لا عقل ولا رفيقة ولا ذكاء)
-const EMPLOYEE_ROUTES = new Set(['group', 'settings', 'org', 'join']);
+const EMPLOYEE_ROUTES = new Set(['group', 'chats', 'settings', 'org', 'join']);
 let role = null;
 
 async function navigate() {
@@ -44,7 +45,7 @@ async function navigate() {
   app.replaceChildren(view);
   titleEl.textContent = screen.title;
   document.body.classList.toggle('on-home', screen === home);
-  document.body.classList.toggle('on-group', screen === group);
+  document.body.classList.toggle('on-group', screen === group || screen === chats);
   document.body.classList.toggle('on-structure', screen === structure);
   document.body.classList.toggle('on-mind', screen === mind);
   document.body.classList.toggle('on-staffnav', screen === staff || screen === points || screen === reports);
@@ -86,14 +87,17 @@ function applyRole(next) {
   role = next || null;
   const tab = document.querySelector('.tabbar__item[data-route="staff"]');
   if (tab) tab.hidden = role !== 'manager';
-  const g = document.querySelector('.tabbar__item[data-route="group"]');
-  if (g) g.hidden = !role;
+  for (const r of ['group', 'chats']) {
+    const t = document.querySelector(`.tabbar__item[data-route="${r}"]`);
+    if (t) t.hidden = !role;
+  }
   // الموظف لا يرى الرفيقة ولا العقل ولا المجلد
   for (const r of ['home', 'mind', 'folder']) {
     const t = document.querySelector(`.tabbar__item[data-route="${r}"]`);
     if (t) t.hidden = role === 'employee';
   }
   document.body.classList.toggle('is-employee', role === 'employee');
+  if (changed) applyNoCompanion();
   syncFloater();
   if (changed && current) navigate();
   // عضو في المؤسسة: نستلم رسائل المجموعة ما دام التطبيق مفتوحاً، في أي شاشة
@@ -102,11 +106,13 @@ function applyRole(next) {
 
 // عدد رسائل المجموعة غير المقروءة على التبويب
 async function refreshBadge() {
-  const badge = document.querySelector('.tabbar__item[data-route="group"] .tabbar__badge');
-  if (!badge) return;
-  const n = await unreadCount().catch(() => 0);
-  badge.textContent = n > 99 ? '99+' : String(n);
-  badge.hidden = !n;
+  for (const [route, kind] of [['group', 'work'], ['chats', 'chat']]) {
+    const badge = document.querySelector(`.tabbar__item[data-route="${route}"] .tabbar__badge`);
+    if (!badge) continue;
+    const n = await unreadCount(kind).catch(() => 0);
+    badge.textContent = n > 99 ? '99+' : String(n);
+    badge.hidden = !n;
+  }
 }
 groupEvents.addEventListener('message', refreshBadge);
 groupEvents.addEventListener('seen', refreshBadge);
@@ -124,7 +130,8 @@ function applyNoCompanion() {
   const tab = document.querySelector('.tabbar__item[data-route="home"]');
   if (tab) {
     tab.querySelector('.tabbar__icon').textContent = noCompanion ? '💬' : '✦';
-    tab.querySelector('span:last-child').textContent = noCompanion ? 'المحادثة' : 'الرفيقة';
+    // في المؤسسة "المحادثات" تبويب للمجموعات، فالذكاء يُسمى "المساعد"
+    tab.querySelector('span:last-child').textContent = noCompanion ? (role ? 'المساعد' : 'المحادثة') : 'الرفيقة';
   }
 }
 

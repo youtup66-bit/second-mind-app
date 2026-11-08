@@ -22,10 +22,16 @@ const resetMembersReady = () => {
 resetMembersReady();
 
 export const GENERAL = 'general';
-let rooms = new Map(); // id ← { name, color, members[], kind }
+let rooms = new Map(); // id ← { name, color, members[], invited[], kind, owner? }
+let invites = new Map(); // مجموعات محادثة دُعيت إليها ولم تنضم بعد
+let contacts = []; // من يستطيع إضافتهم مباشرة لمجموعة محادثة (من في وحدته وما تحتها)
 export const groupMe = () => me;
 export const groupRooms = () => rooms;
+export const groupInvites = () => invites;
 export const roomOf = (m) => m?.room || GENERAL;
+export const isChatRoom = (id) => String(id || '').startsWith('c_');
+// المدير يضيف أي موظف؛ والموظف من جهاته فقط
+export const myContacts = () => (me?.role === 'manager' ? [...members.keys()].filter((u) => u !== me.uid) : contacts.filter((u) => members.has(u)));
 export const groupMembers = () => members;
 export const groupOnline = () => online;
 
@@ -50,16 +56,34 @@ export async function startGroupSync() {
       }
     }, (err) => emit('status', { error: err })));
 
-    // مجموعات الكرات: المدير يرى كلها، والموظف ما هو عضو فيه فقط
-    const roomsQuery = me.role === 'manager' ? F.collection(db, 'rooms')
-      : F.query(F.collection(db, 'rooms'), F.where('members', 'array-contains', me.uid));
-    unsubs.push(F.onSnapshot(roomsQuery, (snap) => {
-      rooms = new Map(snap.docs.map((d) => [d.id, {
-        name: d.data().name, color: d.data().color || '#c084fc', members: d.data().members || [], kind: d.data().kind || 'custom',
-      }]));
-      resolveRooms();
+    // المجموعات: ما أنا عضو فيه (كرات ومحادثات)، والمدير يرى كل الكرات، وما دُعيت إليه
+    const asRoom = (d) => ({
+      name: d.data().name, color: d.data().color || '#c084fc', members: d.data().members || [],
+      invited: d.data().invited || [], kind: d.data().kind || 'custom', owner: d.data().owner || null,
+    });
+    const parts = { mine: new Map(), balls: new Map() };
+    let waiting = me.role === 'manager' ? 2 : 1;
+    const merge = (key) => (snap) => {
+      parts[key] = new Map(snap.docs.map((d) => [d.id, asRoom(d)]));
+      rooms = new Map([...parts.balls, ...parts.mine]);
+      if (--waiting <= 0) resolveRooms();
       emit('rooms');
-    }, () => { resolveRooms(); }));
+    };
+    const fail = () => { if (--waiting <= 0) resolveRooms(); };
+    const rq = (...w) => F.query(F.collection(db, 'rooms'), F.where(...w));
+    unsubs.push(F.onSnapshot(rq('members', 'array-contains', me.uid), merge('mine'), fail));
+    if (me.role === 'manager') unsubs.push(F.onSnapshot(rq('kind', 'in', BALL_KINDS), merge('balls'), fail));
+    unsubs.push(F.onSnapshot(rq('invited', 'array-contains', me.uid), (snap) => {
+      invites = new Map(snap.docs.map((d) => [d.id, asRoom(d)]));
+      emit('rooms');
+    }, () => {}));
+    // الموظف: من يستطيع إضافتهم مباشرة (ينشرها المدير من هيكله)
+    if (me.role !== 'manager') {
+      unsubs.push(F.onSnapshot(F.doc(db, 'places', me.uid), (d) => {
+        contacts = d.exists() ? (d.data().contacts || []).map(String) : [];
+        emit('contacts');
+      }, () => {}));
+    } else migrateOldChats().catch((e) => console.warn('chats migrate', e));
 
     unsubs.push(F.onSnapshot(
       F.query(F.collection(db, 'relay'), F.where('pending', 'array-contains', me.uid)),
@@ -83,6 +107,8 @@ export function stopGroupSync() {
   unsubs = [];
   me = null;
   rooms = new Map();
+  invites = new Map();
+  contacts = [];
   published = null;
   members = new Map();
   resetMembersReady();
@@ -226,6 +252,23 @@ let roomsTimer = 0, roomsRun = Promise.resolve();
 function publishRoomsSoon() { clearTimeout(roomsTimer); roomsTimer = setTimeout(() => publishRooms().catch((e) => console.warn('rooms', e)), 1500); }
 window.addEventListener('sm:structure', () => { if (me?.role === 'manager') publishRoomsSoon(); });
 
+const BALL_KINDS = ['division', 'unit', 'section', 'custom'];
+// من يضيفه الموظف مباشرة: من في كراته وما تحتها (الكرة المخصصة: من فيها)
+export function contactsFromStructure(st, uid) {
+  const out = new Set();
+  for (const pl of st.people?.[uid]?.places || []) {
+    const n = st.nodes.find((x) => x.id === pl.node);
+    if (!n) continue;
+    const ids = new Set([n.id]);
+    if (n.type !== 'custom') {
+      let grew = true;
+      while (grew) { grew = false; for (const x of st.nodes) if (!ids.has(x.id) && ids.has(x.parent)) { ids.add(x.id); grew = true; } }
+    }
+    for (const [u, p] of Object.entries(st.people)) if (u !== uid && p.places.some((q) => ids.has(q.node))) out.add(u);
+  }
+  return [...out];
+}
+
 export function roomsFromStructure(st, managerUid, isMember = () => true) {
   const under = (id) => {
     const ids = new Set([id]);
@@ -259,12 +302,7 @@ async function doPublishRooms() {
   const { loadStructure } = await import('./org-structure.js');
   const st = await loadStructure();
   const want = roomsFromStructure(st, me.uid, (u) => members.has(u));
-  for (const g of await chatGroups()) {
-    want.set(g.id, {
-      name: String(g.name).slice(0, 60), color: g.color || '#c084fc', kind: 'chat',
-      members: [...new Set([me.uid, ...g.members.filter((u) => members.has(u))])].slice(0, 500),
-    });
-  }
+
   const { db, F } = await api();
   published ||= await getSetting(ROOMS_KEY, {}) || {};
   let msgs = null;
@@ -284,39 +322,77 @@ async function doPublishRooms() {
     }
   }
   // كرات حُذفت من الهيكل
-  for (const d of (await F.getDocs(F.collection(db, 'rooms'))).docs) {
+  for (const d of (await F.getDocs(F.query(F.collection(db, 'rooms'), F.where('kind', 'in', BALL_KINDS)))).docs) {
     if (!want.has(d.id)) await F.deleteDoc(d.ref).catch(() => {});
   }
-  for (const id of Object.keys(published)) if (!want.has(id)) delete published[id];
+  for (const id of Object.keys(published)) if (id.startsWith('n_') && !want.has(id)) delete published[id];
+  // لكل موظف: أسماء كراته، ومن يضيفه مباشرة لمجموعة محادثة
+  const { placesOf, nodeById } = await import('./org-structure.js');
+  for (const [uid, m] of members) {
+    if (m.role !== 'employee') continue;
+    const names = [...new Set(placesOf(st, uid).map((x) => nodeById(st, x.node)?.name).filter(Boolean))].slice(0, 30);
+    const cs = contactsFromStructure(st, uid).filter((u) => members.has(u)).slice(0, 1000);
+    const sig = JSON.stringify([names, cs.sort()]);
+    if (published[`p_${uid}`] === sig) continue;
+    await F.setDoc(F.doc(db, 'places', uid), { places: names, contacts: cs, at: F.serverTimestamp() });
+    published[`p_${uid}`] = sig;
+  }
   await setSetting(ROOMS_KEY, published);
 }
 
-// ---- مجموعات المحادثة: ينشئها المدير ويختار أعضاءها (تُحفظ على جهازه، وتُنشر أعضاؤها فقط) ----
-// المنشورات فيها لا تُحسب منها النقاط إلا إن فعّل المدير ذلك للمجموعة.
-const CHATS_KEY = 'chatGroups'; // [{ id, name, color, members: [uid], points }]
-export const chatGroups = async () => (await getSetting(CHATS_KEY, [])) || [];
-export async function saveChatGroup({ id, name, color, members: who, points }) {
-  if (me?.role !== 'manager') throw new Error('إنشاء المجموعات للمدير.');
+// ---- مجموعات المحادثة: ينشئها أي عضو (لا نقاط منها، ولا تصل للمدير إن لم يكن فيها) ----
+// يضيف مباشرة من في وحدته وما تحتها، ومن هو أعلى منه يدعوه فينضم بنفسه.
+export async function saveChat({ id, name, color, members: who = [], invited = [] }) {
+  if (!me) throw new Error('لم تدخل إلى المؤسسة بعد.');
   name = String(name || '').trim().slice(0, 60);
   if (!name) throw new Error('اكتب اسم المجموعة.');
-  const list = await chatGroups();
-  const g = { id: id || `c_${Math.random().toString(36).slice(2, 10)}`, name, color: color || '#c084fc', members: [...new Set(who || [])].filter((u) => u !== me.uid), points: !!points };
-  const i = list.findIndex((x) => x.id === g.id);
-  if (i >= 0) list[i] = g; else list.push(g);
-  await setSetting(CHATS_KEY, list);
-  await publishRooms();
-  return g;
+  const { db, F } = await api();
+  id ||= `c_${Math.random().toString(36).slice(2, 12).replace(/[^a-z0-9]/g, '').padEnd(8, '0')}`;
+  const ok = new Set(myContacts());
+  const old = rooms.get(id);
+  const was = new Set(old?.members || []);
+  // من يُضاف مباشرة: من جهاتي أو كان عضواً قبلاً؛ وغيرهم يُدعون
+  const direct = [...new Set(who)].filter((u) => u !== me.uid && (ok.has(u) || was.has(u)));
+  const inv = [...new Set([...invited, ...who.filter((u) => u !== me.uid && !direct.includes(u))])].filter((u) => !direct.includes(u) && members.has(u)).slice(0, 50);
+  const data = { name, color: color || '#c084fc', members: [me.uid, ...direct], invited: inv, kind: 'chat', owner: me.uid, at: F.serverTimestamp() };
+  await F.setDoc(F.doc(db, 'rooms', id), data);
+  rooms.set(id, { ...data, at: undefined });
+  emit('rooms');
+  return { id, ...data };
 }
-export async function deleteChatGroup(id) {
-  if (me?.role !== 'manager') return;
-  await setSetting(CHATS_KEY, (await chatGroups()).filter((x) => x.id !== id));
-  await publishRooms();
+export async function deleteChat(id) {
+  const { db, F } = await api();
+  await F.deleteDoc(F.doc(db, 'rooms', id));
 }
-// هل تُحسب نقاط من منشورات هذه المجموعة؟ (العامة والكرات نعم؛ المحادثة حسب اختيار المدير)
-export async function pointsRoomFilter() {
-  const on = new Set((await chatGroups()).filter((g) => g.points).map((g) => g.id));
-  // مجموعة محادثة حُذفت أو لم تُفعّل فيها النقاط: لا نقاط منها
-  return (m) => !String(roomOf(m)).startsWith('c_') || on.has(roomOf(m));
+// الانضمام أو الرفض أو المغادرة: كلٌ يغيّر نفسه فقط
+async function selfChange(id, join) {
+  const { db, F } = await api();
+  const ref = F.doc(db, 'rooms', id);
+  const d = await F.getDoc(ref);
+  if (!d.exists()) throw new Error('حُذفت هذه المجموعة.');
+  const x = d.data();
+  const membersNext = (x.members || []).filter((u) => u !== me.uid);
+  if (join) membersNext.push(me.uid);
+  await F.updateDoc(ref, { members: membersNext, invited: (x.invited || []).filter((u) => u !== me.uid) });
+}
+export const acceptInvite = (id) => selfChange(id, true);
+export const declineInvite = (id) => selfChange(id, false);
+export const leaveChat = (id) => selfChange(id, false);
+
+// منشورات مجموعات المحادثة لا تُحسب منها النقاط
+export const countsForPoints = (m) => !isChatRoom(roomOf(m));
+
+// مجموعات المحادثة القديمة (كانت على جهاز المدير): تُنقل إلى الصيغة الجديدة مرة واحدة
+async function migrateOldChats() {
+  const old = (await getSetting('chatGroups', [])) || [];
+  if (!old.length) return;
+  await roomsReady;
+  const { db, F } = await api();
+  for (const g of old) {
+    await F.deleteDoc(F.doc(db, 'rooms', g.id)).catch(() => {});
+    await saveChat({ id: g.id, name: g.name, color: g.color, members: g.members || [] }).catch((e) => console.warn('migrate chat', e));
+  }
+  await setSetting('chatGroups', []);
 }
 
 // ---- غير المقروء (لكل مجموعة) ----
@@ -328,9 +404,11 @@ async function seenMap() {
   return { [GENERAL]: old, '*': old };
 }
 const isUnread = (m, seen) => !m.mine && (m.receivedAt || m.sentAt) > (seen[roomOf(m)] ?? seen['*'] ?? 0);
-export async function unreadCount(room = null) {
+// kind: 'chat' مجموعات المحادثة، 'work' العامة والكرات، أو بلا تحديد للكل
+export async function unreadCount(kind = null) {
   const seen = await seenMap();
-  return (await getGroupMessages()).filter((m) => (room == null || roomOf(m) === room) && isUnread(m, seen)).length;
+  const pick = (m) => !kind || (kind === 'chat') === isChatRoom(roomOf(m));
+  return (await getGroupMessages()).filter((m) => pick(m) && isUnread(m, seen)).length;
 }
 export async function unreadByRoom() {
   const seen = await seenMap();
