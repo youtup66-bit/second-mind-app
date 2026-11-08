@@ -2,7 +2,7 @@
 // وكل مجموعة محادثة مستقلة (نصوص وصور وكلام يتحول إلى نص). ‎#/group‎ القائمة · ‎#/group?room=…‎ المحادثة
 import {
   startGroupSync, groupEvents, groupMe, groupMembers, groupOnline, groupRooms, sendGroup, resend, markSeen, compressImage,
-  GENERAL, roomOf, unreadByRoom, isChatRoom, groupInvites, myContacts, saveChat, deleteChat, acceptInvite, declineInvite, leaveChat,
+  GENERAL, roomOf, unreadByRoom, roomNameOf, isChatRoom, groupInvites, myContacts, saveChat, deleteChat, acceptInvite, declineInvite, leaveChat,
 } from '../group.js';
 import { PALETTE } from '../org-structure.js';
 import { getGroupMessages } from '../storage.js';
@@ -53,7 +53,7 @@ export async function mountMode(root, mode) {
   const orgName = s.org?.name || 'المؤسسة';
   const roomInfo = () => (room === GENERAL ? { name: orgName, color: '#00a884' } : groupRooms().get(room) || pastRoom(room));
   let pastName = '';
-  const pastRoom = () => ({ name: pastName || 'مجموعة سابقة', color: '#6b7c85', past: true });
+  const pastRoom = () => ({ name: pastName || roomNameOf(room) || 'مجموعة سابقة', color: '#6b7c85', past: true });
   // الموظف بلا ذكاء: الميكروفون بخدمة المتصفح فقط
   const micOk = manager ? canListen : canBrowserListen;
   root.innerHTML = `
@@ -398,7 +398,7 @@ async function mountList(root, s, syncErr, mode) {
     const items = chat ? [] : [{ id: GENERAL, name: orgName, color: '#00a884', kind: 'عامة · الجميع' }];
     for (const [id, r] of rooms) if (mine(id)) items.push({ id, name: r.name, color: r.color, kind: KIND[r.kind] || '' });
     // مجموعات غادرها (أو حُذفت) وما زالت رسائلها عنده
-    for (const id of last.keys()) if (id !== GENERAL && mine(id) && !rooms.has(id)) items.push({ id, name: names.get(id) || 'مجموعة سابقة', color: '#6b7c85', kind: 'سابقة', past: true });
+    for (const id of last.keys()) if (id !== GENERAL && mine(id) && !rooms.has(id)) items.push({ id, name: names.get(id) || roomNameOf(id) || 'مجموعة سابقة', color: '#6b7c85', kind: 'سابقة', past: true });
     // الأحدث نشاطاً أولاً، والعامة دائماً في الأعلى
     const t = (it) => last.get(it.id)?.sentAt || 0;
     const top = chat ? [] : [items.shift()];

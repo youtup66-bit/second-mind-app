@@ -2,7 +2,7 @@
 // بحسب خيارات إظهاره: ينشئ كرات وحسابات لما تحته، وكرات مشاريع، ويرسل روابط الاستعادة.
 // الحسابات تُنشأ مباشرة (رابط دعوة)، وتعديل الكرات طلبٌ يطبّقه هاتف رئيس القسم حين يتصل.
 import { startGroupSync, groupEvents, groupBranch, groupMembers, groupMe } from '../group.js';
-import { TYPES, PERSON, ASSISTANT, PALETTE, colorOf, nodeById, toGraph, canHaveHead } from '../org-structure.js';
+import { TYPES, PERSON, ASSISTANT, PALETTE, colorOf, nodeById, toGraph, canHaveHead, projOf, projectLine, projectLate } from '../org-structure.js';
 import { createOrgGraph } from '../org-graph.js';
 import { createInvite, inviteLink } from '../cloud.js';
 import { sendRequest } from '../org-branches.js';
@@ -137,14 +137,25 @@ export async function mount(root) {
       sub = `<p class="struct-sub">أضف إلى «${esc(n.name)}» من فرعك:</p><div class="struct-pick">${list.map((p) => `<button type="button" data-u="${esc(p.uid)}"><b>${esc(p.name)}</b></button>`).join('') || '<p class="muted">لا أحد متاح.</p>'}</div>
         <button class="btn btn--ghost" type="button" data-a="cancel">إلغاء</button>`;
     } else if (mode === 'link' && lastLink) sub = linkOut();
+    else if (mode === 'proj') {
+      const p = projOf(n);
+      sub = `<form class="struct-form struct-form--col" id="pf">
+          <div class="struct-pick struct-pick--row">${[['open', 'مفتوح'], ['closed', 'مغلق']].map(([v, l]) => `<label class="switch"><input type="radio" name="pf-status" value="${v}" ${p.status === v ? 'checked' : ''}><span>${l}</span></label>`).join('')}</div>
+          <label class="struct-field">تاريخ البدء<input type="date" id="pf-start" value="${esc(p.start)}"></label>
+          <label class="struct-field">تاريخ الانتهاء<input type="date" id="pf-end" value="${esc(p.end)}"></label>
+          <label class="struct-field">نسبة الإنجاز: <b id="pf-pv">${p.progress}٪</b><input type="range" id="pf-progress" min="0" max="100" step="5" value="${p.progress}"></label>
+          <div class="row"><button class="btn" type="submit">إرسال</button><button class="btn btn--ghost" type="button" data-a="cancel">إلغاء</button></div></form>`;
+    }
     panel.innerHTML = `
       <div class="struct-title">${dot(colorOf(n))}<div><b>${esc(n.name)}</b><small>${t.label}${isHeadBall(n.id) ? ' · أنت مسؤولها' : ''}</small></div></div>
+      ${n.type === 'custom' && !sub ? `<p class="struct-proj${projectLate(n) ? ' is-late' : ''}">${esc(projectLine(n))}<i style="--p:${projOf(n).progress}%"></i></p>` : ''}
       ${sub || `<p class="struct-meta">${canHaveHead(n.type) ? `المسؤول: <b>${heads.length ? heads.map(esc).join('، ') : 'لا يوجد'}</b> · ` : ''}${here ? `${here} في الكرة` : 'لا أحد بعد'}</p>
       <div class="struct-actions">
         ${can ? '<button type="button" data-a="account">إضافة حساب</button>' : ''}
         ${can && childT ? `<button type="button" data-a="add">إضافة ${childT.label}</button>` : ''}
         ${(can || (n.type === 'custom' && canProj(n.id))) ? '<button type="button" data-a="pick">إضافة من فرعك</button>' : ''}
         ${canProj(n.id) && n.type !== 'custom' ? '<button type="button" data-a="project">إضافة مشروع</button>' : ''}
+        ${canProj(n.id) && n.type === 'custom' ? '<button type="button" data-a="proj">تفاصيل المشروع: الحالة والتواريخ والإنجاز</button>' : ''}
         ${(can || (n.type === 'custom' && canProj(n.id))) ? '<button type="button" data-a="rename">تعديل الاسم</button>' : ''}
         ${(can || (n.type === 'custom' && canProj(n.id))) && !isHeadBall(n.id) ? '<button type="button" data-a="remove" class="is-danger">حذف</button>' : ''}
         ${!can && !canProj(n.id) ? '<p class="muted">للعرض فقط.</p>' : ''}
@@ -166,6 +177,12 @@ export async function mount(root) {
       if (mode === 'add') await request('addNode', { parent: n.id, name: nm });
       else if (mode === 'rename') await request('rename', { id: n.id, name: nm });
       else await request('addProject', { link: n.id, name: nm, color: draftColor });
+      mode = null; renderPanel(); toast('أُرسل إلى هاتف رئيس القسم، ويظهر حين يطبّقه.');
+    });
+    panel.querySelector('#pf-progress')?.addEventListener('input', (e) => { panel.querySelector('#pf-pv').textContent = `${e.target.value}٪`; });
+    panel.querySelector('#pf')?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      await request('project', { id: n.id, status: panel.querySelector('[name=pf-status]:checked').value, start: panel.querySelector('#pf-start').value, end: panel.querySelector('#pf-end').value, progress: Number(panel.querySelector('#pf-progress').value) });
       mode = null; renderPanel(); toast('أُرسل إلى هاتف رئيس القسم، ويظهر حين يطبّقه.');
     });
     panel.querySelectorAll('[data-u]').forEach((x) => x.addEventListener('click', async () => {

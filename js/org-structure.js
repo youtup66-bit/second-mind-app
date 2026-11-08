@@ -48,7 +48,45 @@ export const PALETTE = ['#c084fc', '#f472b6', '#22d3ee', '#f87171', '#a3e635', '
 export const canHaveAssistant = (type) => type === 'dept' || type === 'division' || type === 'unit' || type === 'personnel';
 // كرات لها مسؤول بحساب (المشروع بلا حساب: يُضاف له الموظفون فقط)
 export const canHaveHead = (type) => type === 'division' || type === 'unit' || type === 'section' || type === 'personnel';
-export const colorOf = (n) => (n?.type === 'custom' && n.color) || TYPES[n?.type]?.color || '#ffffff';
+// المشروع المغلق يُعتَّم (يبقى للرجوع إليه)
+const dim = (hex) => { const n = parseInt(hex.slice(1), 16); const m = (c) => Math.round(c * 0.35 + 0x3a * 0.65); return `#${[n >> 16, (n >> 8) & 255, n & 255].map((c) => m(c).toString(16).padStart(2, '0')).join('')}`; };
+export const colorOf = (n) => {
+  const c = (n?.type === 'custom' && n.color) || TYPES[n?.type]?.color || '#ffffff';
+  return n?.type === 'custom' && n.project?.status === 'closed' ? dim(c) : c;
+};
+
+// ---- كرات المشاريع (A9): الحالة، وتاريخ البدء والانتهاء، ونسبة الإنجاز ----
+export const projOf = (n) => ({ status: 'open', progress: 0, start: '', end: '', ...(n?.project || {}) });
+const isDate = (d) => /^\d{4}-\d{2}-\d{2}$/.test(String(d || ''));
+export function setProject(s, id, patch = {}) {
+  const n = nodeById(s, id);
+  if (!n || n.type !== 'custom') return;
+  const p = projOf(n);
+  if (patch.status === 'open' || patch.status === 'closed') {
+    if (patch.status === 'closed' && p.status !== 'closed') p.closedAt = Date.now();
+    p.status = patch.status;
+  }
+  if ('progress' in patch) p.progress = Math.max(0, Math.min(100, Math.round(Number(patch.progress) || 0)));
+  if ('start' in patch) p.start = isDate(patch.start) ? patch.start : '';
+  if ('end' in patch) p.end = isDate(patch.end) ? patch.end : '';
+  n.project = p;
+}
+const fmtDate = new Intl.DateTimeFormat('ar', { day: 'numeric', month: 'long' });
+const dayOf = (d) => new Date(`${d}T00:00`);
+const days = (n) => (n === 1 ? 'يوم واحد' : n === 2 ? 'يومان' : n <= 10 ? `${n} أيام` : `${n} يوماً`);
+// سطر الحالة: مفتوح · ٤٠٪ · ينتهي ١٢ ديسمبر (بعد ٥ أيام) / متأخر ٣ أيام
+export function projectLine(n) {
+  const p = projOf(n);
+  if (p.status === 'closed') return `مغلق${p.closedAt ? ` منذ ${fmtDate.format(p.closedAt)}` : ''} · أُنجز ${p.progress}٪`;
+  const parts = ['مفتوح', `أُنجز ${p.progress}٪`];
+  if (p.start) parts.push(`بدأ ${fmtDate.format(dayOf(p.start))}`);
+  if (p.end) {
+    const d = Math.round((dayOf(p.end) - new Date(new Date().toDateString())) / 86400000);
+    parts.push(d < 0 ? `متأخر ${days(-d)} عن موعده` : d === 0 ? 'ينتهي اليوم' : `ينتهي ${fmtDate.format(dayOf(p.end))} (بعد ${days(d)})`);
+  }
+  return parts.join(' · ');
+}
+export const projectLate = (n) => { const p = projOf(n); return p.status === 'open' && !!p.end && dayOf(p.end) < new Date(new Date().toDateString()) && p.progress < 100; };
 
 const uid = () => Math.random().toString(36).slice(2, 10);
 
@@ -181,7 +219,7 @@ export function pathOf(s, nodeId) {
 // يحوّل الهيكل إلى كرات وخطوط للرسم: [من، إلى، طول الخط]
 export function toGraph(s, members) {
   const names = new Map(members.map((m) => [m.user_id, m.display_name]));
-  const nodes = s.nodes.map((n) => ({ ...TYPES[n.type], id: n.id, kind: n.type, label: n.name, parent: n.parent, color: colorOf(n) }));
+  const nodes = s.nodes.map((n) => ({ ...TYPES[n.type], id: n.id, kind: n.type, label: n.type === 'custom' && n.project?.status === 'closed' ? `${n.name} (مغلق)` : n.name, parent: n.parent, color: colorOf(n) }));
   const edges = [];
   for (const n of s.nodes) {
     if (n.parent) edges.push([n.parent, n.id, TYPES[n.type].rest]);

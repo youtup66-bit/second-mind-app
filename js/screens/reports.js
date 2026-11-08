@@ -85,7 +85,7 @@ export async function mount(root) {
 
     $('#reports').innerHTML = reps.map((r) => `
       <details class="rep-item">
-        <summary><b>${esc(r.headline)}</b><small>${REPORT_PERIODS[r.period] || ''} · ${fmtDay.format(r.createdAt)}</small></summary>
+        <summary><b>${esc(r.headline)}</b><small>${esc(r.label || REPORT_PERIODS[r.period] || '')} · ${fmtDay.format(r.createdAt)}</small></summary>
         <p>${esc(r.overview)}</p>
         ${list('أبرز الأعمال', r.highlights)}
         ${r.people?.length ? `<h4>الموظفون</h4><ul>${r.people.map((p) => `<li><b>${esc(p.name)}:</b> ${esc(p.summary)}</li>`).join('')}</ul>` : ''}

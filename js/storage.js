@@ -157,7 +157,7 @@ export const getPoints = () => run('points', 'readonly', (s) => s.getAll());
 
 // ---- التصدير والاستيراد ----
 // المفتاح لا يُصدَّر أبداً حتى لا يتسرب مع ملف النسخة، وتاريخ آخر نسخة خاص بهذا الجهاز
-const PRIVATE_SETTINGS = new Set(['geminiApiKey', 'lastExportAt', 'usage', 'ttsCooldownUntil', 'liteCooldownUntil', 'cloud', 'orgRole', 'groupSeenAt', 'groupSeenRooms', 'roomsPublished']);
+const PRIVATE_SETTINGS = new Set(['geminiApiKey', 'lastExportAt', 'usage', 'ttsCooldownUntil', 'liteCooldownUntil', 'cloud', 'orgRole', 'groupSeenAt', 'groupSeenRooms', 'roomsPublished', 'roomNames']);
 export const BACKUP_FORMAT = 1;
 
 async function getAllSettings() {

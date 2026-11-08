@@ -6,6 +6,7 @@ import {
   TYPES, PERSON, ASSISTANT, PALETTE, canHaveAssistant, colorOf, loadStructure, saveStructure, nodeById, childrenOf,
   addNode, addCustom, setColor, toggleLink, renameNode, removeNode, placesOf, placePerson, removePlace, unplacePerson,
   assistantOf, peopleAt, pathOf, toGraph, canHaveHead, headsOf, setHead, PERMS, permsOf, setPerm, addPersonnel,
+  projOf, setProject, projectLine, projectLate,
 } from '../org-structure.js';
 import { createOrgGraph } from '../org-graph.js';
 import { totals, pointsEvents } from '../points.js';
@@ -266,6 +267,17 @@ export async function mount(root) {
         <ul class="struct-perms">${PERMS.map(([k, label, hint]) => `<li><label class="switch"><input type="checkbox" data-perm="${k}" ${p[k] ? 'checked' : ''}><span><b>${label}</b><small>${hint}</small></span></label></li>`).join('')}</ul>
         <p class="muted struct-note">تُحفظ الآن، وتعمل حين يصل لكل مسؤول فرعه (المرحلة التالية: الأقسام وإدارة الحسابات وكرات المشاريع، ثم المساعد وعقل المؤسسة والتقييمات).</p>
         <button class="btn btn--ghost" type="button" data-a="cancel">تم</button>`;
+    } else if (mode === 'project') {
+      const p = projOf(n);
+      sub = `<form class="struct-form struct-form--col" id="pf">
+          <p class="struct-sub">تفاصيل مشروع «${esc(n.name)}»:</p>
+          <div class="struct-pick struct-pick--row">${[['open', 'مفتوح'], ['closed', 'مغلق']].map(([v, l]) => `<label class="switch"><input type="radio" name="pf-status" value="${v}" ${p.status === v ? 'checked' : ''}><span>${l}</span></label>`).join('')}</div>
+          <label class="struct-field">تاريخ البدء<input type="date" id="pf-start" value="${esc(p.start)}"></label>
+          <label class="struct-field">تاريخ الانتهاء<input type="date" id="pf-end" value="${esc(p.end)}"></label>
+          <label class="struct-field">نسبة الإنجاز: <b id="pf-pv">${p.progress}٪</b><input type="range" id="pf-progress" min="0" max="100" step="5" value="${p.progress}"></label>
+          <p class="muted struct-note">عند الإغلاق يُعتَّم المشروع، وتُغلق مجموعته (تبقى رسائلها عند أعضائها للقراءة)، ويبقى تقريره ونقاطه.</p>
+          <div class="row"><button class="btn" type="submit">حفظ</button><button class="btn btn--ghost" type="button" data-a="cancel">إلغاء</button></div>
+        </form>`;
     } else if (mode === 'me') {
       sub = `<div class="struct-form struct-form--col">
           <p class="struct-sub">رئيس القسم: <b>${esc(s.member.display_name)}</b> · اسم المستخدم: <b dir="ltr">${esc(s.member.username)}</b></p>
@@ -301,6 +313,7 @@ export async function mount(root) {
     panel.innerHTML = `
       <div class="struct-title">${dot(colorOf(n))}<div><b>${esc(n.name)}</b><small>${t.label}${where}</small></div></div>
       ${sub ? '' : statsLine(n.parent || custom ? peopleUnder(n.id) : members.map((m) => m.user_id), n)}
+      ${custom && !sub ? `<p class="struct-proj${projectLate(n) ? ' is-late' : ''}">${esc(projectLine(n))}<i style="--p:${projOf(n).progress}%"></i></p>` : ''}
       ${sub ? '' : `<p class="struct-meta">
         ${canHaveHead(n.type) ? `المسؤول: <b>${heads.length ? heads.map((u) => esc(nameOf(u))).join('، ') : 'لا يوجد'}</b> · ` : ''}
         ${canHaveAssistant(n.type) ? `المعاون: <b>${asst ? esc(nameOf(asst)) : 'لا يوجد'}</b> · ` : ''}
@@ -317,6 +330,7 @@ export async function mount(root) {
         <button type="button" data-a="pick-person">إضافة موظف</button>
         ${canHaveAssistant(n.type) ? `<button type="button" data-a="pick-assistant">${asst ? 'تغيير المعاون' : 'إضافة معاون'}</button>` : ''}
         ${asst ? '<button type="button" data-a="no-assistant">إلغاء المعاون</button>' : ''}
+        ${custom ? '<button type="button" data-a="project">تفاصيل المشروع: الحالة والتواريخ والإنجاز</button><button type="button" data-a="report">تقرير المشروع</button>' : ''}
         ${custom ? '<button type="button" data-a="links">الربط بفروع</button><button type="button" data-a="color">اللون</button>' : ''}
         <button type="button" data-a="rename">تعديل الاسم</button>
         ${n.id !== 'root' ? '<button type="button" data-a="delete" class="is-danger">حذف</button>' : ''}
@@ -385,6 +399,16 @@ export async function mount(root) {
       });
     }
 
+    panel.querySelector('#pf-progress')?.addEventListener('input', (e) => { panel.querySelector('#pf-pv').textContent = `${e.target.value}٪`; });
+    panel.querySelector('#pf')?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      setProject(st, n.id, {
+        status: panel.querySelector('[name=pf-status]:checked').value, start: panel.querySelector('#pf-start').value,
+        end: panel.querySelector('#pf-end').value, progress: panel.querySelector('#pf-progress').value,
+      });
+      await commit(n.id);
+    });
+
     panel.querySelector('#nf')?.addEventListener('submit', async (e) => {
       e.preventDefault();
       const name = panel.querySelector('#nf-name').value;
@@ -428,6 +452,16 @@ export async function mount(root) {
       if (a === 'cancel') { mode = null; renderPanel(); return; }
       if (a === 'no-assistant') { placePerson(st, asst, n.id, false); await commit(n.id); return; }
       if (a === 'personnel') { const p = addPersonnel(st); await commit(p.id); return; }
+      if (a === 'report') {
+        b.disabled = true;
+        b.textContent = 'أكتب تقرير المشروع…';
+        try {
+          const { makeReport } = await import('../org-insights.js');
+          await makeReport('project', { node: n.id });
+          location.hash = '#/reports';
+        } catch (err) { b.disabled = false; b.textContent = `تعذّر: ${err.message}`; }
+        return;
+      }
       if (a === 'delete') {
         if (!confirm(`حذف «${n.name}»${custom ? '' : ' وكل ما تحته'}؟ يُزال موظفوه من هذا المكان فقط.`)) return;
         const back = n.parent || (custom ? n.links?.[0] : null);

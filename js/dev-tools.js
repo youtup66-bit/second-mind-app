@@ -6,7 +6,7 @@ import {
   session, signIn, signOut, createInvite, secondaryApi, usernameEmail, listMembers,
 } from './cloud.js';
 import {
-  loadStructure, saveStructure, addNode, addCustom, placePerson, toggleLink, setHead,
+  loadStructure, saveStructure, addNode, addCustom, placePerson, toggleLink, setHead, setProject,
 } from './org-structure.js';
 import { getWorks, addWork } from './points.js';
 import { publishRooms, roomIdOf, startGroupSync } from './group.js';
@@ -115,6 +115,8 @@ export async function seedDemoOrg({ managerPassword }, onStep = () => {}) {
     const install = addNode(st, cams.id, 'قسم التركيب');
     const project = addCustom(st, cams.id, 'مشروع المبنى الجديد', '#f472b6');
     toggleLink(st, project.id, cables.id);
+    const day = (k) => new Date(Date.now() + k * 86400000).toISOString().slice(0, 10);
+    setProject(st, project.id, { start: day(-10), end: day(12), progress: 40 });
     const [ahmed, sara, hussein, zainab, mustafa] = people.map((x) => x.uid);
     placePerson(st, ahmed, cams.id); placePerson(st, ahmed, project.id);
     placePerson(st, sara, maint.id, true);

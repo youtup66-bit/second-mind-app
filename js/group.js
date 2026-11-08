@@ -29,6 +29,15 @@ let myBranch = null; // المسؤول: فرعه كما نشره هاتف رئي
 export const groupBranch = () => myBranch;
 export const groupMe = () => me;
 export const groupRooms = () => rooms;
+// أسماء المجموعات تُحفظ على الجهاز: تبقى ظاهرة بعد مغادرتها أو إغلاقها
+let knownNames = {};
+getSetting('roomNames', {}).then((x) => { knownNames = { ...(x || {}), ...knownNames }; }).catch(() => {});
+function rememberNames(map) {
+  let changed = false;
+  for (const [id, r] of map) if (r.name && knownNames[id] !== r.name) { knownNames[id] = r.name; changed = true; }
+  if (changed) setSetting('roomNames', knownNames).catch(() => {});
+}
+export const roomNameOf = (id) => rooms.get(id)?.name || knownNames[id] || '';
 export const groupInvites = () => invites;
 export const roomOf = (m) => m?.room || GENERAL;
 export const isChatRoom = (id) => String(id || '').startsWith('c_');
@@ -72,6 +81,7 @@ export async function startGroupSync() {
     const merge = (key) => (snap) => {
       parts[key] = new Map(snap.docs.map((d) => [d.id, asRoom(d)]));
       rooms = new Map([...parts.balls, ...parts.mine]);
+      rememberNames(rooms);
       if (--waiting <= 0) resolveRooms();
       emit('rooms');
     };
@@ -299,6 +309,8 @@ export function roomsFromStructure(st, managerUid, isMember = () => true) {
   const out = new Map();
   for (const n of st.nodes) {
     if (n.id === 'root') continue;
+    // المشروع المغلق: تُحذف مجموعته، فتبقى رسائلها عند أعضائها للقراءة فقط
+    if (n.type === 'custom' && n.project?.status === 'closed') continue;
     const ids = n.type === 'custom' ? new Set([n.id]) : under(n.id);
     const people = Object.entries(st.people || {})
       .filter(([u, p]) => isMember(u) && (p.places || []).some((pl) => ids.has(pl.node))).map(([u]) => u);

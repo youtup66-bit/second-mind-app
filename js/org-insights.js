@@ -4,7 +4,7 @@ import {
   getSetting, setSetting, deleteSetting, getGroupMessages, getPoints, putPoint, deletePoint, getEntries, updateEntry,
 } from './storage.js';
 import { totals, periodStart, getWorks, addManual, suggestions } from './points.js';
-import { loadStructure, nodeById, placesOf } from './org-structure.js';
+import { loadStructure, nodeById, placesOf, projOf, projectLine, projectLate } from './org-structure.js';
 import { groupMembers, sendGroup, startGroupSync, countsForPoints } from './group.js';
 import { writeOrgReport } from './gemini.js';
 
@@ -20,7 +20,9 @@ const employees = () => [...groupMembers()].filter(([, m]) => m.role === 'employ
 export const REPORT_PERIODS = { week: 'هذا الأسبوع', month: 'هذا الشهر' };
 export const listReports = () => getSetting('orgReports', []);
 
-export async function makeReport(period = 'week') {
+// period: week | month | project (مع node: كرة المشروع؛ منشورات مجموعته ونقاطها منذ بدايته)
+export async function makeReport(period = 'week', { node = null } = {}) {
+  if (period === 'project') return makeProjectReport(node);
   const from = periodStart(period);
   const [t, posts, st, works] = await Promise.all([totals(period), getGroupMessages().then((l) => l.filter(countsForPoints)), loadStructure(), getWorks()]);
   const emps = employees();
@@ -46,13 +48,44 @@ export async function makeReport(period = 'week') {
   changed();
   return report;
 }
+async function makeProjectReport(nodeId) {
+  const [posts, st, works, pts] = await Promise.all([getGroupMessages(), loadStructure(), getWorks(), getPoints()]);
+  const n = nodeById(st, nodeId);
+  if (!n) throw new Error('لم أجد المشروع.');
+  const p = projOf(n);
+  const room = `n_${n.id}`;
+  const mine = posts.filter((m) => m.room === room && m.text);
+  const ids = new Set(mine.map((m) => m.id));
+  const emps = employees();
+  const name = (u) => emps.find(([id]) => id === u)?.[1].name || 'موظف سابق';
+  const team = Object.entries(st.people).filter(([, x]) => x.places.some((pl) => pl.node === n.id)).map(([u]) => u);
+  const people = team.map((u) => {
+    const mp = pts.filter((x) => x.status === 'approved' && x.user === u && ids.has(x.msgId));
+    return {
+      name: name(u), places: [n.name], points: mp.reduce((a, x) => a + x.points, 0),
+      works: mp.map((x) => `${x.workName}${x.count > 1 ? ` ×${x.count}` : ''}`), posts: mine.filter((x) => x.from === u).length,
+    };
+  });
+  const label = `مشروع «${n.name}»: ${projectLine(n)}`;
+  const r = await writeOrgReport({
+    period: label, org: st.nodes.find((x) => x.id === 'root')?.name || '', people,
+    works: works.map((w) => `${w.name} (${w.points})`),
+    posts: mine.slice(-150).map((x) => `[${fmtDay.format(x.sentAt)}] ${x.mine ? 'المدير' : name(x.from)}: ${x.text.slice(0, 300)}`),
+  });
+  const from = p.start ? new Date(`${p.start}T00:00`).getTime() : (mine[0]?.sentAt || Date.now());
+  const report = { id: uid(), period: 'project', label: /^مشروع/.test(n.name) ? `«${n.name}»` : `مشروع «${n.name}»`, node: n.id, from, to: Date.now(), createdAt: Date.now(), ...r };
+  await setSetting('orgReports', [report, ...(await listReports())].slice(0, 30));
+  changed();
+  return report;
+}
+
 export async function deleteReport(id) {
   await setSetting('orgReports', (await listReports()).filter((r) => r.id !== id));
   changed();
 }
 // نص التقرير للمشاركة (واتساب، بريد...)
 export function reportText(r) {
-  const lines = [`📋 ${r.headline}`, `${REPORT_PERIODS[r.period] || ''}`, '', r.overview, ''];
+  const lines = [`📋 ${r.headline}`, `${r.label || REPORT_PERIODS[r.period] || ''}`, '', r.overview, ''];
   if (r.highlights?.length) lines.push('أبرز الأعمال:', ...r.highlights.map((x) => `- ${x}`), '');
   if (r.people?.length) lines.push('الموظفون:', ...r.people.map((p) => `- ${p.name}: ${p.summary}`), '');
   if (r.problems?.length) lines.push('مشاكل ومتابعات:', ...r.problems.map((x) => `- ${x}`), '');
@@ -76,6 +109,8 @@ export async function alerts() {
   if (pending) out.push({ text: `${pending} من اقتراحات النقاط تنتظر موافقتك`, link: '#/points' });
   const late = (await listTasks()).filter((x) => !x.done && now - x.at > 3 * DAY);
   for (const x of late) out.push({ text: `مهمة لم تُنجز منذ ${Math.floor((now - x.at) / DAY)} أيام: ${x.text.slice(0, 50)}`, link: '#/reports' });
+  // مشاريع تجاوزت موعدها ولم تكتمل
+  for (const n of (await loadStructure()).nodes) if (n.type === 'custom' && projectLate(n)) out.push({ text: `مشروع «${n.name}»: ${projectLine(n)}`, link: '#/structure' });
   return out;
 }
 

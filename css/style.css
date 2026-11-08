@@ -984,6 +984,11 @@ body.on-structure .topbar { display: none; }
 .struct-waiting button { background: none; border: 0; color: var(--accent); font: inherit; cursor: pointer; padding: 2px 4px; }
 .struct-waiting button.is-danger { color: var(--danger); }
 .struct-pick--row { display: flex; gap: 14px; flex-wrap: wrap; }
+.struct-proj { margin: 4px 0 8px; font-size: .86rem; }
+.struct-proj i { display: block; height: 5px; margin-top: 6px; border-radius: 3px; background: linear-gradient(270deg, var(--accent) var(--p), rgba(255,255,255,.1) var(--p)); }
+.struct-proj.is-late { color: #fca5a5; }
+.struct-field { display: flex; flex-direction: column; gap: 4px; font-size: .88rem; }
+.struct-field input[type=range] { width: 100%; }
 .struct-color--any { font-size: 0; }
 
 /* ---- شاشات المدير: كلمات بدل الأزرار والمربعات ---- */

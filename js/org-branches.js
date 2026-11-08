@@ -5,7 +5,7 @@ import { api, removeMember } from './cloud.js';
 import { getSetting, setSetting } from './storage.js';
 import {
   TYPES, colorOf, nodeById, permsOf, withStructure, addNode, addCustom, renameNode, removeNode,
-  placePerson, setHead, removePlace, unplacePerson, canHaveHead,
+  placePerson, setHead, removePlace, unplacePerson, canHaveHead, setProject,
 } from './org-structure.js';
 
 const KEY = 'branchesPublished'; // uid ← توقيع آخر ما نُشر
@@ -49,7 +49,7 @@ export function branchOf(st, uid, names) {
   }
   const nodes = st.nodes.filter((n) => ids.has(n.id)).map((n) => ({
     id: n.id, type: n.type, name: n.name, parent: ids.has(n.parent) ? n.parent : null, color: colorOf(n),
-    ...(n.type === 'custom' ? { links: (n.links || []).filter((l) => ids.has(l)) } : {}),
+    ...(n.type === 'custom' ? { links: (n.links || []).filter((l) => ids.has(l)), ...(n.project ? { project: n.project } : {}) } : {}),
     ...(projects.has(n.id) ? { proj: true } : {}),
   }));
   const people = Object.entries(st.people).map(([u, p]) => {
@@ -97,6 +97,7 @@ function check(st, from, op, p, members) {
     case 'addNode': return manage.has(p.parent) && TYPES[nodeById(st, p.parent)?.type]?.child && clean(p.name) ? null : 'خارج صلاحيته';
     case 'addProject': return proj.has(p.link) && clean(p.name) ? null : 'خارج صلاحيته';
     case 'rename': return (manage.has(p.id) || (proj.has(p.id) && nodeById(st, p.id)?.type === 'custom')) && clean(p.name) ? null : 'خارج صلاحيته';
+    case 'project': return proj.has(p.id) && nodeById(st, p.id)?.type === 'custom' ? null : 'خارج صلاحيته';
     case 'removeNode': return !heads.includes(p.id) && (manage.has(p.id) || (proj.has(p.id) && nodeById(st, p.id)?.type === 'custom')) ? null : 'خارج صلاحيته';
     case 'place': {
       const n = nodeById(st, p.node);
@@ -132,6 +133,7 @@ export async function handleRequests(docs, members) {
           else if (data.op === 'addProject') addCustom(st, p.link, clean(p.name), /^#[0-9a-f]{6}$/i.test(p.color) ? p.color : undefined);
           else if (data.op === 'rename') renameNode(st, p.id, clean(p.name));
           else if (data.op === 'removeNode') removeNode(st, p.id);
+          else if (data.op === 'project') setProject(st, p.id, { status: p.status, start: p.start, end: p.end, progress: p.progress });
           else if (data.op === 'place') {
             const n = nodeById(st, p.node);
             placePerson(st, p.uid, p.node, p.title === 'assistant');
