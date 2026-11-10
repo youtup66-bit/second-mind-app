@@ -106,6 +106,11 @@ export async function mount(root) {
       <div id="dev-body"><p class="muted">لحظة…</p></div>
     </section>` : ''}
 
+    <section class="card" id="account">
+      <h2>الحساب</h2>
+      <div id="acc-body"><p class="muted">لحظة…</p></div>
+    </section>
+
     <section class="card" id="org">
       <h2>المؤسسة</h2>
       <p class="muted">حساب للمدير والموظفين، ومحادثة مشتركة ونقاط وتقارير. ملاحظاتك الشخصية تبقى على جهازك.</p>
@@ -326,13 +331,15 @@ export async function mount(root) {
   `;
   // الموظف: لا رفيقة ولا عقل ولا ذكاء؛ نُبقي الحساب والمظهر والتثبيت والخصوصية فقط
   if (await getSetting('orgRole', null) === 'employee') {
-    const keep = new Set(['org', 'look', 'install', 'privacy', 'dev']); // dev: أدوات المطوّر في نسخة التجربة
+    const keep = new Set(['account', 'org', 'look', 'install', 'privacy', 'dev']); // dev: أدوات المطوّر في نسخة التجربة
     // المسؤول المسموح له بالمساعد: يضع مفتاحه الخاص (الموظف العادي لا مفتاح على جواله)
     const { startGroupSync, waitBranch } = await import('../group.js');
     await startGroupSync().catch(() => {});
     if ((await waitBranch())?.perms?.assistant) { keep.add('gemini'); root.querySelector('#key-official').hidden = false; }
     root.querySelectorAll(':scope > section.card').forEach((sec) => { if (!keep.has(sec.id)) sec.hidden = true; });
   }
+  // بطاقة الحساب: لكل أعضاء المؤسسة
+  if (await getSetting('orgRole', null)) { const { renderAccountCard } = await import('../account-card.js'); renderAccountCard(root); }
   // نسخة الهيكل: لرئيس القسم فقط
   if (await getSetting('orgRole', null) === 'manager') {
     root.querySelector('#struct-backup').hidden = false;
