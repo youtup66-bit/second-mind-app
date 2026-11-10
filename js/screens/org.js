@@ -146,6 +146,7 @@ async function renderLogin(root, err) {
         ${userField('no-user')}
         ${pwField('no-pass', 'كلمة المرور (٨ أحرف على الأقل)')}
         ${pwField('no-pass2', 'أعد كتابة كلمة المرور')}
+        ${field('no-hint', 'تلميح لكلمة المرور (اختياري، على هذا الجهاز فقط، لا تكتب الكلمة نفسها)', 'type="text" maxlength="120"')}
         <button class="btn" id="no-go" type="submit">إنشاء المؤسسة وحساب المدير</button>
         <p class="status" id="no-msg" role="status"></p>
       </form>
@@ -191,6 +192,8 @@ async function renderLogin(root, err) {
         username: root.querySelector('#no-user').value,
         password: pass,
       });
+      const hint = root.querySelector('#no-hint')?.value || '';
+      if (hint.trim()) { const { setHint } = await import('../pw-hint.js'); await setHint(root.querySelector('#no-user').value, hint).catch(() => {}); }
       location.hash = '#/structure';
     } catch (e) { setMsg(msg, e.message); }
   }));
