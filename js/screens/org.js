@@ -137,7 +137,8 @@ async function renderLogin(root, err) {
         ${field('li-pass', 'كلمة المرور', 'type="password" autocomplete="current-password" dir="ltr" required')}
         <button class="btn" id="li-go" type="submit">دخول</button>
         <p class="status" id="li-msg" role="status"></p>
-        <button type="button" class="link-btn" id="li-forgot">نسيت كلمة المرور؟</button>
+        <p class="status" id="li-hint" role="status" hidden></p>
+        <div class="row"><button type="button" class="link-btn" id="li-forgot">نسيت كلمة المرور؟</button><button type="button" class="link-btn" id="li-hintbtn">تلميح كلمة المرور</button></div>
       </form>
       <form class="card org-form" id="new-form" ${exists ? 'hidden' : ''}>
         ${field('no-org', 'اسم المؤسسة', 'type="text" required maxlength="80"')}
@@ -158,6 +159,17 @@ async function renderLogin(root, err) {
       location.hash = s?.member?.role === 'manager' ? '#/structure' : '#/group';
     } catch (e) { setMsg(root.querySelector('#li-msg'), e.message); }
   }));
+
+  // التلميح: من هذا الجهاز فقط (لا يُرفع إلى السحابة)
+  root.querySelector('#li-hintbtn').addEventListener('click', async () => {
+    const { getHint } = await import('../pw-hint.js');
+    const u = root.querySelector('#li-user').value.trim();
+    const hint = root.querySelector('#li-hint');
+    if (!u) { hint.textContent = 'اكتب اسم المستخدم أولاً.'; hint.hidden = false; return; }
+    const t = await getHint(u);
+    hint.textContent = t ? `تلميحك: ${t}` : 'لم تضع تلميحاً لهذا الحساب على هذا الجهاز.';
+    hint.hidden = false;
+  });
 
   // الاستعادة: بالبريد لمن ربطه (رئيس القسم)، وغيره يطلب من مسؤوله رابطاً جديداً
   root.querySelector('#li-forgot').addEventListener('click', async () => {
@@ -255,6 +267,7 @@ async function renderJoin(root, params) {
         ${userField('jn-user', 'اسم المستخدم (للدخول لاحقاً)', inv.username, true)}
         ${pwField('jn-pass', 'كلمة المرور (٨ أحرف على الأقل)')}
         ${pwField('jn-pass2', 'أعد كتابة كلمة المرور')}
+        ${field('jn-hint', 'تلميح لكلمة المرور (اختياري، على هذا الجهاز فقط، لا تكتب الكلمة نفسها)', 'type="text" maxlength="120"')}
         <button class="btn" id="jn-go" type="submit">انضمام</button>
         <p class="status" id="jn-msg" role="status"></p>
       </form>
@@ -270,6 +283,8 @@ async function renderJoin(root, params) {
     try { sessionStorage.setItem('sm-kit', JSON.stringify(data)); } catch { /* لا شيء */ }
     try {
       await joinWithInvite({ code: inv.code, username: inv.username, password: pass });
+      const hint = root.querySelector('#jn-hint')?.value || '';
+      if (hint.trim()) { const { setHint } = await import('../pw-hint.js'); await setHint(inv.username, hint).catch(() => {}); }
       showKit(root, data);
     } catch (e) {
       try { sessionStorage.removeItem('sm-kit'); } catch { /* لا شيء */ }
