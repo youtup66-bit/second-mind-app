@@ -58,6 +58,9 @@ export async function structureBackupStatus() {
 }
 
 // يربط أزرار النسخ والاستعادة في شاشة الإعدادات (لرئيس القسم فقط)
+// مشاركة الملف: تفتح قائمة الجوال، فيختار الشخص المكان (الملفات، Drive، واتساب...)
+export const canShareStructure = () => !!navigator.canShare && navigator.canShare({ files: [new File(['x'], 'x.smorg')] });
+
 export function bindStructureBackup(root) {
   const box = root.querySelector('#struct-backup');
   if (!box) return;
@@ -71,16 +74,28 @@ export function bindStructureBackup(root) {
       : 'لم تُحفظ نسخة للهيكل بعد. الهيكل على هذا الجهاز وحده.';
   };
   refresh();
+  const fileName = () => `هيكل-المؤسسة-${new Date().toISOString().slice(0, 10)}.smorg`;
+  // التنزيل المباشر: يذهب إلى مجلد التنزيلات
   box.querySelector('#sb-save').addEventListener('click', async () => {
     try {
       const text = await makeStructureBackup(pass());
-      const name = `هيكل-المؤسسة-${new Date().toISOString().slice(0, 10)}.smorg`;
       const url = URL.createObjectURL(new Blob([text], { type: 'application/json' }));
-      Object.assign(document.createElement('a'), { href: url, download: name }).click();
+      Object.assign(document.createElement('a'), { href: url, download: fileName() }).click();
       setTimeout(() => URL.revokeObjectURL(url), 4000);
-      say('حُفظت النسخة. احفظ الملف في مكان آمن، وكلمة السر لا تُستعاد.');
+      say('حُفظت النسخة في التنزيلات. احفظها في مكان آمن، وكلمة السر لا تُستعاد.');
       await refresh();
     } catch (err) { say(err.message, false); }
+  });
+  // المشاركة: تفتح قائمة الجوال ليختار المكان بنفسه
+  const share = box.querySelector('#sb-share');
+  if (share) share.addEventListener('click', async () => {
+    try {
+      const text = await makeStructureBackup(pass());
+      const file = new File([text], fileName(), { type: 'application/json' });
+      await navigator.share({ files: [file], title: 'نسخة هيكل المؤسسة' });
+      say('شاركتَ النسخة. احفظها في مكان آمن، وكلمة السر لا تُستعاد.');
+      await refresh();
+    } catch (err) { if (err.name !== 'AbortError') say(err.message, false); }
   });
   box.querySelector('#sb-file').addEventListener('change', async (e) => {
     const f = e.target.files?.[0];

@@ -291,7 +291,8 @@ export async function mount(root) {
         <label for="sb-pass">كلمة سر النسخة (٨ أحرف على الأقل)</label>
         <input id="sb-pass" type="password" dir="ltr" autocomplete="new-password">
         <div class="row">
-          <button class="btn" id="sb-save" type="button">حفظ نسخة الهيكل</button>
+          <button class="btn" id="sb-save" type="button">حفظ في التنزيلات</button>
+          <button class="btn btn--ghost" id="sb-share" type="button" hidden>مشاركة (اختر المكان)</button>
           <label class="btn btn--ghost file-btn">استعادة الهيكل…<input type="file" id="sb-file" accept=".smorg,application/json" hidden></label>
         </div>
         <p class="status" id="sb-msg" role="status"></p>
@@ -335,8 +336,9 @@ export async function mount(root) {
   // نسخة الهيكل: لرئيس القسم فقط
   if (await getSetting('orgRole', null) === 'manager') {
     root.querySelector('#struct-backup').hidden = false;
-    const { bindStructureBackup } = await import('../org-backup.js');
+    const { bindStructureBackup, canShareStructure } = await import('../org-backup.js');
     bindStructureBackup(root);
+    if (canShareStructure()) root.querySelector('#sb-share').hidden = false;
   }
   const openGroup = groupSettings(root);
   if (IS_DEV) renderDevTools(root.querySelector('#dev-body')).catch((e) => { root.querySelector('#dev-body').textContent = e.message; });
