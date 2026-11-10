@@ -39,9 +39,13 @@ export async function decryptStructure(pass, text) {
   return p;
 }
 
-export async function makeStructureBackup(pass) {
+// يُنشئ النص المشفّر فقط (دون تسجيل أنها نُسخت)
+export async function buildStructureText(pass) {
   const st = await loadStructure();
-  const text = await encryptStructure(pass, { at: Date.now(), structure: st });
+  return encryptStructure(pass, { at: Date.now(), structure: st });
+}
+export async function makeStructureBackup(pass) {
+  const text = await buildStructureText(pass);
   await setSetting('lastStructureBackupAt', Date.now());
   return text;
 }
@@ -86,16 +90,38 @@ export function bindStructureBackup(root) {
       await refresh();
     } catch (err) { say(err.message, false); }
   });
-  // المشاركة: تفتح قائمة الجوال ليختار المكان بنفسه
+  // المشاركة: تفتح قائمة الجوال ليختار المكان بنفسه.
+  // التشفير بطيء، والمتصفح يشترط أن تُفتح القائمة مباشرة بعد اللمسة، فنجهّز الملف مسبقاً أثناء كتابة كلمة السر
   const share = box.querySelector('#sb-share');
+  let prepared = null, preparedFor = null, preparing = 0;
+  const prepare = () => {
+    const p = pass();
+    clearTimeout(preparing);
+    if (p.length < 8) { prepared = null; return; }
+    preparing = setTimeout(async () => {
+      try { prepared = await buildStructureText(p); preparedFor = p; } catch { prepared = null; }
+    }, 600);
+  };
+  box.querySelector('#sb-pass').addEventListener('input', prepare);
   if (share) share.addEventListener('click', async () => {
     try {
-      const text = await makeStructureBackup(pass());
+      let text = prepared && preparedFor === pass() ? prepared : null;
+      // لم يُجهَّز بعد: نجهّزه ونطلب الضغط مرة أخرى (المتصفح يمنع المشاركة بعد الانتظار)
+      if (!text) {
+        say('أجهّز النسخة… اضغط «مشاركة» مرة أخرى بعد لحظة.', true);
+        text = await buildStructureText(pass());
+        prepared = text; preparedFor = pass();
+        return;
+      }
       const file = new File([text], fileName(), { type: 'application/json' });
       await navigator.share({ files: [file], title: 'نسخة هيكل المؤسسة' });
+      await setSetting('lastStructureBackupAt', Date.now());
       say('شاركتَ النسخة. احفظها في مكان آمن، وكلمة السر لا تُستعاد.');
       await refresh();
-    } catch (err) { if (err.name !== 'AbortError') say(err.message, false); }
+    } catch (err) {
+      if (err.name === 'AbortError') return;
+      say(`تعذّرت المشاركة: ${err.name === 'NotAllowedError' ? 'اضغط الزر مرة أخرى مباشرة' : err.message}`, false);
+    }
   });
   box.querySelector('#sb-file').addEventListener('change', async (e) => {
     const f = e.target.files?.[0];
