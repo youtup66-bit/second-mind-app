@@ -227,6 +227,9 @@ function renderStranger(root) {
 
 // ---- الانضمام برابط دعوة ----
 async function renderJoin(root, params) {
+  // انضم للتو: الورقة معلّقة حتى تُعرض بعد أي إعادة رسم (تغيّر الدور يعيد الشاشة، والدعوة صارت مستخدمة)
+  const pending = (() => { try { return JSON.parse(sessionStorage.getItem('sm-kit') || 'null'); } catch { return null; } })();
+  if (pending) { showKit(root, pending); return; }
   root.innerHTML = '<p class="muted org-wait">أفتح الدعوة…</p>';
   let inv;
   try {
@@ -262,9 +265,42 @@ async function renderJoin(root, params) {
     const msg = root.querySelector('#jn-msg');
     const pass = root.querySelector('#jn-pass').value;
     if (pass !== root.querySelector('#jn-pass2').value) { setMsg(msg, 'كلمتا المرور غير متطابقتين.'); return; }
+    // الورقة معلّقة قبل الانضمام: التطبيق يعيد رسم الشاشة أثناءه (تغيّر الدور)، فتُعرض الورقة في الرسم التالي
+    const data = { org: inv.org_name, name: inv.display_name, username: inv.username };
+    try { sessionStorage.setItem('sm-kit', JSON.stringify(data)); } catch { /* لا شيء */ }
     try {
       await joinWithInvite({ code: inv.code, username: inv.username, password: pass });
-      location.hash = '#/org';
-    } catch (e) { setMsg(msg, e.message); }
+      showKit(root, data);
+    } catch (e) {
+      try { sessionStorage.removeItem('sm-kit'); } catch { /* لا شيء */ }
+      setMsg(msg, e.message);
+    }
   }));
+}
+
+function showKit(root, data) {
+  const url = `${location.origin}${location.pathname}#/org`;
+  root.innerHTML = `
+    <div class="org">
+      <div class="org-hero">
+        <div class="org-hero__icon" aria-hidden="true">📄</div>
+        <h2>تم انضمامك ✓</h2>
+        <p class="muted">احفظ <b>ورقة الدخول</b> الآن. فيها اسمك واسم دخولك ورابط التطبيق، وخانة لتكتب فيها كلمة مرورك بخط يدك. لا نحفظ كلمة المرور في الورقة.</p>
+      </div>
+      <div class="card org-form">
+        <button class="btn" id="kit-save" type="button">حفظ الورقة كـ PDF</button>
+        <p class="muted">تفتح نافذة الطباعة: اختر «حفظ كـ PDF» أو «طباعة».</p>
+        <p class="status" id="kit-msg" role="status"></p>
+        <button class="btn btn--ghost" id="kit-done" type="button">تم، متابعة</button>
+      </div>
+    </div>`;
+  const msg = root.querySelector('#kit-msg');
+  root.querySelector('#kit-save').addEventListener('click', async () => {
+    const { openKit } = await import('../join-kit.js');
+    if (!openKit({ ...data, url })) msg.textContent = 'المتصفح منع النافذة. اسمح بالنوافذ المنبثقة ثم اضغط مرة أخرى.';
+  });
+  root.querySelector('#kit-done').addEventListener('click', () => {
+    try { sessionStorage.removeItem('sm-kit'); } catch { /* لا شيء */ }
+    location.hash = '#/org';
+  });
 }
