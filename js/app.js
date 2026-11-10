@@ -209,6 +209,12 @@ const tickReminders = () => {
   checkReminders((r) => notice(r.text)).catch(() => {});
   // مهام أرسلتُها ولم يُنشر فيها منذ ١٢ ساعة: ملاحظة «لم ينشر حتى الآن»
   if (role) import('./tasks.js').then((t) => t.checkSilent((txt) => notice(`📌 ${txt}`))).then(refreshTaskBadge).catch(() => {});
+  // تذكير رئيس القسم بنسخة الهيكل كل أسبوع (مرة كل جلسة تقريباً، لا يكرر إن لم تُحفظ نسخة)
+  if (role === 'manager' && !sessionStorage.getItem('sm-struct-remind')) {
+    import('./org-backup.js').then((b) => b.structureBackupStatus()).then((s) => {
+      if (s.needsReminder) { sessionStorage.setItem('sm-struct-remind', '1'); notice('تذكير: احفظ نسخة احتياطية للهيكل من الإعدادات ← النسخ الاحتياطي.'); }
+    }).catch(() => {});
+  }
 };
 tickReminders();
 setInterval(tickReminders, 30_000);

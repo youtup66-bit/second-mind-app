@@ -284,6 +284,18 @@ export async function mount(root) {
         ${canShareFiles() ? '<button class="btn btn--ghost" id="share">مشاركة النسخة</button>' : ''}
       </div>
       <p class="muted">الملف يحوي ملاحظاتك ومحادثتك، ونسخة مقروءة مقسّمة حسب الأقسام. لا يحوي مفتاح Gemini.</p>
+      <div id="struct-backup" hidden>
+        <h3 class="subhead">نسخة احتياطية للهيكل</h3>
+        <p class="muted" id="sb-info"></p>
+        <p class="muted">الهيكل (الكرات والأشخاص والمناصب) على جوالك وحده. تُحفظ نسخته في ملف مشفّر بكلمة سر تختارها.</p>
+        <label for="sb-pass">كلمة سر النسخة (٨ أحرف على الأقل)</label>
+        <input id="sb-pass" type="password" dir="ltr" autocomplete="new-password">
+        <div class="row">
+          <button class="btn" id="sb-save" type="button">حفظ نسخة الهيكل</button>
+          <label class="btn btn--ghost file-btn">استعادة الهيكل…<input type="file" id="sb-file" accept=".smorg,application/json" hidden></label>
+        </div>
+        <p class="status" id="sb-msg" role="status"></p>
+      </div>
 
       <h3 class="subhead">استيراد نسخة</h3>
       <div class="radio-row" role="radiogroup" aria-label="طريقة الاستيراد">
@@ -319,6 +331,12 @@ export async function mount(root) {
     await startGroupSync().catch(() => {});
     if ((await waitBranch())?.perms?.assistant) { keep.add('gemini'); root.querySelector('#key-official').hidden = false; }
     root.querySelectorAll(':scope > section.card').forEach((sec) => { if (!keep.has(sec.id)) sec.hidden = true; });
+  }
+  // نسخة الهيكل: لرئيس القسم فقط
+  if (await getSetting('orgRole', null) === 'manager') {
+    root.querySelector('#struct-backup').hidden = false;
+    const { bindStructureBackup } = await import('../org-backup.js');
+    bindStructureBackup(root);
   }
   const openGroup = groupSettings(root);
   if (IS_DEV) renderDevTools(root.querySelector('#dev-body')).catch((e) => { root.querySelector('#dev-body').textContent = e.message; });
