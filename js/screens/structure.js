@@ -290,7 +290,7 @@ export async function mount(root) {
           </form>
           <form class="struct-form struct-form--col" id="em">
             <b>الاستعادة بالبريد</b>
-            <small class="muted">تصل رسالة تأكيد إلى بريدك. بعدها تدخل ببريدك بدل اسم المستخدم، وتستعيد كلمة المرور منه إن نسيتها.</small>
+            <small class="muted"><b>القرار:</b> البريد هو طريقة دخولك من الآن. تصل رسالة تأكيد إلى بريدك، وبعد تأكيدها يتوقف الدخول باسم المستخدم، وتستعيد كلمة المرور منه إن نسيتها.</small>
             <input type="email" id="em-addr" required dir="ltr" placeholder="name@example.com">
             <input type="password" id="em-cur" required placeholder="كلمة المرور الحالية" autocomplete="current-password">
             <button class="btn" type="submit">ربط البريد</button>
@@ -380,7 +380,7 @@ export async function mount(root) {
     if (mode === 'me') {
       const msg = panel.querySelector('#me-msg');
       const say = (t, ok) => { msg.textContent = t; msg.className = `status ${ok ? 'status--ok' : 'status--err'}`; };
-      currentEmail().then((e) => { const el = panel.querySelector('#me-email'); if (el) el.textContent = e ? `البريد للاستعادة: ${e} (تدخل به أيضاً)` : 'البريد للاستعادة: لم يُربط بعد'; }).catch(() => {});
+      currentEmail().then((e) => { const el = panel.querySelector('#me-email'); if (el) el.textContent = e ? `البريد: ${e} · تدخل به الآن` : 'البريد: لم يُربط بعد · بدونه لا استعادة لك'; }).catch(() => {});
       panel.querySelector('#pw').addEventListener('submit', async (e) => {
         e.preventDefault();
         const next = panel.querySelector('#pw-new').value;

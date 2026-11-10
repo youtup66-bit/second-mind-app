@@ -133,7 +133,7 @@ async function renderLogin(root, err) {
       </div>
       ${err ? `<p class="status status--err">${esc(err.message)}</p>` : ''}
       <form class="card org-form" id="login-form" ${exists ? '' : 'hidden'}>
-        ${userField('li-user', 'اسم المستخدم (أو البريد إن ربطته)')}
+        ${userField('li-user', 'البريد (لرئيس القسم بعد ربطه) أو اسم المستخدم')}
         ${field('li-pass', 'كلمة المرور', 'type="password" autocomplete="current-password" dir="ltr" required')}
         <button class="btn" id="li-go" type="submit">دخول</button>
         <p class="status" id="li-msg" role="status"></p>
