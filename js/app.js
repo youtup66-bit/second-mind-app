@@ -95,7 +95,8 @@ let floaterRoute = 'home';
 const noCompanion = true;
 // لا تطفو فوق شاشات المحادثة (الرئيسية والمجموعة)
 // كرة المساعد الطافية: عند رئيس القسم في كل الشاشات عدا شاشة المساعد
-const syncFloater = () => setOrbVisible((role === 'manager' || (role === 'employee' && !!groupBranch()?.perms?.assistant)) && floaterRoute !== 'home');
+// لا تطفو فوق شاشة المساعد ولا الإعدادات (تغطي أزرارها)
+const syncFloater = () => setOrbVisible((role === 'manager' || (role === 'employee' && !!groupBranch()?.perms?.assistant)) && floaterRoute !== 'home' && floaterRoute !== 'settings');
 // بلا رفيقة: تبويب "المحادثة"، والشاشة الرئيسية بلا شريط عنوان (رأس المحادثة يكفي)
 // تبويب "الموظفين" يظهر للمدير فقط (الصلاحية الفعلية تفرضها قاعدة البيانات)
 function applyRole(next) {
