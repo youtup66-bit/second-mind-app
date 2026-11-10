@@ -860,6 +860,8 @@ export async function mount(root) {
     const file = e.target.files[0];
     e.target.value = '';
     if (!file) return;
+    // ملف الهيكل (.smorg) يُستعاد من زر «استعادة الهيكل» في قسم نسخة الهيكل، لا من هنا
+    if (/\.smorg$/i.test(file.name)) { show(backupMsg, 'هذا ملف نسخة الهيكل. استعده من زر «استعادة الهيكل…» أعلاه (في قسم نسخة الهيكل).', false); return; }
     const mode = root.querySelector('input[name="mode"]:checked').value;
     if (mode === 'replace' && !confirm('سيُستبدل كل ما في التطبيق بمحتوى الملف (مع حفظ لقطة قبلها). متابعة؟')) return;
     show(backupMsg, 'جارٍ الاستيراد…');
