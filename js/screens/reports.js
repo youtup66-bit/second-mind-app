@@ -38,6 +38,7 @@ export async function mount(root) {
   root.innerHTML = `
     <div class="rep">
       ${staffTabs('reports')}
+      <section class="rep-sec" id="morning"></section>
       <section class="rep-sec" id="alerts"></section>
       <section class="rep-sec">
         <h3>التقارير</h3>
@@ -79,6 +80,13 @@ export async function mount(root) {
   async function render() {
     if (!alive) return;
     const [al, reps, tasks, rems, works] = await Promise.all([alerts(), listReports(), listTasks(), listReminders(), getWorks()]);
+    // صباح القسم: للمدير فقط، داخل التقارير (لا في الشاشة الرئيسية)
+    const role = await getSetting('orgRole', null);
+    if (role === 'manager') {
+      const { morningBriefing, morningHTML } = await import('../org-morning.js');
+      const b = await morningBriefing().catch(() => null);
+      if (b && alive) $('#morning').innerHTML = morningHTML(b, esc);
+    }
     $('#alerts').innerHTML = `<h3>التنبيهات</h3>${al.length
       ? `<ul class="rep-list">${al.map((a) => `<li><a href="${a.link}">${esc(a.text)}</a></li>`).join('')}</ul>`
       : '<p class="muted">لا تنبيهات. كل شيء على ما يرام.</p>'}`;
