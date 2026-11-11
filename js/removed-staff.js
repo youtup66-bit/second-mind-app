@@ -31,7 +31,23 @@ export async function archiveMember(snap) {
   const list = (await getSetting(KEY, [])) || [];
   await setSetting(KEY, [snap, ...list.filter((x) => x.uid !== snap.uid)].slice(0, 300));
 }
-export const listRemoved = async () => (await getSetting(KEY, [])) || [];
+// القائمة الظاهرة والأرشيف (المؤرشف يبقى محفوظاً ولا يظهر في القائمة الأساسية)
+export const listRemoved = async () => ((await getSetting(KEY, [])) || []).filter((x) => !x.archived);
+export const listArchived = async () => ((await getSetting(KEY, [])) || []).filter((x) => x.archived);
+export async function setArchived(uid, on) {
+  const list = (await getSetting(KEY, [])) || [];
+  await setSetting(KEY, list.map((x) => (x.uid === uid ? { ...x, archived: !!on } : x)));
+}
+// حذف نهائي: تُمسح اللقطة من الجهاز، ويمكن أن تُمسح منشوراته ونقاطه من الجهاز أيضاً (اختياري)
+export async function deleteRemovedForever(uid, { alsoData = false } = {}) {
+  const { getPoints, deletePoint, getGroupMessages, deleteGroupMessage } = await import('./storage.js');
+  if (alsoData) {
+    for (const p of (await getPoints()).filter((x) => x.user === uid)) await deletePoint(p.id).catch(() => {});
+    for (const m of (await getGroupMessages()).filter((x) => x.from === uid)) await deleteGroupMessage(m.id).catch(() => {});
+  }
+  const list = (await getSetting(KEY, [])) || [];
+  await setSetting(KEY, list.filter((x) => x.uid !== uid));
+}
 
 // نص سطر للعرض
 export function removedLines(s) {

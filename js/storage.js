@@ -153,6 +153,8 @@ export const clearGroup = () => run('group', 'readwrite', (s) => s.clear());
 // { id, user, workId, workName, points, count, at, msgId?, quote?, status: 'suggested'|'approved'|'rejected', source: 'ai'|'manual' }
 export const putPoint = (p) => run('points', 'readwrite', (s) => s.put(p));
 export const deletePoint = (id) => run('points', 'readwrite', (s) => s.delete(id));
+// حذف رسالة مجموعة بمعرّفها (يستعمله الحذف النهائي لموظف محذوف)
+export const deleteGroupMessage = (id) => run('group', 'readwrite', (s) => s.delete(gKey(id)));
 export const getPoints = () => run('points', 'readonly', (s) => s.getAll());
 
 // ---- التصدير والاستيراد ----

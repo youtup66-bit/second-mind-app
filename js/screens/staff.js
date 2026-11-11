@@ -41,6 +41,10 @@ export async function mount(root) {
         <summary>الموظفون المحذوفون</summary>
         <ul class="removed-list" id="removed-list"></ul>
       </details>
+      <details class="removed-staff" id="archived" hidden>
+        <summary>الأرشيف</summary>
+        <ul class="removed-list" id="archived-list"></ul>
+      </details>
       <button type="button" class="text-row text-row--accent" id="add-btn">إضافة موظف</button>
       <form class="org-form staff-form" id="add-form" hidden>
         <label class="org-field"><span>اسم الموظف</span><input id="ad-name" type="text" required maxlength="60" placeholder="مثال: أحمد علي"></label>
@@ -70,15 +74,24 @@ export async function mount(root) {
     const period = await getSetting('pointsPeriod', 'month');
     const t = await totals(period).catch(() => new Map());
     // الموظفون المحذوفون: آخر معلوماتهم قبل الحذف
-    const { listRemoved, removedLines } = await import('../removed-staff.js');
+    const { listRemoved, listArchived, removedLines } = await import('../removed-staff.js');
     const gone = await listRemoved();
+    const old = await listArchived();
     const removedBox = root.querySelector('#removed');
     removedBox.hidden = !gone.length;
-    root.querySelector('#removed-list').innerHTML = gone.map((x) => `
-      <li><b>${esc(x.name)}</b>${x.username ? ` <small dir="ltr">${esc(x.username)}</small>` : ''}
+    const card = (x, archived) => `
+      <li data-uid="${esc(x.uid)}"><b>${esc(x.name)}</b>${x.username ? ` <small dir="ltr">${esc(x.username)}</small>` : ''}
         <small class="removed-date">حُذف ${new Date(x.deletedAt).toLocaleDateString('ar', { day: 'numeric', month: 'short', year: 'numeric' })}</small>
         ${removedLines(x).map((l) => `<span>${esc(l)}</span>`).join('')}
-      </li>`).join('');
+        <div class="removed-acts">
+          ${archived ? '<button type="button" class="text-btn" data-restore>إلغاء الأرشفة</button>' : '<button type="button" class="text-btn" data-archive>أرشفة</button>'}
+          <button type="button" class="text-btn text-btn--danger" data-forever>حذف نهائي</button>
+        </div>
+      </li>`;
+    root.querySelector('#removed-list').innerHTML = gone.map((x) => card(x, false)).join('');
+    root.querySelector('#archived').hidden = !old.length;
+    root.querySelector('#archived summary').textContent = `الأرشيف (${old.length})`;
+    root.querySelector('#archived-list').innerHTML = old.map((x) => card(x, true)).join('');
     list.innerHTML = [
       ...staff.map((m) => `
         <li><a class="staff-row" href="#/staff?id=${encodeURIComponent(m.user_id)}">
@@ -127,6 +140,24 @@ export async function mount(root) {
     out.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
   }
 
+  // الموظفون المحذوفون: أرشفة، وإلغاء الأرشفة، وحذف نهائي (مع سؤال عن منشوراته ونقاطه)
+  const onRemovedClick = async (e) => {
+    const li = e.target.closest('li[data-uid]');
+    if (!li) return;
+    const uid = li.dataset.uid;
+    const m = await import('../removed-staff.js');
+    if (e.target.closest('[data-archive]')) { await m.setArchived(uid, true); return render(); }
+    if (e.target.closest('[data-restore]')) { await m.setArchived(uid, false); return render(); }
+    if (e.target.closest('[data-forever]')) {
+      const name = li.querySelector('b')?.textContent || 'هذا الموظف';
+      if (!confirm(`حذف ${name} نهائياً من هذا الجهاز؟ لا يمكن التراجع.`)) return;
+      const alsoData = confirm('هل تحذف أيضاً منشوراته ونقاطه من هذا الجهاز؟\nموافق = نعم، وتختفي من التقارير والنقاط.\nإلغاء = لا، وتبقى.');
+      await m.deleteRemovedForever(uid, { alsoData });
+      return render();
+    }
+  };
+  root.querySelector('#removed').addEventListener('click', onRemovedClick);
+  root.querySelector('#archived').addEventListener('click', onRemovedClick);
   list.addEventListener('click', (e) => {
     const b = e.target.closest('.staff-row--pending');
     if (b) showInvite(b.dataset.code, b.dataset.name);
