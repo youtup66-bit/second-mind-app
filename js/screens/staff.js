@@ -37,6 +37,10 @@ export async function mount(root) {
       ${staffTabs('staff')}
       <p class="muted staff__org">${esc(s.org?.name)}</p>
       <ul class="staff-list" id="list" aria-label="الموظفون"></ul>
+      <details class="removed-staff" id="removed" hidden>
+        <summary>الموظفون المحذوفون</summary>
+        <ul class="removed-list" id="removed-list"></ul>
+      </details>
       <button type="button" class="text-row text-row--accent" id="add-btn">إضافة موظف</button>
       <form class="org-form staff-form" id="add-form" hidden>
         <label class="org-field"><span>اسم الموظف</span><input id="ad-name" type="text" required maxlength="60" placeholder="مثال: أحمد علي"></label>
@@ -65,6 +69,16 @@ export async function mount(root) {
     // النقاط أمام الأسماء (حسب الفترة المختارة في شاشة النقاط)
     const period = await getSetting('pointsPeriod', 'month');
     const t = await totals(period).catch(() => new Map());
+    // الموظفون المحذوفون: آخر معلوماتهم قبل الحذف
+    const { listRemoved, removedLines } = await import('../removed-staff.js');
+    const gone = await listRemoved();
+    const removedBox = root.querySelector('#removed');
+    removedBox.hidden = !gone.length;
+    root.querySelector('#removed-list').innerHTML = gone.map((x) => `
+      <li><b>${esc(x.name)}</b>${x.username ? ` <small dir="ltr">${esc(x.username)}</small>` : ''}
+        <small class="removed-date">حُذف ${new Date(x.deletedAt).toLocaleDateString('ar', { day: 'numeric', month: 'short', year: 'numeric' })}</small>
+        ${removedLines(x).map((l) => `<span>${esc(l)}</span>`).join('')}
+      </li>`).join('');
     list.innerHTML = [
       ...staff.map((m) => `
         <li><a class="staff-row" href="#/staff?id=${encodeURIComponent(m.user_id)}">

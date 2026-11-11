@@ -176,8 +176,13 @@ export async function handleRequests(docs, members) {
             if (canHaveHead(n.type)) setHead(st, p.uid, p.node, p.title === 'head');
           } else if (data.op === 'unplace') removePlace(st, p.uid, p.node);
           else if (data.op === 'deleteAccount') {
+            // لقطة قبل النقل: تبقى في قائمة المحذوفين عند رئيس القسم
+            const { snapshotMember, archiveMember } = await import('./removed-staff.js');
+            const succ = p.successor ? (members.get(p.successor)?.name || '') : '';
+            const snap = await snapshotMember(p.uid, st, succ);
             if (p.successor) moveMemberPlaces(st, p.uid, p.successor); else unplacePerson(st, p.uid);
             await removeMember(p.uid);
+            await archiveMember(snap);
           }
           changed = true;
         } catch (e) { console.warn('request', data.op, e); }

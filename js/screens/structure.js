@@ -545,11 +545,15 @@ export async function mount(root) {
         if (!chosen) return;
         if (!confirm(`سيُسلَّم ${nameOf(u)} إلى ${chosen.display_name}، ثم يُحذف حسابه من المؤسسة، ولا يستطيع الدخول بعدها. متابعة؟`)) return;
         try {
+          // لقطة قبل أي نقل: تبقى في قائمة المحذوفين داخل شاشة الموظفين
+          const { snapshotMember, archiveMember } = await import('../removed-staff.js');
+          const snap = await snapshotMember(u, st, chosen.display_name);
           const { transferOpenTasks } = await import('../org-accounts.js');
           const moved = await transferOpenTasks(u, chosen.user_id);
           moveMemberPlaces(st, u, chosen.user_id);
           await saveStructure(st);
           await removeMember(u);
+          await archiveMember(snap);
           if (moved) alert(`أُعيدت ${moved} ${moved === 1 ? "مهمة" : "مهام"} إلى ${chosen.display_name}`);
         } catch (err) { alert(err.message); return; }
         members = members.filter((m) => m.user_id !== u);
