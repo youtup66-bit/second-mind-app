@@ -35,6 +35,7 @@ const dot = (c) => `<i class="sdot" style="background:${c}"></i>`;
 let graph = null;
 let alive = false;
 let accountPref = null; // المنصب المختار مسبقاً في نموذج الحساب
+let accountName = ''; // اسم مُعبّأ مسبقاً (كرة الموظف التي أنشأتها ثم نضيف لها الرابط)
 let offStats = null;
 
 export async function mount(root) {
@@ -257,11 +258,11 @@ export async function mount(root) {
       const pref = accountPref && titles.includes(accountPref) ? accountPref : titles[0];
       sub = `<form class="struct-form struct-form--col" id="af">
           <p class="struct-sub">حساب جديد في «${esc(n.name)}». يصله رابط فيضع كلمة مروره بنفسه:</p>
-          <input id="af-name" maxlength="60" required placeholder="الاسم الكامل">
+          <input id="af-name" maxlength="60" required placeholder="الاسم الكامل" value="${esc(accountName)}">
           <input id="af-user" maxlength="30" required dir="ltr" placeholder="اسم المستخدم (إنجليزي)" autocapitalize="off" autocomplete="off">
           <div class="struct-pick struct-pick--row">${titles.map((t) => `<label class="switch"><input type="radio" name="af-title" value="${t}" ${t === pref ? 'checked' : ''}><span>${TITLES[t]}</span></label>`).join('')}</div>
           <p class="status" id="af-msg" role="status"></p>
-          <div class="row"><button class="btn" type="submit">إنشاء الرابط</button><button class="btn btn--ghost" type="button" data-a="cancel">إلغاء</button></div>
+          <div class="row"><button class="btn" type="submit">إنشاء الرابط</button>${n.type !== 'employee' ? '<button class="btn btn--ghost" type="button" id="af-ball">إنشاء كرة</button>' : ''}<button class="btn btn--ghost" type="button" data-a="cancel">إلغاء</button></div>
         </form>`;
     } else if (mode === 'invite-out' && lastInvite) {
       sub = `<div class="struct-form struct-form--col">
@@ -331,7 +332,7 @@ export async function mount(root) {
       ${waiting.length ? `<ul class="struct-waiting">${waiting.map(([code, x]) => `<li><span>بانتظار التسجيل: <b>${esc(x.name)}</b> (${TITLES[x.title]})</span><button type="button" data-link-code="${esc(code)}" data-link-name="${esc(x.name)}">الرابط</button><button type="button" data-cancel-code="${esc(code)}" class="is-danger">إلغاء</button></li>`).join('')}</ul>` : ''}`}
       ${sub || `<div class="struct-actions">
         ${n.id === 'root' ? '<button type="button" data-a="me">حسابك: كلمة المرور والاستعادة</button>' : ''}
-        ${n.type === 'employee' ? '<button type="button" data-a="account-new">إضافة حساب الموظف (برابط)</button>' : ''}
+        ${n.type === 'employee' ? '<button type="button" data-a="account-new">إنشاء رابط</button>' : ''}
         ${n.type !== 'employee' ? '<button type="button" data-a="account">إضافة حساب (يمكن إضافته لاحقاً)</button>' : ''}
         ${n.type !== 'employee' && !custom ? '<button type="button" data-a="account-new">إضافة موظف جديد (حساب برابط)</button>' : ''}
         ${canHaveHead(n.type) ? '<button type="button" data-a="perms">خيارات الإظهار</button>' : ''}
@@ -427,6 +428,16 @@ export async function mount(root) {
       if (mode === 'add') addNode(st, n.id, name); else renameNode(st, n.id, name);
       await commit(n.id);
     });
+    // إنشاء كرة للموظف من نموذج الحساب (يُضاف الرابط لاحقاً من الكرة نفسها)
+    panel.querySelector('#af-ball')?.addEventListener('click', async () => {
+      const name = panel.querySelector('#af-name').value.trim();
+      const msg = panel.querySelector('#msg') || panel.appendChild(Object.assign(document.createElement('p'), { id: 'msg', className: 'status' }));
+      if (!name) { msg.textContent = 'اكتب اسم الموظف أولاً.'; msg.className = 'status status--err'; return; }
+      const { addEmployeeBall } = await import('../org-structure.js');
+      const b = addEmployeeBall(st, n.id, name);
+      accountName = ''; accountPref = null;
+      await commit(b.id);
+    });
     panel.querySelector('#ebf')?.addEventListener('submit', async (e) => {
       e.preventDefault();
       const { addEmployeeBall } = await import('../org-structure.js');
@@ -489,8 +500,8 @@ export async function mount(root) {
       }
       if (a === 'custom') draftColor = PALETTE[st.nodes.filter((x) => x.type === 'custom').length % PALETTE.length];
       // إضافة موظف جديد: نموذج الحساب مختاراً فيه «موظف»
-      if (a === 'account-new') { accountPref = 'member'; mode = 'account'; renderPanel(); return; }
-      if (a === 'account') accountPref = null;
+      if (a === 'account-new') { accountPref = 'member'; accountName = n.type === 'employee' ? n.name : ''; mode = 'account'; renderPanel(); return; }
+      if (a === 'account') { accountPref = null; accountName = ''; }
       mode = a;
       renderPanel();
     }));
