@@ -1,6 +1,6 @@
 // خدمة المؤسسة (Firebase): الحسابات، والمدير، والموظفون، والدعوات.
 // الملاحظات الشخصية لا تمر من هنا أبداً؛ تبقى على الجهاز.
-import { getSetting, setSetting, deleteSetting } from './storage.js';
+import { getSetting, setSetting, deleteSetting, setSettingsAccount } from './storage.js';
 
 const FB = 'https://www.gstatic.com/firebasejs/12.19.0';
 // أسماء المستخدمين تتحول داخلياً إلى بريد لا يُرسل إليه شيء (نطاق example.com محجوز عالمياً لهذا)
@@ -124,11 +124,12 @@ const memberShape = (id, d) => d && ({
 
 // يعيد { user, member, org } أو null
 export async function session() {
-  if (!(await cloudConfig())) return null;
+  if (!(await cloudConfig())) { await setSettingsAccount(null); return null; }
   const { auth, db, F } = await api();
   await auth.authStateReady();
   const user = auth.currentUser;
-  if (!user) { cacheRole(null); return null; }
+  if (!user) { cacheRole(null); await setSettingsAccount(null); return null; }
+  await setSettingsAccount(user.uid);
   return run(async () => {
     const [m, o] = await Promise.all([F.getDoc(F.doc(db, 'members', user.uid)), F.getDoc(F.doc(db, 'orgs', 'main'))]);
     const s = { user: { id: user.uid }, member: m.exists() ? memberShape(user.uid, m.data()) : null, org: o.exists() ? { name: o.data().name } : null };
@@ -195,6 +196,7 @@ export async function signOut() {
   window.dispatchEvent(new Event('sm:signout'));
   if (fb) await fb.A.signOut(fb.auth).catch(() => {});
   cacheRole(null);
+  await setSettingsAccount(null);
 }
 
 // ينشئ الحساب، أو يدخل به إن كان موجوداً بكلمة المرور نفسها (موظف أُزيل ثم دُعي مجدداً)

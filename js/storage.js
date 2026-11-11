@@ -60,14 +60,51 @@ async function run(storeName, mode, fn) {
 }
 
 // ---- الإعدادات ----
-export const getSetting = (key, fallback = null) =>
-  run('settings', 'readonly', (s) => s.get(key)).then((v) => (v === undefined ? fallback : v));
+// ---- نطاق الحساب للإعدادات ----
+// خانات بيانات المؤسسة والحساب تُحفظ بمفتاح يخص الحساب المسجّل: "المفتاح|معرّف الحساب".
+// الحساب الأول الذي استخدم الجهاز يبقى مفتاحه كما هو (فلا يضيع شيء)، وكل حساب آخر له نسخته.
+const ACCOUNT_KEYS = new Set([
+  'orgStructure', 'branchesPublished', 'placedMembers', 'ballInvites', 'removedStaff',
+  'orgWorks', 'pointsSince', 'pointsAuto', 'orgReports', 'orgTasks', 'reminders', 'pwHints',
+  'orgRole', 'lastStructureBackupAt', 'groupSeenAt', 'groupSeenRooms', 'roomsPublished', 'roomNames',
+]);
+let scope = null; // { acct, owner }
+const rawGet = (key) => run('settings', 'readonly', (s) => s.get(key));
+const rawSet = (key, value) => run('settings', 'readwrite', (s) => s.put(value, key));
+async function loadScope() {
+  if (!scope) {
+    const [acct, owner, groupOwner] = await Promise.all([rawGet('settingsAcct'), rawGet('settingsOwner'), rawGet('groupOwner')]);
+    scope = { acct: acct || null, owner: owner || groupOwner || null };
+  }
+  return scope;
+}
+// يُستدعى عند معرفة الحساب المسجّل، ويُمرَّر null عند الخروج أو عند غياب المؤسسة
+export async function setSettingsAccount(uid) {
+  const sc = await loadScope();
+  if (uid && !sc.owner) { sc.owner = uid; await rawSet('settingsOwner', uid); }
+  if (sc.acct === (uid || null)) return;
+  sc.acct = uid || null;
+  await rawSet('settingsAcct', sc.acct);
+}
+async function scopedKey(key) {
+  if (!ACCOUNT_KEYS.has(key)) return key;
+  const { acct, owner } = await loadScope();
+  return !acct || acct === owner ? key : `${key}|${acct}`;
+}
 
-export const setSetting = (key, value) =>
-  run('settings', 'readwrite', (s) => s.put(value, key));
-
-export const deleteSetting = (key) =>
-  run('settings', 'readwrite', (s) => s.delete(key));
+export async function getSetting(key, fallback = null) {
+  const k = await scopedKey(key);
+  const v = await run('settings', 'readonly', (s) => s.get(k));
+  return v === undefined ? fallback : v;
+}
+export async function setSetting(key, value) {
+  const k = await scopedKey(key);
+  return run('settings', 'readwrite', (s) => s.put(value, k));
+}
+export async function deleteSetting(key) {
+  const k = await scopedKey(key);
+  return run('settings', 'readwrite', (s) => s.delete(k));
+}
 
 // ---- الملاحظات ----
 export async function addEntry({ text, category = null, source = 'text', meta = {} }) {
@@ -170,7 +207,8 @@ async function getAllSettings() {
     req.onsuccess = () => {
       const c = req.result;
       if (!c) return resolve(out);
-      if (!PRIVATE_SETTINGS.has(c.key)) out[c.key] = c.value;
+      // المفاتيح ذات "|" تخص حساباً غير حساب الجهاز الأول: لا تدخل نسخة الجهاز
+      if (!PRIVATE_SETTINGS.has(c.key) && !String(c.key).includes('|')) out[c.key] = c.value;
       c.continue();
     };
     req.onerror = () => reject(req.error);
