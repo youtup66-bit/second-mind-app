@@ -428,11 +428,22 @@ async function mountList(root, s, syncErr, mode, tab = 'chats') {
         ? [...members0].filter(([u, m]) => u !== me.uid && m.role === 'employee').map(([u]) => u)
         : myContacts().filter((u) => members0.has(u));
       const people = ids.map((u) => ({ uid: u, name: members0.get(u)?.name || 'موظف' })).sort((a, b) => a.name.localeCompare(b.name, 'ar'));
+      // كرات الموظفين بلا حساب بعد (من الهيكل): تظهر هنا بأسمائها، ولا تُراسَل قبل أن يدخل صاحبها
+      let pending = [];
+      if (me?.role === 'manager') {
+        const { loadStructure } = await import('../org-structure.js');
+        const { ballInvites } = await import('../org-accounts.js');
+        const st = await loadStructure();
+        const sent = new Set(Object.values(await ballInvites()).map((x) => x.card).filter(Boolean));
+        pending = st.nodes.filter((n) => n.person && !sent.has(n.id)).map((n) => ({ name: n.name, role: ({ member: 'موظف', assistant: 'معاون', personnel: 'ذاتية' })[n.person.title] || 'موظف' }));
+      }
       list.innerHTML = people.map((p) => `<li><button type="button" class="g-room g-person" data-uid="${esc(p.uid)}">
         <span class="wa-avatar wa-avatar--group" aria-hidden="true">${esc(initial(p.name))}</span>
         <span class="g-room__body"><span class="g-room__top"><b>${esc(p.name)}</b></span><span class="g-room__bottom"><span class="g-room__last"><i>راسِل مباشرة</i></span></span></span></button></li>`).join('')
+        + pending.map((b) => `<li class="g-room is-past"><span class="wa-avatar wa-avatar--group" aria-hidden="true">${esc(initial(b.name))}</span>
+        <span class="g-room__body"><span class="g-room__top"><b>${esc(b.name)}</b></span><span class="g-room__bottom"><span class="g-room__last"><i>${esc(b.role)} · بلا حساب بعد</i></span></span></span></li>`).join('')
         || `<li class="wa-day">${me?.role === 'manager' ? 'لا موظفين بعد.' : 'لا أحد في وحدتك بعد للمراسلة المباشرة.'}</li>`;
-      statusEl.textContent = people.length ? `${people.length} ${people.length === 1 ? 'شخص' : 'أشخاص'}` : '';
+      statusEl.textContent = (people.length + pending.length) ? `${people.length + pending.length} ${people.length + pending.length === 1 ? 'شخص' : 'أشخاص'}` : '';
       return;
     }
     const mineRoom = (id) => (tab === 'sections' ? !isChatRoom(id) : isChatRoom(id));
