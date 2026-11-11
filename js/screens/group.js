@@ -29,9 +29,12 @@ const TICKS = { queued: '🕓', sent: '✓', failed: '⚠️' };
 let cleanup = [];
 
 // mode: 'work' منشورات الأعمال (العامة ومجموعات الكرات) · 'chat' مجموعات المحادثة
-export const mount = (root) => mountMode(root, 'work');
+// المحادثة تضم الآن الكروبات كلها: الأعمال صارت قسماً «الأقسام» فيها
+export const mount = (root) => mountMode(root, 'chat');
 export async function mountMode(root, mode) {
-  const base = mode === 'chat' ? '#/chats' : '#/group';
+  const base = '#/chats';
+  const tabParam = new URLSearchParams(location.hash.split('?')[1] || '').get('tab');
+  const tab = TABS.some((x) => x[0] === tabParam) ? tabParam : 'chats';
   root.innerHTML = '<p class="muted org-wait">لحظة…</p>';
   const s = await session().catch(() => null);
   if (!root.isConnected) return;
@@ -47,9 +50,7 @@ export async function mountMode(root, mode) {
   // نبدأ المزامنة أولاً: هي التي تحدد أرشيف أي حساب يُعرض
   const syncErr = await startGroupSync().then(() => '', (err) => err.message);
   if (!root.isConnected) return;
-  if (!room) return mountList(root, s, syncErr, mode);
-  // رابط مجموعة من النوع الآخر: نفتحه في تبويبه
-  if (isChatRoom(room) !== (mode === 'chat')) { location.replace(`${isChatRoom(room) ? '#/chats' : '#/group'}?room=${encodeURIComponent(room)}`); return; }
+  if (!room) return mountList(root, s, syncErr, mode, tab);
   const orgName = s.org?.name || 'المؤسسة';
   const roomInfo = () => (room === GENERAL ? { name: orgName, color: '#00a884' } : groupRooms().get(room) || pastRoom(room));
   let pastName = '';
@@ -369,22 +370,47 @@ function openEditor(root, g = null) {
   $('#ge-name').focus();
 }
 
-async function mountList(root, s, syncErr, mode) {
+// المحادثات بثلاثة أقسام: المحادثات (التي ينشئها الأعضاء)، والأقسام (كروب العامة وكروبات الكرات)، والموظفون (للتواصل المباشر)
+const TABS = [['chats', 'المحادثات'], ['sections', 'الأقسام'], ['people', 'الموظفون']];
+async function mountList(root, s, syncErr, mode, tab = 'chats') {
   const orgName = s.org?.name || 'المؤسسة';
-  const chat = mode === 'chat';
-  const base = chat ? '#/chats' : '#/group';
+  const chat = true;
+  const base = '#/chats';
+  const showOrb = s.member.role === 'manager' || !!groupBranch()?.perms?.assistant;
   root.innerHTML = `
     <section class="chat chat--wa chat--plain chat--group g-list">
-      <header class="wa-head">
-        <div class="wa-head__who"><span class="wa-head__text"><b>${chat ? 'المحادثات' : 'منشورات الأعمال'}</b><small id="g-status"></small></span></div>
-      </header>
+      ${showOrb ? `<a class="chats-orb" href="#/home" aria-label="المساعد">
+          <span class="g-orb chats-orb__ball" aria-hidden="true"></span>
+          <b>المساعد</b><small>مرتبط بعقل المؤسسة</small></a>` : ''}
+      <nav class="chats-words" aria-label="أقسام المحادثات">
+        ${TABS.map(([id, label]) => (id === tab ? `<b aria-current="page">${label}</b>` : `<a href="#/chats?tab=${id}">${label}</a>`)).join('')}
+      </nav>
+      <small class="chats-status" id="g-status"></small>
       <p class="wa-note" id="g-note" ${syncErr ? '' : 'hidden'} role="status">${esc(syncErr)}</p>
-      <ul class="g-rooms" id="g-rooms" aria-label="المجموعات"></ul>
-      ${chat ? '<button type="button" class="g-new" id="g-new">مجموعة جديدة</button>' : ''}
+      <ul class="g-rooms" id="g-rooms" aria-label="${TABS.find((x) => x[0] === tab)?.[1] || ''}"></ul>
+      ${tab === 'chats' ? '<button type="button" class="g-new" id="g-new">مجموعة جديدة</button>' : ''}
     </section>`;
   root.querySelector('#g-new')?.addEventListener('click', () => openEditor(root));
   const list = root.querySelector('#g-rooms');
   const statusEl = root.querySelector('#g-status');
+
+  // مراسلة موظف مباشرة: محادثة من شخصين (تُعاد إن وُجدت)، والقواعد تمنع من ليس في جهاتك
+  async function openDirect(uid) {
+    const me = groupMe();
+    const rooms = groupRooms();
+    const found = [...rooms].find(([id, r]) => isChatRoom(id) && r.members.length === 2 && r.members.includes(me.uid) && r.members.includes(uid));
+    if (found) { location.hash = `#/chats?room=${encodeURIComponent(found[0])}`; return; }
+    const name = groupMembers().get(uid)?.name || 'موظف';
+    try {
+      const r = await saveChat({ name, members: [uid] });
+      location.hash = `#/chats?room=${encodeURIComponent(r.id)}`;
+    } catch (err) {
+      root.querySelector('#g-note').textContent = /permission/i.test(String(err?.code || err?.message))
+        ? 'لا تستطيع مراسلة هذا الشخص مباشرة (خارج وحدتك). اطلب من مسؤولك إضافته، أو ادعُه من مجموعة.'
+        : err.message;
+      root.querySelector('#g-note').hidden = false;
+    }
+  }
 
   async function render() {
     const [all, unread] = await Promise.all([getGroupMessages(), unreadByRoom()]);
@@ -394,27 +420,36 @@ async function mountList(root, s, syncErr, mode) {
       if (m.roomName) names.set(roomOf(m), m.roomName);
     }
     const rooms = groupRooms();
-    const mine = (id) => isChatRoom(id) === chat;
-    const items = chat ? [] : [{ id: GENERAL, name: orgName, color: '#00a884', kind: 'عامة · الجميع' }];
-    for (const [id, r] of rooms) if (mine(id)) items.push({ id, name: r.name, color: r.color, kind: KIND[r.kind] || '' });
+    const members = groupMembers();
+    const members0 = members;
+    if (tab === 'people') {
+      const me = groupMe();
+      const ids = me?.role === 'manager'
+        ? [...members0].filter(([u, m]) => u !== me.uid && m.role === 'employee').map(([u]) => u)
+        : myContacts().filter((u) => members0.has(u));
+      const people = ids.map((u) => ({ uid: u, name: members0.get(u)?.name || 'موظف' })).sort((a, b) => a.name.localeCompare(b.name, 'ar'));
+      list.innerHTML = people.map((p) => `<li><button type="button" class="g-room g-person" data-uid="${esc(p.uid)}">
+        <span class="wa-avatar wa-avatar--group" aria-hidden="true">${esc(initial(p.name))}</span>
+        <span class="g-room__body"><span class="g-room__top"><b>${esc(p.name)}</b></span><span class="g-room__bottom"><span class="g-room__last"><i>راسِل مباشرة</i></span></span></span></button></li>`).join('')
+        || `<li class="wa-day">${me?.role === 'manager' ? 'لا موظفين بعد.' : 'لا أحد في وحدتك بعد للمراسلة المباشرة.'}</li>`;
+      statusEl.textContent = people.length ? `${people.length} ${people.length === 1 ? 'شخص' : 'أشخاص'}` : '';
+      return;
+    }
+    const mineRoom = (id) => (tab === 'sections' ? !isChatRoom(id) : isChatRoom(id));
+    const items = tab === 'sections' ? [{ id: GENERAL, name: orgName, color: '#00a884', kind: 'عامة · الجميع' }] : [];
+    for (const [id, r] of rooms) if (mineRoom(id)) items.push({ id, name: r.name, color: r.color, kind: KIND[r.kind] || '' });
     // مجموعات غادرها (أو حُذفت) وما زالت رسائلها عنده
-    for (const id of last.keys()) if (id !== GENERAL && mine(id) && !rooms.has(id)) items.push({ id, name: names.get(id) || roomNameOf(id) || 'مجموعة سابقة', color: '#6b7c85', kind: 'سابقة', past: true });
+    for (const id of last.keys()) if (id !== GENERAL && mineRoom(id) && !rooms.has(id)) items.push({ id, name: names.get(id) || roomNameOf(id) || 'مجموعة سابقة', color: '#6b7c85', kind: 'سابقة', past: true });
     // الأحدث نشاطاً أولاً، والعامة دائماً في الأعلى
     const t = (it) => last.get(it.id)?.sentAt || 0;
-    const top = chat ? [] : [items.shift()];
+    const top = tab === 'sections' ? [items.shift()].filter(Boolean) : [];
     items.sort((a, b) => (a.past - b.past) || (t(b) - t(a)) || a.name.localeCompare(b.name, 'ar'));
-    const members = groupMembers();
-    const inv = chat ? [...groupInvites()].map(([id, r]) => `<li class="g-invite" data-id="${esc(id)}">
+    const inv = tab === 'chats' ? [...groupInvites()].map(([id, r]) => `<li class="g-invite" data-id="${esc(id)}">
         <span class="wa-avatar wa-avatar--group" style="background:${esc(r.color)};color:${textOn(r.color)}" aria-hidden="true">${esc(initial(r.name))}</span>
         <span class="g-room__body"><b>${esc(r.name)}</b><small>دعوة من ${esc(members.get(r.owner)?.name || 'عضو')}${r.enrich ? ' · تُثري عقل المؤسسة' : ''}</small></span>
         <button type="button" class="text-btn" data-join="${esc(id)}">انضم</button><button type="button" class="text-btn text-btn--muted" data-decline="${esc(id)}">رفض</button></li>`).join('') : '';
-    const empty = chat && !items.length && !inv ? '<li class="wa-day">لا مجموعات محادثة بعد. أنشئ واحدة من الزر بالأسفل.</li>' : '';
-    // رئيس القسم: المساعد كرة متوهجة مثبتة أعلى المحادثات
-    const orb = chat && (s.member.role === 'manager' || groupBranch()?.perms?.assistant) ? `<li><a class="g-room g-room--orb" href="#/home">
-        <span class="wa-avatar wa-avatar--orb" aria-hidden="true"><span class="g-orb"></span></span>
-        <span class="g-room__body"><span class="g-room__top"><b>المساعد</b></span>
-        <span class="g-room__bottom"><span class="g-room__last"><i>مرتبط بعقل المؤسسة</i></span></span></span></a></li>` : '';
-    list.innerHTML = orb + inv + empty + [...top, ...items].map((it) => {
+    const empty = !items.length && !inv && !top.length ? `<li class="wa-day">${tab === 'chats' ? 'لا مجموعات محادثة بعد. أنشئ واحدة من الزر بالأسفل.' : 'لا كروبات أقسام بعد.'}</li>` : '';
+    list.innerHTML = inv + empty + [...top, ...items].map((it) => {
       const m = last.get(it.id);
       const n = unread.get(it.id) || 0;
       const preview = m ? `${m.mine ? 'أنت' : esc(m.fromName)}: ${m.text ? esc(m.text.slice(0, 80)) : '📷 صورة'}` : `<i>${esc(it.kind)}</i>`;
@@ -429,6 +464,8 @@ async function mountList(root, s, syncErr, mode) {
     statusEl.textContent = !groupOnline() ? 'بلا إنترنت' : !n ? '' : `${n} ${n === 1 ? 'مجموعة' : n === 2 ? 'مجموعتان' : n <= 10 ? 'مجموعات' : 'مجموعة'}`;
   }
   list.addEventListener('click', async (e) => {
+    const person = e.target.closest('[data-uid]');
+    if (person && person.classList.contains('g-person')) { openDirect(person.dataset.uid); return; }
     const j = e.target.closest('[data-join]'), d = e.target.closest('[data-decline]');
     if (!j && !d) return;
     (j || d).disabled = true;
@@ -438,7 +475,7 @@ async function mountList(root, s, syncErr, mode) {
     } catch (err) { root.querySelector('#g-note').textContent = err.message; root.querySelector('#g-note').hidden = false; }
   });
   const onAny = () => { render().catch(() => {}); };
-  const EVS = ['message', 'update', 'rooms', 'status', 'seen', 'members'];
+  const EVS = ['message', 'update', 'rooms', 'status', 'seen', 'members', 'contacts'];
   for (const ev of EVS) groupEvents.addEventListener(ev, onAny);
   cleanup.push(() => { for (const ev of EVS) groupEvents.removeEventListener(ev, onAny); });
   await render();

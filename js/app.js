@@ -41,15 +41,21 @@ let role = null;
 async function navigate() {
   const myNav = ++navId;
   // رئيس القسم يبدأ من المحادثات (المساعد كرة فيها)، والموظف من الأعمال
-  let name = location.hash.replace(/^#\//, '').split('?')[0] || (role === 'employee' ? 'group' : role === 'manager' ? 'chats' : 'home');
+  let name = location.hash.replace(/^#\//, '').split('?')[0] || (role === 'employee' ? 'chats' : role === 'manager' ? 'chats' : 'home');
+  // «الأعمال» صارت جزءاً من المحادثات: الروابط القديمة تُحوَّل إليها مع المجموعة المفتوحة
+  if (name === 'group') {
+    const q = location.hash.split('?')[1];
+    history.replaceState(null, '', `#/chats${q ? `?${q}` : ''}`);
+    name = 'chats';
+  }
   // المسؤول عند فتح التطبيق: ننتظر فرعه لحظة قبل الحكم على المساعد والعقل
   if (role === 'employee' && (name === 'home' || name === 'mind') && !groupBranch()) {
     await waitBranch();
     if (myNav !== navId) return;
   }
   if (role === 'employee' && !EMPLOYEE_ROUTES.has(name) && !officialAllows(name)) {
-    name = 'group';
-    history.replaceState(null, '', '#/group');
+    name = 'chats';
+    history.replaceState(null, '', '#/chats');
   }
   const screen = routes[name] || home;
 
@@ -67,7 +73,7 @@ async function navigate() {
   document.title = `${screen.title} · عقلي الثاني`;
 
   document.querySelectorAll('.tabbar__item').forEach((a) => {
-    const tabOf = { join: 'org', structure: 'mind', branch: 'mind', folder: 'mind', points: 'staff', reports: 'staff', ...(role ? { home: 'chats' } : {}) };
+    const tabOf = { join: 'org', structure: 'mind', branch: 'mind', folder: 'mind', group: 'chats', points: 'staff', reports: 'staff', ...(role ? { home: 'chats' } : {}) };
     const active = a.dataset.route === (tabOf[name] || (routes[name] ? name : 'home'));
     a.classList.toggle('is-active', active);
     if (active) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
@@ -153,7 +159,8 @@ import('./tasks.js').then((t) => t.taskEvents.addEventListener('change', refresh
 groupEvents.addEventListener('members', refreshTaskBadge);
 
 async function refreshBadge() {
-  for (const [route, kind] of [['group', 'work'], ['chats', 'chat']]) {
+  // تبويب المحادثات يحمل عدّاد الكروبات كلها (أعمال وأقسام ومحادثات)
+  for (const [route, kind] of [['chats', null]]) {
     const badge = document.querySelector(`.tabbar__item[data-route="${route}"] .tabbar__badge`);
     if (!badge) continue;
     const n = await unreadCount(kind).catch(() => 0);
