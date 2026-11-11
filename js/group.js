@@ -304,7 +304,8 @@ window.addEventListener('sm:orgmind', () => { if (me?.role === 'manager') publis
 window.addEventListener('sm:points', () => { if (me?.role === 'manager') publishRoomsSoon(); });
 window.addEventListener('sm:works', () => { if (me?.role === 'manager') publishRoomsSoon(); });
 
-const BALL_KINDS = ['division', 'unit', 'section', 'custom'];
+// أنواع الكرات التي تُنشر كمجموعات (كرات الموظفين والذاتية ليست مجموعات عمل؛ نُظّف ما نُشر منها سابقاً)
+const BALL_KINDS = ['division', 'unit', 'section', 'custom', 'employee', 'personnel'];
 // من يضيفه الموظف مباشرة: من في كراته وما تحتها (الكرة المخصصة: من فيها)
 export function contactsFromStructure(st, uid) {
   const out = new Set();
@@ -331,6 +332,8 @@ export function roomsFromStructure(st, managerUid, isMember = () => true) {
   const out = new Map();
   for (const n of st.nodes) {
     if (n.id === 'root') continue;
+    // كرة الموظف (بلا حساب أو بحساب) تظهر في قائمة الموظفين لا في محادثات الأقسام
+    if (n.type === 'employee' || n.type === 'personnel') continue;
     // المشروع المغلق: تُحذف مجموعته، فتبقى رسائلها عند أعضائها للقراءة فقط
     if (n.type === 'custom' && n.project?.status === 'closed') continue;
     const ids = n.type === 'custom' ? new Set([n.id]) : under(n.id);
