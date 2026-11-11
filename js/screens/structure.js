@@ -333,13 +333,13 @@ export async function mount(root) {
       ${sub || `<div class="struct-actions">
         ${n.id === 'root' ? '<button type="button" data-a="me">حسابك: كلمة المرور والاستعادة</button>' : ''}
         ${n.type === 'employee' ? '<button type="button" data-a="account-new">إنشاء رابط</button>' : ''}
-        ${n.type !== 'employee' ? '<button type="button" data-a="account">إضافة حساب (يمكن إضافته لاحقاً)</button>' : ''}
-        ${n.type !== 'employee' && !custom ? '<button type="button" data-a="account-new">إضافة موظف جديد (حساب برابط)</button>' : ''}
+        ${n.type !== 'employee' ? '<button type="button" data-a="employee-ball">إنشاء كرة</button>' : ''}
+        ${n.type !== 'employee' ? '<button type="button" data-a="account">إنشاء رابط</button>' : ''}
         ${canHaveHead(n.type) ? '<button type="button" data-a="perms">خيارات الإظهار</button>' : ''}
         ${childT ? `<button type="button" data-a="add">إضافة ${childT.label}</button>` : ''}
         ${n.id === 'root' && !st.nodes.some((x) => x.type === 'personnel') ? '<button type="button" data-a="personnel">إضافة الذاتية</button>' : ''}
         ${n.type !== 'employee' ? '<button type="button" data-a="custom">إضافة كرة مخصصة</button>' : ''}
-        ${!custom && n.type !== 'employee' ? '<button type="button" data-a="employee-ball">إضافة كرة موظف (حسابه لاحقاً)</button>' : ''}
+
         ${n.type !== 'employee' ? '<button type="button" data-a="pick-person">ربط موظف موجود بالكرة</button>' : ''}
         ${canHaveAssistant(n.type) ? `<button type="button" data-a="pick-assistant">${asst ? 'تغيير المعاون' : 'إضافة معاون'}</button>` : ''}
         ${asst ? '<button type="button" data-a="no-assistant">إلغاء المعاون</button>' : ''}
