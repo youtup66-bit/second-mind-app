@@ -1250,3 +1250,9 @@ body.on-group .tasks .wa-head { padding-top: calc(env(safe-area-inset-top) + 8px
 .struct-more { margin-top: 6px; }
 .struct-more > summary { cursor: pointer; color: var(--muted); padding: 6px 0; font-size: .9rem; }
 .struct-more .struct-actions { margin-top: 4px; }
+
+/* اختيار المنصب عند إنشاء الكرة: قائمة مرتبة، الاسم والدائرة في خط واحد */
+.pbf-roles { display: flex; flex-direction: column; border: 1px solid var(--border, rgba(255,255,255,.08)); border-radius: 12px; overflow: hidden; }
+.pbf-role { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 14px; border-bottom: 1px solid rgba(255,255,255,.06); cursor: pointer; }
+.pbf-role:last-child { border-bottom: 0; }
+.pbf-role input { width: 20px; height: 20px; margin: 0; accent-color: var(--wa-green, #00a884); flex: none; }

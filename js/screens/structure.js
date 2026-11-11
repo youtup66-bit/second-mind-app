@@ -260,7 +260,7 @@ export async function mount(root) {
           <p class="struct-sub">كرة جديدة في «${esc(n.name)}». أرسل الرابط لاحقاً من داخلها:</p>
           <input id="pbf-name" maxlength="60" required placeholder="الاسم الكامل">
           <input id="pbf-user" maxlength="30" dir="ltr" placeholder="اسم المستخدم (إنجليزي، لا يلزم للمخصصة)" autocapitalize="off" autocomplete="off">
-          <div class="struct-pick struct-pick--row">${opts.map(([v, l], i) => `<label class="switch"><input type="radio" name="pbf-title" value="${v}" ${v === 'member' ? 'checked' : ''}><span>${l}</span></label>`).join('')}</div>
+          <div class="pbf-roles" role="radiogroup" aria-label="المنصب">${opts.map(([v, l]) => `<label class="pbf-role"><span>${l}</span><input type="radio" name="pbf-title" value="${v}" ${v === 'member' ? 'checked' : ''}></label>`).join('')}</div>
           <p class="status" id="msg" role="status"></p>
           <div class="row"><button class="btn" type="submit">إنشاء الكرة</button><button class="btn btn--ghost" type="button" data-a="cancel">إلغاء</button></div>
         </form>`;
