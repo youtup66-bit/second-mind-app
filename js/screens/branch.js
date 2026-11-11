@@ -28,7 +28,7 @@ export async function mount(root) {
   let b = groupBranch();
   if (!b?.perms?.sections) {
     root.innerHTML = `<div class="org"><div class="org-hero"><div class="org-hero__icon" aria-hidden="true">◉</div>
-      <h2>الأقسام</h2><p class="muted">${b ? 'لم يُظهر لك رئيس القسم الأقسام بعد.' : 'لا فرع لك بعد. يظهر حين يعيّنك رئيس القسم مسؤولاً لكرة.'}</p></div></div>`;
+      <h2>الأقسام</h2><p class="muted">${b ? 'لم يُظهر لك رئيس القسم الأقسام بعد.' : 'لا فرع لك بعد. إن كنت مسؤولاً لكرة فيظهر فرعك حين يعيّنك رئيس القسم. وإن كنت معاوناً فلا صلاحيات إدارة لك حتى يفعّلها رئيس القسم في «صلاحيات المعاون».'}</p></div></div>`;
     return;
   }
 
