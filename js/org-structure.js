@@ -27,7 +27,7 @@ export const PERMS = [
   ['evals', 'التقييمات', 'يرى تقييمات ونقاط من تحته'],
 ];
 // المسؤول الافتراضي: يرى فرعه، ويدير حسابات وحدته (مسؤول الوحدة ينشئ موظفيه وأقسامها)
-export const defaultPerms = (type) => ({ sections: true, accounts: type === 'unit' || type === 'section' });
+export const defaultPerms = (type) => ({ sections: true, accounts: type === 'division' || type === 'unit' || type === 'section' });
 export const permsOf = (n) => ({ ...defaultPerms(n?.type), ...(n?.perms || {}) });
 export function setPerm(s, id, key, on) {
   const n = nodeById(s, id);
