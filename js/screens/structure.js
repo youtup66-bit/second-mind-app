@@ -249,14 +249,17 @@ export async function mount(root) {
         <button class="btn btn--ghost" type="button" data-a="cancel">تم</button>`;
     } else if (mode === 'person-ball') {
       // كرة شخص: الاسم واسم المستخدم والمنصب، ويُرسل الرابط لاحقاً من داخل الكرة
+      // الخيارات: شعبة أو وحدة حسب ما تحت هذه الكرة، ثم معاون وذاتية ومخصصة وموظف
       const childT = TYPES[n.type]?.child;
-      const opts = [['assistant', 'معاون'], ['personnel', 'ذاتية']];
-      if (childT) opts.push(['head', `مسؤول ${TYPES[childT].label}`]);
-      opts.push(['member', 'موظف']);
+      const opts = [];
+      if (childT === 'division') opts.push(['division', 'شعبة']);
+      if (childT === 'unit') opts.push(['unit', 'وحدة']);
+      if (canHaveAssistant(n.type)) opts.push(['assistant', 'معاون']);
+      opts.push(['personnel', 'ذاتية'], ['custom', 'مخصصة'], ['member', 'موظف']);
       sub = `<form class="struct-form struct-form--col" id="pbf">
           <p class="struct-sub">كرة جديدة في «${esc(n.name)}». أرسل الرابط لاحقاً من داخلها:</p>
           <input id="pbf-name" maxlength="60" required placeholder="الاسم الكامل">
-          <input id="pbf-user" maxlength="30" required dir="ltr" placeholder="اسم المستخدم (إنجليزي)" autocapitalize="off" autocomplete="off">
+          <input id="pbf-user" maxlength="30" dir="ltr" placeholder="اسم المستخدم (إنجليزي، لا يلزم للمخصصة)" autocapitalize="off" autocomplete="off">
           <div class="struct-pick struct-pick--row">${opts.map(([v, l], i) => `<label class="switch"><input type="radio" name="pbf-title" value="${v}" ${v === 'member' ? 'checked' : ''}><span>${l}</span></label>`).join('')}</div>
           <p class="status" id="msg" role="status"></p>
           <div class="row"><button class="btn" type="submit">إنشاء الكرة</button><button class="btn btn--ghost" type="button" data-a="cancel">إلغاء</button></div>
@@ -349,7 +352,6 @@ export async function mount(root) {
         ${n.id === 'root' ? '<button type="button" data-a="me">حسابك: كلمة المرور والاستعادة</button>' : ''}
         ${n.type !== 'employee' ? '<button type="button" data-a="person-ball">إنشاء كرة</button>' : ''}
         ${n.person ? '<button type="button" data-a="send-link">إرسال رابط</button>' : ''}
-        ${childT ? `<button type="button" data-a="add">إضافة ${childT.label}</button>` : ''}
         ${canHaveHead(n.type) ? '<button type="button" data-a="perms">خيارات الإظهار</button>' : ''}
         ${custom ? '<button type="button" data-a="project">تفاصيل المشروع: الحالة والتواريخ والإنجاز</button><button type="button" data-a="report">تقرير المشروع</button>' : ''}
         <button type="button" data-a="rename">تعديل الاسم</button>
@@ -463,17 +465,18 @@ export async function mount(root) {
       const msg = panel.querySelector('#msg');
       try {
         const name = panel.querySelector('#pbf-name').value.trim();
-        const username = checkUsername(panel.querySelector('#pbf-user').value);
         const title = panel.querySelector('[name=pbf-title]:checked').value;
-        const { addPersonBall, addNode, TYPES: T } = await import('../org-structure.js');
-        const person = { username, title, name };
+        const { addPersonBall, addNode, addCustom, PALETTE: PAL } = await import('../org-structure.js');
         let made;
-        if (title === 'head') {
-          // مسؤول شعبة/وحدة: الكرة الجديدة (شعبة أو وحدة) تنتظر مسؤولها
+        if (title === 'division' || title === 'unit') {
+          // شعبة أو وحدة باسم الاسم المكتوب (تُضاف تحت هذه الكرة حسب نوعها)
           made = addNode(st, n.id, name);
-          made.person = person;
+        } else if (title === 'custom') {
+          // كرة مخصصة (مشروع أو لجنة): بلا حساب
+          made = addCustom(st, n.id, name, PAL[st.nodes.filter((x) => x.type === 'custom').length % PAL.length]);
         } else {
-          made = addPersonBall(st, n.id, name, person);
+          const username = checkUsername(panel.querySelector('#pbf-user').value);
+          made = addPersonBall(st, n.id, name, { username, title, name });
         }
         await commit(made.id);
       } catch (err) { msg.textContent = err.message; msg.className = 'status status--err'; }
