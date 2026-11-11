@@ -62,6 +62,19 @@ export async function mount(root) {
   const form = root.querySelector('#add-form');
   const out = root.querySelector('#invite-out');
 
+  // كرات الأشخاص التي لم يُربط بها حساب بعد (من الهيكل)، مع الدعوات المرسلة لها (تُعرض في الدعوات)
+  async function pendingBalls() {
+    const { loadStructure, TYPES: T, nodeById: byId } = await import('../org-structure.js');
+    const { ballInvites } = await import('../org-accounts.js');
+    const st = await loadStructure();
+    const sent = new Set(Object.values(await ballInvites()).map((x) => x.card).filter(Boolean));
+    const ROLE = { member: 'موظف', assistant: 'معاون', personnel: 'ذاتية' };
+    return st.nodes.filter((n) => n.person && !sent.has(n.id)).map((n) => {
+      const role = n.person.title === 'head' ? T[n.type]?.label || 'مسؤول' : ROLE[n.person.title] || 'موظف';
+      return { name: n.name, role, where: n.parent ? byId(st, n.parent)?.name : '' };
+    });
+  }
+
   async function render() {
     let members = [], invites = [];
     try { [members, invites] = await Promise.all([listMembers(), listInvites()]); } catch (e) {
@@ -104,6 +117,12 @@ export async function mount(root) {
           <span class="staff-row__avatar" aria-hidden="true">${initial(i.display_name)}</span>
           <span class="staff-row__name">${esc(i.display_name)}<small>لم ينضم بعد · المس لإعادة إرسال الدعوة</small></span>
         </button></li>`),
+      // كرات الأشخاص بلا حساب بعد: تُعامَل كالأشخاص (تظهر بأسمائها ومنصبها)، إلا التي أُرسل لها رابط
+      ...(await pendingBalls()).map((b) => `
+        <li><span class="staff-row staff-row--ball">
+          <span class="staff-row__avatar" aria-hidden="true">${initial(b.name)}</span>
+          <span class="staff-row__name">${esc(b.name)}<small>${esc(b.role)} · بلا حساب بعد${b.where ? ` · ${esc(b.where)}` : ''}</small></span>
+        </span></li>`),
     ].join('') || '<li class="muted staff-empty">لا يوجد موظفون بعد. أضف أول موظف من الزر أدناه.</li>';
   }
 
