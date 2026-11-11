@@ -34,6 +34,7 @@ const dot = (c) => `<i class="sdot" style="background:${c}"></i>`;
 
 let graph = null;
 let alive = false;
+let accountPref = null; // المنصب المختار مسبقاً في نموذج الحساب
 let offStats = null;
 
 export async function mount(root) {
@@ -246,11 +247,13 @@ export async function mount(root) {
         <button class="btn btn--ghost" type="button" data-a="cancel">تم</button>`;
     } else if (mode === 'account') {
       const titles = n.id === 'root' ? ['assistant', 'member'] : canHaveHead(n.type) ? ['head', 'assistant', 'member'] : ['member'];
+      // «موظف جديد» يفتح النموذج على «موظف» مختاراً
+      const pref = accountPref && titles.includes(accountPref) ? accountPref : titles[0];
       sub = `<form class="struct-form struct-form--col" id="af">
           <p class="struct-sub">حساب جديد في «${esc(n.name)}». يصله رابط فيضع كلمة مروره بنفسه:</p>
           <input id="af-name" maxlength="60" required placeholder="الاسم الكامل">
           <input id="af-user" maxlength="30" required dir="ltr" placeholder="اسم المستخدم (إنجليزي)" autocapitalize="off" autocomplete="off">
-          <div class="struct-pick struct-pick--row">${titles.map((t, i) => `<label class="switch"><input type="radio" name="af-title" value="${t}" ${i === 0 ? 'checked' : ''}><span>${TITLES[t]}</span></label>`).join('')}</div>
+          <div class="struct-pick struct-pick--row">${titles.map((t) => `<label class="switch"><input type="radio" name="af-title" value="${t}" ${t === pref ? 'checked' : ''}><span>${TITLES[t]}</span></label>`).join('')}</div>
           <p class="status" id="af-msg" role="status"></p>
           <div class="row"><button class="btn" type="submit">إنشاء الرابط</button><button class="btn btn--ghost" type="button" data-a="cancel">إلغاء</button></div>
         </form>`;
@@ -322,12 +325,13 @@ export async function mount(root) {
       ${waiting.length ? `<ul class="struct-waiting">${waiting.map(([code, x]) => `<li><span>بانتظار التسجيل: <b>${esc(x.name)}</b> (${TITLES[x.title]})</span><button type="button" data-link-code="${esc(code)}" data-link-name="${esc(x.name)}">الرابط</button><button type="button" data-cancel-code="${esc(code)}" class="is-danger">إلغاء</button></li>`).join('')}</ul>` : ''}`}
       ${sub || `<div class="struct-actions">
         ${n.id === 'root' ? '<button type="button" data-a="me">حسابك: كلمة المرور والاستعادة</button>' : ''}
-        ${!custom ? '<button type="button" data-a="account">إضافة حساب</button>' : ''}
+        ${!custom ? '<button type="button" data-a="account-new">إضافة موظف جديد (حساب برابط)</button>' : ''}
+        ${!custom ? '<button type="button" data-a="account">إضافة حساب (مسؤول أو معاون)</button>' : ''}
         ${canHaveHead(n.type) ? '<button type="button" data-a="perms">خيارات الإظهار</button>' : ''}
         ${childT ? `<button type="button" data-a="add">إضافة ${childT.label}</button>` : ''}
         ${n.id === 'root' && !st.nodes.some((x) => x.type === 'personnel') ? '<button type="button" data-a="personnel">إضافة الذاتية</button>' : ''}
         <button type="button" data-a="custom">إضافة كرة مخصصة</button>
-        <button type="button" data-a="pick-person">إضافة موظف</button>
+        <button type="button" data-a="pick-person">ربط موظف موجود بالكرة</button>
         ${canHaveAssistant(n.type) ? `<button type="button" data-a="pick-assistant">${asst ? 'تغيير المعاون' : 'إضافة معاون'}</button>` : ''}
         ${asst ? '<button type="button" data-a="no-assistant">إلغاء المعاون</button>' : ''}
         ${custom ? '<button type="button" data-a="project">تفاصيل المشروع: الحالة والتواريخ والإنجاز</button><button type="button" data-a="report">تقرير المشروع</button>' : ''}
@@ -470,6 +474,9 @@ export async function mount(root) {
         return;
       }
       if (a === 'custom') draftColor = PALETTE[st.nodes.filter((x) => x.type === 'custom').length % PALETTE.length];
+      // إضافة موظف جديد: نموذج الحساب مختاراً فيه «موظف»
+      if (a === 'account-new') { accountPref = 'member'; mode = 'account'; renderPanel(); return; }
+      if (a === 'account') accountPref = null;
       mode = a;
       renderPanel();
     }));
