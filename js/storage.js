@@ -188,11 +188,21 @@ export const clearGroup = () => run('group', 'readwrite', (s) => s.clear());
 
 // ---- نقاط الموظفين ----
 // { id, user, workId, workName, points, count, at, msgId?, quote?, status: 'suggested'|'approved'|'rejected', source: 'ai'|'manual' }
-export const putPoint = (p) => run('points', 'readwrite', (s) => s.put(p));
+// نطاق الحساب: سجلات النقاط لحساب غير حساب الجهاز الأول تحمل معرّفه، ولا تُقرأ إلا به
+const pointAcct = async () => { const { acct, owner } = await loadScope(); return acct && acct !== owner ? acct : null; };
+export async function putPoint(p) {
+  const a = await pointAcct();
+  const rec = a ? { ...p, acct: a } : p;
+  return run('points', 'readwrite', (s) => s.put(rec));
+}
 export const deletePoint = (id) => run('points', 'readwrite', (s) => s.delete(id));
 // حذف رسالة مجموعة بمعرّفها (يستعمله الحذف النهائي لموظف محذوف)
 export const deleteGroupMessage = (id) => run('group', 'readwrite', (s) => s.delete(gKey(id)));
-export const getPoints = () => run('points', 'readonly', (s) => s.getAll());
+export async function getPoints() {
+  const a = await pointAcct();
+  const all = (await run('points', 'readonly', (s) => s.getAll())) || [];
+  return all.filter((p) => (a ? p.acct === a : !p.acct));
+}
 
 // ---- التصدير والاستيراد ----
 // المفتاح لا يُصدَّر أبداً حتى لا يتسرب مع ملف النسخة، وتاريخ آخر نسخة خاص بهذا الجهاز
@@ -224,7 +234,7 @@ export async function exportData({ withGroup = true } = {}) {
     entries: await run('entries', 'readonly', (s) => s.getAll()),
     messages: await run('messages', 'readonly', (s) => s.getAll()),
     summaries: await run('summaries', 'readonly', (s) => s.getAll()),
-    points: await run('points', 'readonly', (s) => s.getAll()),
+    points: (await run('points', 'readonly', (s) => s.getAll()) || []).filter((p) => !p.acct),
     ...(withGroup ? { group: await run('group', 'readonly', (s) => s.getAll()) } : {}),
     settings: await getAllSettings(),
   };
