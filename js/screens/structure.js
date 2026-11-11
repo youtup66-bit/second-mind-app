@@ -332,8 +332,8 @@ export async function mount(root) {
       ${sub || `<div class="struct-actions">
         ${n.id === 'root' ? '<button type="button" data-a="me">حسابك: كلمة المرور والاستعادة</button>' : ''}
         ${n.type === 'employee' ? '<button type="button" data-a="account-new">إضافة حساب الموظف (برابط)</button>' : ''}
-        ${!custom && n.type !== 'employee' ? '<button type="button" data-a="account-new">إضافة موظف جديد (حساب برابط)</button>' : ''}
-        ${!custom && n.type !== 'employee' ? '<button type="button" data-a="account">إضافة حساب (مسؤول أو معاون)</button>' : ''}
+        ${n.type !== 'employee' ? '<button type="button" data-a="account">إضافة حساب (يمكن إضافته لاحقاً)</button>' : ''}
+        ${n.type !== 'employee' && !custom ? '<button type="button" data-a="account-new">إضافة موظف جديد (حساب برابط)</button>' : ''}
         ${canHaveHead(n.type) ? '<button type="button" data-a="perms">خيارات الإظهار</button>' : ''}
         ${childT ? `<button type="button" data-a="add">إضافة ${childT.label}</button>` : ''}
         ${n.id === 'root' && !st.nodes.some((x) => x.type === 'personnel') ? '<button type="button" data-a="personnel">إضافة الذاتية</button>' : ''}
