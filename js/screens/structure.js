@@ -347,22 +347,26 @@ export async function mount(root) {
       ${waiting.length ? `<ul class="struct-waiting">${waiting.map(([code, x]) => `<li><span>بانتظار التسجيل: <b>${esc(x.name)}</b> (${TITLES[x.title]})</span><button type="button" data-link-code="${esc(code)}" data-link-name="${esc(x.name)}">الرابط</button><button type="button" data-cancel-code="${esc(code)}" class="is-danger">إلغاء</button></li>`).join('')}</ul>` : ''}`}
       ${sub || `<div class="struct-actions">
         ${n.id === 'root' ? '<button type="button" data-a="me">حسابك: كلمة المرور والاستعادة</button>' : ''}
-        ${n.type === 'employee' && !n.person ? '<button type="button" data-a="account-new">إنشاء رابط</button>' : ''}
         ${n.type !== 'employee' ? '<button type="button" data-a="person-ball">إنشاء كرة</button>' : ''}
         ${n.person ? '<button type="button" data-a="send-link">إرسال رابط</button>' : ''}
-        ${n.type !== 'employee' ? '<button type="button" data-a="account">إنشاء رابط</button>' : ''}
-        ${canHaveHead(n.type) ? '<button type="button" data-a="perms">خيارات الإظهار</button>' : ''}
         ${childT ? `<button type="button" data-a="add">إضافة ${childT.label}</button>` : ''}
-        ${n.id === 'root' && !st.nodes.some((x) => x.type === 'personnel') ? '<button type="button" data-a="personnel">إضافة الذاتية</button>' : ''}
-        ${n.type !== 'employee' ? '<button type="button" data-a="custom">إضافة كرة مخصصة</button>' : ''}
-
-        ${n.type !== 'employee' ? '<button type="button" data-a="pick-person">ربط موظف موجود بالكرة</button>' : ''}
-        ${canHaveAssistant(n.type) ? `<button type="button" data-a="pick-assistant">${asst ? 'تغيير المعاون' : 'إضافة معاون'}</button>` : ''}
-        ${asst ? '<button type="button" data-a="no-assistant">إلغاء المعاون</button>' : ''}
+        ${canHaveHead(n.type) ? '<button type="button" data-a="perms">خيارات الإظهار</button>' : ''}
         ${custom ? '<button type="button" data-a="project">تفاصيل المشروع: الحالة والتواريخ والإنجاز</button><button type="button" data-a="report">تقرير المشروع</button>' : ''}
-        ${custom ? '<button type="button" data-a="links">الربط بفروع</button><button type="button" data-a="color">اللون</button>' : ''}
         <button type="button" data-a="rename">تعديل الاسم</button>
         ${n.id !== 'root' ? '<button type="button" data-a="delete" class="is-danger">حذف</button>' : ''}
+        <details class="struct-more"><summary>المزيد</summary>
+          <div class="struct-actions">
+            ${n.type === 'employee' && !n.person ? '<button type="button" data-a="account-new">إنشاء رابط</button>' : ''}
+            ${n.type !== 'employee' ? '<button type="button" data-a="account">إنشاء رابط لشخص موجود أو مسؤول</button>' : ''}
+            ${n.type !== 'employee' && !custom ? '<button type="button" data-a="account-new">موظف جديد (حساب برابط مباشر)</button>' : ''}
+            ${n.id === 'root' && !st.nodes.some((x) => x.type === 'personnel') ? '<button type="button" data-a="personnel">إضافة الذاتية</button>' : ''}
+            ${n.type !== 'employee' ? '<button type="button" data-a="custom">إضافة كرة مخصصة</button>' : ''}
+            ${n.type !== 'employee' ? '<button type="button" data-a="pick-person">ربط موظف موجود بالكرة</button>' : ''}
+            ${canHaveAssistant(n.type) ? `<button type="button" data-a="pick-assistant">${asst ? 'تغيير المعاون' : 'إضافة معاون'}</button>` : ''}
+            ${asst ? '<button type="button" data-a="no-assistant">إلغاء المعاون</button>' : ''}
+            ${custom ? '<button type="button" data-a="links">الربط بفروع</button><button type="button" data-a="color">اللون</button>' : ''}
+          </div>
+        </details>
       </div>`}`;
 
     panel.querySelector('#af')?.addEventListener('submit', async (e) => {
