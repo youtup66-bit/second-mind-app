@@ -360,9 +360,7 @@ export async function mount(root) {
           <div class="struct-actions">
             ${n.type === 'employee' && !n.person ? '<button type="button" data-a="account-new">إنشاء رابط</button>' : ''}
             ${n.type !== 'employee' ? '<button type="button" data-a="account">إنشاء رابط لشخص موجود أو مسؤول</button>' : ''}
-            ${n.type !== 'employee' && !custom ? '<button type="button" data-a="account-new">موظف جديد (حساب برابط مباشر)</button>' : ''}
             ${n.id === 'root' && !st.nodes.some((x) => x.type === 'personnel') ? '<button type="button" data-a="personnel">إضافة الذاتية</button>' : ''}
-            ${n.type !== 'employee' ? '<button type="button" data-a="custom">إضافة كرة مخصصة</button>' : ''}
             ${n.type !== 'employee' ? '<button type="button" data-a="pick-person">ربط موظف موجود بالكرة</button>' : ''}
             ${canHaveAssistant(n.type) ? `<button type="button" data-a="pick-assistant">${asst ? 'تغيير المعاون' : 'إضافة معاون'}</button>` : ''}
             ${asst ? '<button type="button" data-a="no-assistant">إلغاء المعاون</button>' : ''}
