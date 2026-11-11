@@ -173,7 +173,7 @@ export async function mount(root) {
       <canvas class="mind-canvas" aria-label="عقل المؤسسة. قرّب إصبعين أو باعدهما للتصغير والتكبير"></canvas>
       <button type="button" class="struct-handle" id="handle" aria-label="القائمة" aria-expanded="false"><span></span></button>
       <div class="struct-menu mind-menu" id="menu" hidden>
-        ${mindTabs('mind', sectionsRoute)}
+        ${mindTabs('mind', sectionsRoute, role === 'manager')}
         <p class="mind-hint" id="hint"></p>
         <div class="mind-words zoom-ctrl" role="group" aria-label="الخيارات">
           <button type="button" class="text-btn" id="add-cat">قسم جديد</button>

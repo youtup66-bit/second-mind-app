@@ -67,7 +67,7 @@ async function navigate() {
   document.title = `${screen.title} · عقلي الثاني`;
 
   document.querySelectorAll('.tabbar__item').forEach((a) => {
-    const tabOf = { join: 'org', structure: 'mind', branch: 'mind', points: 'staff', reports: 'staff', ...(role ? { home: 'chats' } : {}) };
+    const tabOf = { join: 'org', structure: 'mind', branch: 'mind', folder: 'mind', points: 'staff', reports: 'staff', ...(role ? { home: 'chats' } : {}) };
     const active = a.dataset.route === (tabOf[name] || (routes[name] ? name : 'home'));
     a.classList.toggle('is-active', active);
     if (active) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
@@ -109,7 +109,8 @@ function applyRole(next) {
     if (t) t.hidden = !role;
   }
   // الموظف لا يرى المساعد ولا العقل ولا المجلد؛ ورئيس القسم يجد المساعد كرة في المحادثات
-  for (const r of ['home', 'mind', 'folder']) {
+  // المجلد صار كلمة داخل تبويب العقل (لا تبويب خاصاً)
+  for (const r of ['home', 'mind']) {
     const t = document.querySelector(`.tabbar__item[data-route="${r}"]`);
     if (t) t.hidden = role === 'employee' || (r === 'home' && role === 'manager');
   }

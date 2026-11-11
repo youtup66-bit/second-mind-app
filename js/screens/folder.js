@@ -32,7 +32,10 @@ export async function mount(root) {
   const status = await backupStatus();
   if (location.hash.includes('summaries')) state.tab = 'summaries';
 
+  const { mindTabs } = await import('../staff-nav.js');
+  const { getSetting: gs } = await import('../storage.js');
   root.innerHTML = `
+    ${(await gs('orgRole', null)) === 'manager' ? mindTabs('folder', 'structure', true) : ''}
     <div class="folder-words">
     <div class="seg struct-tabs folder-tabs" role="tablist" aria-label="عرض">
       <button role="tab" data-tab="notes">الملاحظات</button>
