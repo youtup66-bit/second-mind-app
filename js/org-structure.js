@@ -14,6 +14,8 @@ export const TYPES = {
   custom: { label: 'كرة مخصصة', color: '#c084fc', child: null, r: 6.5, rest: 110 },
   // الذاتية: البريد والكتب وإرسالها إلى مسؤولي الشعب والوحدات (A22)؛ كرة واحدة تحت القسم
   personnel: { label: 'الذاتية', color: '#e2e8f0', child: null, r: 6.5, rest: 110 },
+  // كرة موظف: تُنشأ قبل أن يكون للموظف حساب، ويُضاف إليها الحساب لاحقاً برابط فينضم إليها تلقائياً
+  employee: { label: 'كرة موظف', color: '#3ddc84', child: null, r: 6, rest: 90 },
 };
 
 // خيارات الإظهار لكل كرة: ما يُسمح لمسؤولها (يقررها رئيس القسم)
@@ -123,6 +125,14 @@ export function withStructure(fn) {
 
 export const nodeById = (s, id) => s.nodes.find((n) => n.id === id) || null;
 export const childrenOf = (s, id) => s.nodes.filter((n) => n.parent === id);
+
+export function addEmployeeBall(s, parentId, name) {
+  const parent = nodeById(s, parentId);
+  if (!parent || parent.type === 'employee') throw new Error('لا يمكن إضافة كرة موظف هنا.');
+  const n = { id: uid(), type: 'employee', name: String(name).trim().slice(0, 60) || 'موظف', parent: parentId };
+  s.nodes.push(n);
+  return n;
+}
 
 export function addNode(s, parentId, name) {
   const parent = nodeById(s, parentId);

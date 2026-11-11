@@ -245,6 +245,12 @@ export async function mount(root) {
       sub = `<p class="struct-sub">اربط «${esc(n.name)}» بالفروع (يمكن اختيار أكثر من فرع):</p>
         <div class="struct-pick">${st.nodes.filter((x) => x.id !== n.id).map((x) => `<button type="button" data-link="${esc(x.id)}" class="${n.links?.includes(x.id) ? 'is-on' : ''}">${n.links?.includes(x.id) ? '✓ ' : ''}${nodeLine(x)}</button>`).join('')}</div>
         <button class="btn btn--ghost" type="button" data-a="cancel">تم</button>`;
+    } else if (mode === 'employee-ball') {
+      sub = `<form class="struct-form" id="ebf">
+          <input id="ebf-name" maxlength="60" required placeholder="اسم الموظف، مثل: أحمد علي">
+          <div class="row"><button class="btn" type="submit">إنشاء الكرة</button><button class="btn btn--ghost" type="button" data-a="cancel">إلغاء</button></div>
+          <p class="muted struct-note">تُنشأ الكرة الآن، ويُضاف حسابه لاحقاً من لوحة الكرة (إضافة حساب).</p>
+        </form>`;
     } else if (mode === 'account') {
       const titles = n.id === 'root' ? ['assistant', 'member'] : canHaveHead(n.type) ? ['head', 'assistant', 'member'] : ['member'];
       // «موظف جديد» يفتح النموذج على «موظف» مختاراً
@@ -325,13 +331,15 @@ export async function mount(root) {
       ${waiting.length ? `<ul class="struct-waiting">${waiting.map(([code, x]) => `<li><span>بانتظار التسجيل: <b>${esc(x.name)}</b> (${TITLES[x.title]})</span><button type="button" data-link-code="${esc(code)}" data-link-name="${esc(x.name)}">الرابط</button><button type="button" data-cancel-code="${esc(code)}" class="is-danger">إلغاء</button></li>`).join('')}</ul>` : ''}`}
       ${sub || `<div class="struct-actions">
         ${n.id === 'root' ? '<button type="button" data-a="me">حسابك: كلمة المرور والاستعادة</button>' : ''}
-        ${!custom ? '<button type="button" data-a="account-new">إضافة موظف جديد (حساب برابط)</button>' : ''}
-        ${!custom ? '<button type="button" data-a="account">إضافة حساب (مسؤول أو معاون)</button>' : ''}
+        ${n.type === 'employee' ? '<button type="button" data-a="account-new">إضافة حساب الموظف (برابط)</button>' : ''}
+        ${!custom && n.type !== 'employee' ? '<button type="button" data-a="account-new">إضافة موظف جديد (حساب برابط)</button>' : ''}
+        ${!custom && n.type !== 'employee' ? '<button type="button" data-a="account">إضافة حساب (مسؤول أو معاون)</button>' : ''}
         ${canHaveHead(n.type) ? '<button type="button" data-a="perms">خيارات الإظهار</button>' : ''}
         ${childT ? `<button type="button" data-a="add">إضافة ${childT.label}</button>` : ''}
         ${n.id === 'root' && !st.nodes.some((x) => x.type === 'personnel') ? '<button type="button" data-a="personnel">إضافة الذاتية</button>' : ''}
-        <button type="button" data-a="custom">إضافة كرة مخصصة</button>
-        <button type="button" data-a="pick-person">ربط موظف موجود بالكرة</button>
+        ${n.type !== 'employee' ? '<button type="button" data-a="custom">إضافة كرة مخصصة</button>' : ''}
+        ${!custom && n.type !== 'employee' ? '<button type="button" data-a="employee-ball">إضافة كرة موظف (حسابه لاحقاً)</button>' : ''}
+        ${n.type !== 'employee' ? '<button type="button" data-a="pick-person">ربط موظف موجود بالكرة</button>' : ''}
         ${canHaveAssistant(n.type) ? `<button type="button" data-a="pick-assistant">${asst ? 'تغيير المعاون' : 'إضافة معاون'}</button>` : ''}
         ${asst ? '<button type="button" data-a="no-assistant">إلغاء المعاون</button>' : ''}
         ${custom ? '<button type="button" data-a="project">تفاصيل المشروع: الحالة والتواريخ والإنجاز</button><button type="button" data-a="report">تقرير المشروع</button>' : ''}
@@ -418,6 +426,12 @@ export async function mount(root) {
       const name = panel.querySelector('#nf-name').value;
       if (mode === 'add') addNode(st, n.id, name); else renameNode(st, n.id, name);
       await commit(n.id);
+    });
+    panel.querySelector('#ebf')?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const { addEmployeeBall } = await import('../org-structure.js');
+      const b = addEmployeeBall(st, n.id, panel.querySelector('#ebf-name').value);
+      await commit(b.id);
     });
     panel.querySelector('#cf')?.addEventListener('submit', async (e) => {
       e.preventDefault();
