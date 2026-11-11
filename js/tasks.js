@@ -13,9 +13,16 @@ export const SILENT_MS = 12 * 3600 * 1000;
 const uid = () => `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`;
 
 // مهام كل حساب منفصلة (قد يدخل أكثر من حساب من الجهاز نفسه في التجربة)
-const key = () => `tasks_${groupMe()?.uid || 'x'}`;
-export async function listTasks() { return (await getSetting(key(), [])) || []; }
-async function saveTasks(list) { await setSetting(key(), list.slice(0, 500)); emit(); }
+// كل حساب قائمته على الجهاز، ولا تُقرأ ولا تُكتب بلا حساب مسجّل (حتى لا تختلط بين الحسابات)
+const key = () => (groupMe()?.uid ? `tasks_${groupMe().uid}` : null);
+// لا تظهر إلا المهام التي أرسلها هذا الحساب، أو استلمها هو
+export async function listTasks() {
+  const k = key();
+  if (!k) return [];
+  const me = groupMe();
+  return ((await getSetting(k, [])) || []).filter((t) => (t.mine ? t.from === me.uid : t.to === me.uid));
+}
+async function saveTasks(list) { const k = key(); if (!k) return; await setSetting(k, list.slice(0, 500)); emit(); }
 async function upsert(t) {
   const list = await listTasks();
   const i = list.findIndex((x) => x.id === t.id && x.from === t.from);
