@@ -65,6 +65,22 @@ export async function placeJoined(members) {
   } finally { busy = false; }
 }
 
+// المهام التي أرسلتُها أنا إلى من سيُحذف حسابه: تُعاد إلى المستلم الجديد، وتُحذف عندي (تبقى عنده حتى يُحذف حسابه).
+// المهام التي أرسلها غيري إليه لا أستطيع نقلها من جهازي؛ تُعرض على الشاشة لتعرف عددها.
+export async function transferOpenTasks(from, to) {
+  const { listTasks, sendTask, deleteTask } = await import('./tasks.js');
+  const mine = (await listTasks()).filter((t) => t.mine && t.to === from && t.status !== 'done');
+  for (const t of mine) {
+    await sendTask({ to, title: t.title, text: `(نُقلت إليك من ${t.toName})${t.text ? `\n${t.text}` : ''}`.slice(0, 800), due: t.due });
+    await deleteTask(t);
+  }
+  return mine.length;
+}
+export async function openTasksFrom(from) {
+  const { listTasks } = await import('./tasks.js');
+  return (await listTasks()).filter((t) => !t.mine && t.from === from && t.status !== 'done').length;
+}
+
 // رابط استعادة لمن نسي كلمة مروره: حساب جديد باسمه نفسه يأخذ مناصبه، والقديم يُحذف عند انضمامه
 export async function recoveryInvite({ uid, name, username, node, title }) {
   const base = String(username || 'user').replace(/\.r\d+$/, '');

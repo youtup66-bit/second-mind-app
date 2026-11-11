@@ -236,3 +236,17 @@ export function toGraph(s, members) {
   }
   return { nodes, edges };
 }
+
+// تسليم أماكن شخص إلى آخر قبل حذف حسابه (A46): تنتقل كراته مع مناصبه (مسؤول، معاون)، ويبقى ما كان للمستلم
+export function moveMemberPlaces(s, from, to) {
+  if (!from || !to || from === to) return 0;
+  const src = s.people[from]?.places || [];
+  let moved = 0;
+  for (const pl of src) {
+    if (!nodeById(s, pl.node)) continue;
+    const dst = (s.people[to] ||= { places: [] });
+    if (!dst.places.some((x) => x.node === pl.node)) { dst.places.push({ node: pl.node, ...(pl.head ? { head: true } : {}), ...(pl.assistant ? { assistant: true } : {}) }); moved++; }
+  }
+  delete s.people[from];
+  return moved;
+}

@@ -216,6 +216,16 @@ export async function mount(root) {
     if (!p) return;
     const can = p.places.every((pl) => manage.has(pl.node)) && u !== me?.uid;
     let sub = mode === 'link' && lastLink ? linkOut() : '';
+    // تسليم قبل الحذف (A46): يختار الخليفة من فرعه، فتنتقل كراته ومناصبه ومهامه إليه
+    if (mode === 'handover') {
+      const others = b.people.filter((x) => x.uid !== u);
+      sub = `<form class="struct-form struct-form--col" id="hf">
+          <p class="struct-sub">قبل حذف حساب <b>${esc(nameOf(u))}</b> سلّم أماكنه لغيره في فرعك:</p>
+          <label class="struct-field">الخليفة<select id="hf-to" required>${others.map((x) => `<option value="${esc(x.uid)}">${esc(x.name)}</option>`).join('')}</select></label>
+          <p class="muted struct-note">تنتقل كراته ومناصبه إلى الخليفة. المهام التي أرسلتها له تُعاد إليه عند الخليفة. المهام التي أرسلها غيرك له تبقى على أجهزتهم.</p>
+          <div class="row"><button class="btn" type="submit" ${others.length ? '' : 'disabled'}>تسليم وحذف الحساب</button><button class="btn btn--ghost" type="button" data-a="cancel">إلغاء</button></div>
+        </form>`;
+    }
     panel.innerHTML = `
       <div class="struct-title">${dot(p.places.some((x) => x.assistant) ? ASSISTANT.color : PERSON.color)}<div><b>${esc(nameOf(u))}</b><small>${u === me?.uid ? 'أنت' : ''}</small></div></div>
       ${!sub && b.perms.evals && b.evals?.[u] ? `<p class="struct-stats">نقاط هذا الأسبوع <b>${b.evals[u].week}</b> · هذا الشهر <b>${b.evals[u].month}</b>${b.evals[u].works.length ? `<br><small>${b.evals[u].works.map(esc).join('، ')}</small>` : ''}</p>` : ''}
@@ -226,6 +236,19 @@ export async function mount(root) {
       </div>`}
       <p class="status" id="msg" role="status"></p>`;
     if (mode === 'link') bindLinkOut();
+    panel.querySelector('#hf')?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const to = panel.querySelector('#hf-to').value;
+      const btn = panel.querySelector('#hf [type=submit]');
+      btn.disabled = true;
+      try {
+        const { transferOpenTasks } = await import('../org-accounts.js');
+        const moved = await transferOpenTasks(u, to);
+        await request('deleteAccount', { uid: u, successor: to });
+        mode = null; renderPerson(u);
+        toast(`أُرسل طلب الحذف والتسليم${moved ? `، وأُعيدت ${moved} ${moved === 1 ? 'مهمة' : 'مهام'} إلى الخليفة` : ''}.`);
+      } catch (err) { say(err.message); btn.disabled = false; }
+    });
     panel.querySelectorAll('[data-title]').forEach((x) => x.addEventListener('click', async () => {
       await request('place', { uid: u, node: x.dataset.title, title: x.dataset.v }); toast('أُرسل الطلب.');
     }));
@@ -235,10 +258,7 @@ export async function mount(root) {
     panel.querySelectorAll('[data-a]').forEach((x) => x.addEventListener('click', async () => {
       const a = x.dataset.a;
       if (a === 'cancel') { mode = null; renderPerson(u); return; }
-      if (a === 'delete') {
-        if (!confirm(`حذف حساب ${nameOf(u)}؟ لا يستطيع الدخول بعدها.`)) return;
-        await request('deleteAccount', { uid: u }); toast('أُرسل طلب حذف الحساب.'); return;
-      }
+      if (a === 'delete') { mode = 'handover'; renderPerson(u); return; }
       if (a === 'recover') {
         try {
           const pl = p.places[0];

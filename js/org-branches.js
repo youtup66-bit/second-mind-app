@@ -5,7 +5,7 @@ import { api, removeMember } from './cloud.js';
 import { getSetting, setSetting } from './storage.js';
 import {
   TYPES, colorOf, nodeById, permsOf, withStructure, addNode, addCustom, renameNode, removeNode,
-  placePerson, setHead, removePlace, unplacePerson, canHaveHead, setProject,
+  placePerson, setHead, removePlace, unplacePerson, canHaveHead, setProject, moveMemberPlaces,
 } from './org-structure.js';
 
 const KEY = 'branchesPublished'; // uid ← توقيع آخر ما نُشر
@@ -140,7 +140,10 @@ function check(st, from, op, p, members) {
     case 'unplace': return (manage.has(p.node) || (proj.has(p.node) && nodeById(st, p.node)?.type === 'custom')) && p.uid !== from ? null : 'خارج صلاحيته';
     case 'deleteAccount': {
       const pl = st.people[p.uid]?.places || [];
-      return p.uid !== from && members.get(p.uid)?.role === 'employee' && pl.length && pl.every((x) => manage.has(x.node)) ? null : 'خارج صلاحيته';
+      if (!(p.uid !== from && members.get(p.uid)?.role === 'employee' && pl.length && pl.every((x) => manage.has(x.node)))) return 'خارج صلاحيته';
+      // التسليم: الخليفة من فرع الطالب نفسه، ولا يكون هو المحذوف
+      if (p.successor && (p.successor === p.uid || !members.has(p.successor) || !inBranch(p.successor))) return 'الخليفة خارج فرعك';
+      return null;
     }
     default: return 'طلب غير معروف';
   }
@@ -172,7 +175,10 @@ export async function handleRequests(docs, members) {
             placePerson(st, p.uid, p.node, p.title === 'assistant');
             if (canHaveHead(n.type)) setHead(st, p.uid, p.node, p.title === 'head');
           } else if (data.op === 'unplace') removePlace(st, p.uid, p.node);
-          else if (data.op === 'deleteAccount') { await removeMember(p.uid); unplacePerson(st, p.uid); }
+          else if (data.op === 'deleteAccount') {
+            if (p.successor) moveMemberPlaces(st, p.uid, p.successor); else unplacePerson(st, p.uid);
+            await removeMember(p.uid);
+          }
           changed = true;
         } catch (e) { console.warn('request', data.op, e); }
       } else console.warn('رُفض طلب', data.op, 'من', data.from, ':', why);

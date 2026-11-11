@@ -6,7 +6,7 @@ import {
   TYPES, PERSON, ASSISTANT, PALETTE, canHaveAssistant, colorOf, loadStructure, saveStructure, nodeById, childrenOf,
   addNode, addCustom, setColor, toggleLink, renameNode, removeNode, placesOf, placePerson, removePlace, unplacePerson,
   assistantOf, peopleAt, pathOf, toGraph, canHaveHead, headsOf, setHead, PERMS, permsOf, setPerm, addPersonnel,
-  projOf, setProject, projectLine, projectLate,
+  projOf, setProject, projectLine, projectLate, moveMemberPlaces,
 } from '../org-structure.js';
 import { createOrgGraph } from '../org-graph.js';
 import { totals, pointsEvents } from '../points.js';
@@ -537,12 +537,23 @@ export async function mount(root) {
         return;
       }
       if (a === 'delete-account') {
-        if (!confirm(`حذف حساب ${nameOf(u)} من المؤسسة؟ لا يستطيع الدخول بعدها، ويُخرج من كل الكرات. تبقى منشوراته ونقاطه السابقة.`)) return;
-        try { await removeMember(u); } catch (err) { alert(err.message); return; }
-        const back = places[0].node;
-        unplacePerson(st, u);
+        // تسليم قبل الحذف (A46): يختار الخليفة، فتنتقل الكرات والمناصب ومهامه التي أرسلتها أنت
+        const others = members.filter((m) => m.user_id !== u);
+        if (!others.length) return alert('لا أحد يستلم الأماكن. أضف موظفاً أولاً.');
+        const pick = prompt(`سلّم أماكن ${nameOf(u)} قبل الحذف. اختر الخليفة:\n${others.map((m, i) => `${i + 1}- ${m.display_name}`).join('\n')}\n\nاكتب رقمه:`);
+        const chosen = others[Number(pick) - 1];
+        if (!chosen) return;
+        if (!confirm(`سيُسلَّم ${nameOf(u)} إلى ${chosen.display_name}، ثم يُحذف حسابه من المؤسسة، ولا يستطيع الدخول بعدها. متابعة؟`)) return;
+        try {
+          const { transferOpenTasks } = await import('../org-accounts.js');
+          const moved = await transferOpenTasks(u, chosen.user_id);
+          moveMemberPlaces(st, u, chosen.user_id);
+          await saveStructure(st);
+          await removeMember(u);
+          if (moved) alert(`أُعيدت ${moved} ${moved === 1 ? "مهمة" : "مهام"} إلى ${chosen.display_name}`);
+        } catch (err) { alert(err.message); return; }
         members = members.filter((m) => m.user_id !== u);
-        await commit(back);
+        await commit(placesOf(st, chosen.user_id).length ? `p:${chosen.user_id}` : null);
         return;
       }
       if (a === 'unplace') {
