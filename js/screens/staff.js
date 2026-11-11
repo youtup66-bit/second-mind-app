@@ -86,7 +86,7 @@ export async function mount(root) {
     out.hidden = false;
     out.innerHTML = `
       <p><b>دعوة ${esc(name)}</b></p>
-      <p class="muted">أرسل هذا الرابط إلى ${esc(name)} (واتساب مثلاً). يفتحه، ويختار كلمة مروره، فيصبح حسابه جاهزاً. الرابط يُستخدم مرة واحدة.</p>
+      <p class="muted">أرسل هذا الرابط إلى ${esc(name)} (واتساب مثلاً). يفتحه، ويختار كلمة مروره، فيصبح حسابه جاهزاً. الرابط يُستخدم مرة واحدة، وصالح ٧ أيام.</p>
       <input class="invite-out__link" dir="ltr" readonly value="${esc(link)}">
       <div class="text-btns">
         ${navigator.share ? '<button class="text-btn" type="button" id="inv-share">مشاركة</button>' : ''}

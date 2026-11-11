@@ -1,7 +1,7 @@
 rules_version = '2';
 
 // عقلي الثاني: قواعد حماية المؤسسة على Firestore
-// إصدار القواعد: 11 (أعمال متعددة ومعاونون في رد المهمة)
+// إصدار القواعد: 12 (انتهاء صلاحية الدعوات)
 // المرحلة ١: الحسابات (المدير، والموظفون، والدعوات)
 //
 // انسخ هذا الملف كاملاً في Firebase ← Firestore Database ← Rules، ثم اضغط Publish.
@@ -78,6 +78,8 @@ service cloud.firestore {
             && exists(invite(request.resource.data.invite))
             && get(invite(request.resource.data.invite)).data.username == request.resource.data.username
             && get(invite(request.resource.data.invite)).data.displayName == request.resource.data.displayName
+            // الدعوة تنتهي بعد ٧ أيام من إنشائها (لا تُستعمل بعدها)
+            && request.time < get(invite(request.resource.data.invite)).data.createdAt + duration.value(7, 'd')
             && !existsAfter(invite(request.resource.data.invite)))
         );
       // لا تعديل للأدوار أبداً

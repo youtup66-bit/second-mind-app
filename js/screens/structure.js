@@ -256,7 +256,7 @@ export async function mount(root) {
         </form>`;
     } else if (mode === 'invite-out' && lastInvite) {
       sub = `<div class="struct-form struct-form--col">
-          <p class="struct-sub">أرسل هذا الرابط إلى <b>${esc(lastInvite.name)}</b> (واتساب مثلاً). يفتحه ويضع كلمة مروره، فيظهر في «${esc(n.name)}» تلقائياً. يُستخدم مرة واحدة.</p>
+          <p class="struct-sub">أرسل هذا الرابط إلى <b>${esc(lastInvite.name)}</b> (واتساب مثلاً). يفتحه ويضع كلمة مروره، فيظهر في «${esc(n.name)}» تلقائياً. يُستخدم مرة واحدة، وصالح ٧ أيام.</p>
           <input class="invite-out__link" dir="ltr" readonly value="${esc(lastInvite.link)}">
           <div class="row">${navigator.share ? '<button class="btn" type="button" id="inv-share">مشاركة</button>' : ''}<button class="btn btn--ghost" type="button" id="inv-copy">نسخ</button><button class="btn btn--ghost" type="button" data-a="cancel">تم</button></div>
           <p class="status" id="inv-msg" role="status"></p>
