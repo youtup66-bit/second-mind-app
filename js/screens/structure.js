@@ -2,6 +2,7 @@
 // يسمّيها المدير ويلوّنها ويربطها بأكثر من فرع، ومكان كل موظف ومعاون (وقد يكون في أكثر من كرة)
 import { session, listMembers, inviteLink, removeMember, changePassword, linkRecoveryEmail, currentEmail } from '../cloud.js';
 import { inviteToBall, cancelBallInvite, ballInvites, recoveryInvite, TITLES } from '../org-accounts.js';
+import { checkUsername } from '../cloud.js';
 import {
   TYPES, PERSON, ASSISTANT, PALETTE, canHaveAssistant, colorOf, loadStructure, saveStructure, nodeById, childrenOf,
   addNode, addCustom, setColor, toggleLink, renameNode, removeNode, placesOf, placePerson, removePlace, unplacePerson,
@@ -246,6 +247,20 @@ export async function mount(root) {
       sub = `<p class="struct-sub">اربط «${esc(n.name)}» بالفروع (يمكن اختيار أكثر من فرع):</p>
         <div class="struct-pick">${st.nodes.filter((x) => x.id !== n.id).map((x) => `<button type="button" data-link="${esc(x.id)}" class="${n.links?.includes(x.id) ? 'is-on' : ''}">${n.links?.includes(x.id) ? '✓ ' : ''}${nodeLine(x)}</button>`).join('')}</div>
         <button class="btn btn--ghost" type="button" data-a="cancel">تم</button>`;
+    } else if (mode === 'person-ball') {
+      // كرة شخص: الاسم واسم المستخدم والمنصب، ويُرسل الرابط لاحقاً من داخل الكرة
+      const childT = TYPES[n.type]?.child;
+      const opts = [['assistant', 'معاون'], ['personnel', 'ذاتية']];
+      if (childT) opts.push(['head', `مسؤول ${TYPES[childT].label}`]);
+      opts.push(['member', 'موظف']);
+      sub = `<form class="struct-form struct-form--col" id="pbf">
+          <p class="struct-sub">كرة جديدة في «${esc(n.name)}». أرسل الرابط لاحقاً من داخلها:</p>
+          <input id="pbf-name" maxlength="60" required placeholder="الاسم الكامل">
+          <input id="pbf-user" maxlength="30" required dir="ltr" placeholder="اسم المستخدم (إنجليزي)" autocapitalize="off" autocomplete="off">
+          <div class="struct-pick struct-pick--row">${opts.map(([v, l], i) => `<label class="switch"><input type="radio" name="pbf-title" value="${v}" ${v === 'member' ? 'checked' : ''}><span>${l}</span></label>`).join('')}</div>
+          <p class="status" id="msg" role="status"></p>
+          <div class="row"><button class="btn" type="submit">إنشاء الكرة</button><button class="btn btn--ghost" type="button" data-a="cancel">إلغاء</button></div>
+        </form>`;
     } else if (mode === 'employee-ball') {
       sub = `<form class="struct-form" id="ebf">
           <input id="ebf-name" maxlength="60" required placeholder="اسم الموظف، مثل: أحمد علي">
@@ -332,8 +347,9 @@ export async function mount(root) {
       ${waiting.length ? `<ul class="struct-waiting">${waiting.map(([code, x]) => `<li><span>بانتظار التسجيل: <b>${esc(x.name)}</b> (${TITLES[x.title]})</span><button type="button" data-link-code="${esc(code)}" data-link-name="${esc(x.name)}">الرابط</button><button type="button" data-cancel-code="${esc(code)}" class="is-danger">إلغاء</button></li>`).join('')}</ul>` : ''}`}
       ${sub || `<div class="struct-actions">
         ${n.id === 'root' ? '<button type="button" data-a="me">حسابك: كلمة المرور والاستعادة</button>' : ''}
-        ${n.type === 'employee' ? '<button type="button" data-a="account-new">إنشاء رابط</button>' : ''}
-        ${n.type !== 'employee' ? '<button type="button" data-a="employee-ball">إنشاء كرة</button>' : ''}
+        ${n.type === 'employee' && !n.person ? '<button type="button" data-a="account-new">إنشاء رابط</button>' : ''}
+        ${n.type !== 'employee' ? '<button type="button" data-a="person-ball">إنشاء كرة</button>' : ''}
+        ${n.person ? '<button type="button" data-a="send-link">إرسال رابط</button>' : ''}
         ${n.type !== 'employee' ? '<button type="button" data-a="account">إنشاء رابط</button>' : ''}
         ${canHaveHead(n.type) ? '<button type="button" data-a="perms">خيارات الإظهار</button>' : ''}
         ${childT ? `<button type="button" data-a="add">إضافة ${childT.label}</button>` : ''}
@@ -438,6 +454,26 @@ export async function mount(root) {
       accountName = ''; accountPref = null;
       await commit(b.id);
     });
+    panel.querySelector('#pbf')?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const msg = panel.querySelector('#msg');
+      try {
+        const name = panel.querySelector('#pbf-name').value.trim();
+        const username = checkUsername(panel.querySelector('#pbf-user').value);
+        const title = panel.querySelector('[name=pbf-title]:checked').value;
+        const { addPersonBall, addNode, TYPES: T } = await import('../org-structure.js');
+        const person = { username, title, name };
+        let made;
+        if (title === 'head') {
+          // مسؤول شعبة/وحدة: الكرة الجديدة (شعبة أو وحدة) تنتظر مسؤولها
+          made = addNode(st, n.id, name);
+          made.person = person;
+        } else {
+          made = addPersonBall(st, n.id, name, person);
+        }
+        await commit(made.id);
+      } catch (err) { msg.textContent = err.message; msg.className = 'status status--err'; }
+    });
     panel.querySelector('#ebf')?.addEventListener('submit', async (e) => {
       e.preventDefault();
       const { addEmployeeBall } = await import('../org-structure.js');
@@ -500,6 +536,23 @@ export async function mount(root) {
       }
       if (a === 'custom') draftColor = PALETTE[st.nodes.filter((x) => x.type === 'custom').length % PALETTE.length];
       // إضافة موظف جديد: نموذج الحساب مختاراً فيه «موظف»
+      if (a === 'send-link') {
+        const pr = n.person;
+        if (!pr) return;
+        try {
+          // المسؤول: الرابط يضعه مسؤولاً للكرة نفسها. الآخرون: يُوضعون في الكرة الأم بمنصبهم، وتُحذف البطاقة عند انضمامهم
+          let node = n.parent, card = n.id, title = pr.title;
+          if (pr.title === 'head') { node = n.id; card = null; }
+          else if (pr.title === 'personnel') { const ps = addPersonnel(st); node = ps.id; title = 'member'; await saveStructure(st); }
+          else if (pr.title === 'member' || pr.title === 'assistant') { /* الافتراضي */ }
+          const code = await inviteToBall({ node, title, name: pr.name || n.name, username: pr.username, card });
+          lastInvite = { code, name: pr.name || n.name, link: await inviteLink(code) };
+          mode = 'invite-out';
+          renderPanel();
+        } catch (err) { alert(err.message); }
+        return;
+      }
+      if (a === 'person-ball') { mode = 'person-ball'; renderPanel(); return; }
       if (a === 'account-new') { accountPref = 'member'; accountName = n.type === 'employee' ? n.name : ''; mode = 'account'; renderPanel(); return; }
       if (a === 'account') { accountPref = null; accountName = ''; }
       mode = a;

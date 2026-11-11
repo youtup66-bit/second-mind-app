@@ -2,17 +2,17 @@
 // يضع به صاحبه كلمة مروره. هاتف رئيس القسم يتذكر لأي كرة كل دعوة، فإذا انضم صاحبها وُضع فيها تلقائياً.
 import { getSetting, setSetting } from './storage.js';
 import { createInvite, deleteInvite, removeMember } from './cloud.js';
-import { withStructure, nodeById, placePerson, setHead, unplacePerson } from './org-structure.js';
+import { withStructure, nodeById, placePerson, setHead, unplacePerson, removeCard } from './org-structure.js';
 
 const KEY = 'ballInvites'; // رمز الدعوة ← { node, title: head|assistant|member, name, username, at }
 export const TITLES = { head: 'مسؤول', assistant: 'معاون', member: 'موظف' };
 
 export const ballInvites = async () => (await getSetting(KEY, {})) || {};
 
-export async function inviteToBall({ node, title, name, username }) {
+export async function inviteToBall({ node, title, name, username, card = null }) {
   const code = await createInvite({ name, username });
   const all = await ballInvites();
-  all[code] = { node, title, name: String(name).trim(), username, at: Date.now() };
+  all[code] = { node, title, name: String(name).trim(), username, at: Date.now(), ...(card ? { card } : {}) };
   await setSetting(KEY, all);
   return code;
 }
@@ -52,7 +52,9 @@ export async function placeJoined(members) {
         changed = true;
       } else if (x && nodeById(st, x.node)) {
         placePerson(st, uid, x.node, x.title === 'assistant');
-        if (x.title === 'head') setHead(st, uid, x.node, true);
+        if (x.title === 'head') { setHead(st, uid, x.node, true); delete nodeById(st, x.node).person; }
+        // بطاقة الشخص (إن كانت) تُحذف لأنه صار في مكانه
+        if (x.card) removeCard(st, x.card);
         changed = true;
       }
       if (m.invite && all[m.invite]) delete all[m.invite];

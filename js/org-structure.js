@@ -134,6 +134,18 @@ export function addEmployeeBall(s, parentId, name) {
   return n;
 }
 
+// كرة شخص بياناته معه (اسم المستخدم والمنصب): تنتظر إرسال الرابط من داخلها
+export function addPersonBall(s, parentId, name, person) {
+  const n = addEmployeeBall(s, parentId, name);
+  n.person = person;
+  return n;
+}
+// حذف بطاقة من الهيكل (بعد انضمام صاحبها إلى مكانه)
+export function removeCard(s, id) {
+  s.nodes = s.nodes.filter((n) => n.id !== id);
+  for (const p of Object.values(s.people)) p.places = p.places.filter((pl) => pl.node !== id);
+}
+
 export function addNode(s, parentId, name) {
   const parent = nodeById(s, parentId);
   const type = parent && TYPES[parent.type].child;
