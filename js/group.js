@@ -329,6 +329,13 @@ export function roomsFromStructure(st, managerUid, isMember = () => true) {
     while (grew) { grew = false; for (const n of st.nodes) if (!ids.has(n.id) && ids.has(n.parent)) { ids.add(n.id); grew = true; } }
     return ids;
   };
+  // الكرة وما فوقها: من يُوضع في كرة يرى محادثتها ومحادثات كل ما تحتها (رئيس القسم يرى أقسامه)
+  const parentOf = new Map(st.nodes.map((x) => [x.id, x.parent]));
+  const chainOf = (id) => {
+    const set = new Set();
+    for (let c = id, g = 0; c && !set.has(c) && g < 500; c = parentOf.get(c), g++) set.add(c);
+    return set;
+  };
   const out = new Map();
   for (const n of st.nodes) {
     if (n.id === 'root') continue;
@@ -337,8 +344,9 @@ export function roomsFromStructure(st, managerUid, isMember = () => true) {
     // المشروع المغلق: تُحذف مجموعته، فتبقى رسائلها عند أعضائها للقراءة فقط
     if (n.type === 'custom' && n.project?.status === 'closed') continue;
     const ids = n.type === 'custom' ? new Set([n.id]) : under(n.id);
+    const above = chainOf(n.id); // الكرة نفسها وما فوقها
     const people = Object.entries(st.people || {})
-      .filter(([u, p]) => isMember(u) && (p.places || []).some((pl) => ids.has(pl.node))).map(([u]) => u);
+      .filter(([u, p]) => isMember(u) && (p.places || []).some((pl) => ids.has(pl.node) || above.has(pl.node))).map(([u]) => u);
     out.set(roomIdOf(n.id), {
       name: String(n.name).slice(0, 60), color: (n.type === 'custom' && n.color) || COLORS[n.type] || '#c084fc',
       kind: n.type, members: [...new Set([managerUid, ...people])].slice(0, 500),
