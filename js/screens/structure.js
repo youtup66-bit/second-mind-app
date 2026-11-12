@@ -397,6 +397,7 @@ export async function mount(root) {
         ${st.nodes.some((x) => x.parent === n.id) ? reportScopeHTML(st, n) : ''}
         ${n.id !== 'root' && n.type !== 'employee' && n.type !== 'personnel' ? roomMembersHTML(st, n, members) : ''}
         ${custom ? '<button type="button" data-a="project">تفاصيل المشروع: الحالة والتواريخ والإنجاز</button><button type="button" data-a="report">تقرير المشروع</button>' : ''}
+        ${custom ? '<label class="struct-field">تغيير النوع إلى<select id="conv-type"><option value="">اختر النوع</option><option value="division">شعبة</option><option value="unit">وحدة</option><option value="section">قسم وحدة</option></select></label>' : ''}
         <button type="button" data-a="rename">تعديل الاسم</button>
         ${n.id !== 'root' ? '<button type="button" data-a="delete" class="is-danger">حذف</button>' : ''}
         <details class="struct-more"><summary>المزيد</summary>
@@ -474,6 +475,18 @@ export async function mount(root) {
       r.addNodes = r.addNodes.filter((x) => x !== id);
       r.removeNodes = r.removeNodes.filter((x) => x !== id);
     })));
+    // تحويل الكرة المخصصة إلى نوع تنظيمي: تُزال بيانات المشروع والروابط واللون الخاص
+    panel.querySelector('#conv-type')?.addEventListener('change', async (e) => {
+      const t = e.target.value;
+      if (!t) return;
+      const label = { division: 'شعبة', unit: 'وحدة', section: 'قسم وحدة' }[t];
+      if (!confirm(`تحويل «${n.name}» إلى ${label}؟ تُحذف تفاصيل المشروع وروابطه، ولا يمكن التراجع.`)) { e.target.value = ''; return; }
+      n.type = t;
+      delete n.project;
+      delete n.links;
+      delete n.color;
+      await commit(n.id);
+    });
     panel.querySelectorAll('[data-rep]').forEach((c) => c.addEventListener('change', async () => {
       const x = nodeById(st, c.dataset.rep);
       if (!x) return;
