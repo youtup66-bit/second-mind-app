@@ -73,15 +73,17 @@ const rawGet = (key) => run('settings', 'readonly', (s) => s.get(key));
 const rawSet = (key, value) => run('settings', 'readwrite', (s) => s.put(value, key));
 async function loadScope() {
   if (!scope) {
-    const [acct, owner, groupOwner] = await Promise.all([rawGet('settingsAcct'), rawGet('settingsOwner'), rawGet('groupOwner')]);
-    scope = { acct: acct || null, owner: owner || groupOwner || null };
+    const [acct, owner] = await Promise.all([rawGet('settingsAcct'), rawGet('settingsOwner')]);
+    scope = { acct: acct || null, owner: owner || null };
   }
   return scope;
 }
-// يُستدعى عند معرفة الحساب المسجّل، ويُمرَّر null عند الخروج أو عند غياب المؤسسة
-export async function setSettingsAccount(uid) {
+// يُستدعى عند معرفة الحساب المسجّل ودوره، ويُمرَّر null عند الخروج أو عند غياب المؤسسة.
+// البيانات غير المفصولة على الجهاز تخص المدير وحده: هيكل المؤسسة الكامل لا يُحفظ إلا على جهازه،
+// فكل مدير يدخل الجهاز يصبح صاحبها. غير المدير لا يملكها أبداً، فيبقى له مفتاحه الخاص.
+export async function setSettingsAccount(uid, role = null) {
   const sc = await loadScope();
-  if (uid && !sc.owner) { sc.owner = uid; await rawSet('settingsOwner', uid); }
+  if (uid && role === 'manager' && sc.owner !== uid) { sc.owner = uid; await rawSet('settingsOwner', uid); }
   if (sc.acct === (uid || null)) return;
   sc.acct = uid || null;
   await rawSet('settingsAcct', sc.acct);
@@ -201,7 +203,8 @@ export const deleteGroupMessage = (id) => run('group', 'readwrite', (s) => s.del
 export async function getPoints() {
   const a = await pointAcct();
   const all = (await run('points', 'readonly', (s) => s.getAll())) || [];
-  return all.filter((p) => (a ? p.acct === a : !p.acct));
+  const { owner } = await loadScope();
+  return all.filter((p) => (a ? p.acct === a : !p.acct || p.acct === owner));
 }
 
 // ---- التصدير والاستيراد ----

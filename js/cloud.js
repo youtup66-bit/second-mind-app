@@ -129,10 +129,10 @@ export async function session() {
   await auth.authStateReady();
   const user = auth.currentUser;
   if (!user) { cacheRole(null); await setSettingsAccount(null); return null; }
-  await setSettingsAccount(user.uid);
   return run(async () => {
     const [m, o] = await Promise.all([F.getDoc(F.doc(db, 'members', user.uid)), F.getDoc(F.doc(db, 'orgs', 'main'))]);
     const s = { user: { id: user.uid }, member: m.exists() ? memberShape(user.uid, m.data()) : null, org: o.exists() ? { name: o.data().name } : null };
+    await setSettingsAccount(user.uid, s.member?.role || null);
     cacheRole(s);
     return s;
   });
