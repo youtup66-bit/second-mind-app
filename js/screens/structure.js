@@ -401,6 +401,7 @@ export async function mount(root) {
         ${n.id === 'root' ? '<button type="button" data-a="me">حسابك: كلمة المرور والاستعادة</button>' : ''}
         ${n.type !== 'employee' ? '<button type="button" data-a="person-ball">إنشاء كرة</button>' : ''}
         ${n.person ? '<button type="button" data-a="send-link">إرسال رابط</button>' : ''}
+        ${n.type === 'employee' && !n.person ? '<button type="button" data-a="account-new">إنشاء رابط</button>' : ''}
         ${canHaveHead(n.type) ? '<button type="button" data-a="perms">خيارات الإظهار</button>' : ''}
         ${st.nodes.some((x) => x.parent === n.id) ? reportScopeHTML(st, n) : ''}
         ${n.id !== 'root' && n.type !== 'employee' && n.type !== 'personnel' ? roomMembersHTML(st, n, members) : ''}
@@ -410,7 +411,6 @@ export async function mount(root) {
         ${n.id !== 'root' ? '<button type="button" data-a="delete" class="is-danger">حذف</button>' : ''}
         <details class="struct-more"><summary>المزيد</summary>
           <div class="struct-actions">
-            ${n.type === 'employee' && !n.person ? '<button type="button" data-a="account-new">إنشاء رابط</button>' : ''}
             ${n.type !== 'employee' ? '<button type="button" data-a="account">إنشاء رابط لشخص موجود أو مسؤول</button>' : ''}
             ${n.type !== 'employee' ? '<button type="button" data-a="pick-person">ربط موظف موجود بالكرة</button>' : ''}
             ${custom ? '<button type="button" data-a="links">الربط بفروع</button><button type="button" data-a="color">اللون</button>' : ''}
