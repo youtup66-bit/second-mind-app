@@ -40,7 +40,7 @@ let graph = null;
 function cardsToPick(st, n) {
   const above = new Set();
   for (let c = n.id, g = 0; c && !above.has(c) && g < 500; c = nodeById(st, c)?.parent, g++) above.add(c);
-  return st.nodes.filter((x) => x.type === 'employee' && x.parent !== n.id && !above.has(x.id));
+  return st.nodes.filter((x) => x.type === 'employee' && x.parent !== n.id && !(x.extraParents || []).includes(n.id) && !above.has(x.id));
 }
 
 // أعضاء كروب الكرة: إضافة شخص أو كرة (أهلها)، وإخراج شخص أو كرة. تُحفظ على الكرة نفسها
@@ -402,6 +402,7 @@ export async function mount(root) {
         ${n.type !== 'employee' ? '<button type="button" data-a="person-ball">إنشاء كرة</button>' : ''}
         ${n.person ? '<button type="button" data-a="send-link">إرسال رابط</button>' : ''}
         ${n.type === 'employee' && !n.person ? '<button type="button" data-a="account-new">إنشاء رابط</button>' : ''}
+        ${n.type === 'employee' && (n.extraParents || []).length ? `<div class="struct-report-list"><b>مرتبط أيضاً بـ:</b>${n.extraParents.map((e) => `<div><span>${esc(nodeById(st, e)?.name || '')}</span> <button type="button" class="text-btn text-btn--danger" data-unlink="${esc(e)}">إزالة</button></div>`).join('')}</div>` : ''}
         ${canHaveHead(n.type) ? '<button type="button" data-a="perms">خيارات الإظهار</button>' : ''}
         ${st.nodes.some((x) => x.parent === n.id) ? reportScopeHTML(st, n) : ''}
         ${n.id !== 'root' && n.type !== 'employee' && n.type !== 'personnel' ? roomMembersHTML(st, n, members) : ''}
@@ -608,6 +609,10 @@ export async function mount(root) {
       graph.setData(toGraph(st, members));
       renderPanel();
     }));
+    panel.querySelectorAll('[data-unlink]').forEach((b) => b.addEventListener('click', async () => {
+      n.extraParents = (n.extraParents || []).filter((x) => x !== b.dataset.unlink);
+      await commit(n.id);
+    }));
     panel.querySelectorAll('[data-u]').forEach((b) => b.addEventListener('click', async () => {
       placePerson(st, b.dataset.u, n.id, mode === 'pick-assistant');
       await commit(n.id);
@@ -616,7 +621,7 @@ export async function mount(root) {
     panel.querySelectorAll('[data-card]').forEach((b) => b.addEventListener('click', async () => {
       const c = nodeById(st, b.dataset.card);
       if (!c) return;
-      c.parent = n.id;
+      c.extraParents = [...new Set([...(c.extraParents || []), n.id])];
       await commit(n.id);
     }));
     panel.querySelectorAll('[data-a]').forEach((b) => b.addEventListener('click', async () => {

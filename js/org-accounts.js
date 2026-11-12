@@ -53,6 +53,8 @@ export async function placeJoined(members) {
       } else if (x && nodeById(st, x.node)) {
         placePerson(st, uid, x.node, x.title === 'assistant');
         if (x.title === 'head') { setHead(st, uid, x.node, true); delete nodeById(st, x.node).person; }
+        // كرات إضافية للبطاقة (ربط الموظف بأكثر من كرة) تنتقل معه إلى أماكنه
+        for (const e of (x.card && nodeById(st, x.card)?.extraParents) || []) if (nodeById(st, e)) placePerson(st, uid, e, false);
         // بطاقة الشخص (إن كانت) تُحذف لأنه صار في مكانه
         if (x.card) removeCard(st, x.card);
         changed = true;

@@ -246,6 +246,8 @@ export function toGraph(s, members) {
   for (const n of s.nodes) {
     if (n.parent) edges.push([n.parent, n.id, TYPES[n.type].rest]);
     for (const l of n.links || []) edges.push([l, n.id, TYPES.custom.rest]);
+    // كرة موظف مرتبطة بكرات إضافية (يعمل في أكثر من اختصاص)
+    for (const e of n.extraParents || []) edges.push([e, n.id, TYPES.employee.rest]);
   }
   for (const [u, p] of Object.entries(s.people)) {
     const places = p.places.filter((pl) => nodeById(s, pl.node));
