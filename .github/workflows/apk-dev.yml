@@ -40,6 +40,11 @@ jobs:
           BUBBLEWRAP_KEY_PASSWORD: ${{ secrets.APK_KEY_PASS }}
         run: |
           npm i -g @bubblewrap/cli
+          # JDK و Android SDK موجودان في البيئة: نعطي مساراتهما حتى لا يسأل Bubblewrap عن التثبيت
+          mkdir -p ~/.bubblewrap
+          printf '{"jdkPath":"%s","androidSdkPath":"%s"}' "$JAVA_HOME" "$ANDROID_HOME" > ~/.bubblewrap/config.json
+          cat ~/.bubblewrap/config.json
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null 2>&1 || true
           bubblewrap build --skipPwaValidation --skipWebManifestValidation || bubblewrap build --skipPwaValidation
 
       - name: رفع الملف
