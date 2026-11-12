@@ -386,6 +386,7 @@ async function mountList(root, s, syncErr, mode, tab = 'chats') {
         ${TABS.map(([id, label]) => (id === tab ? `<b aria-current="page">${label}</b>` : `<a href="#/chats?tab=${id}">${label}</a>`)).join('')}
       </nav>
       <small class="chats-status" id="g-status"></small>
+      ${tab === 'sections' ? '<input type="search" class="g-search" id="g-search" placeholder="ابحث عن كرة بالاسم" aria-label="ابحث عن كرة">' : ''}
       <p class="wa-note" id="g-note" ${syncErr ? '' : 'hidden'} role="status">${esc(syncErr)}</p>
       <ul class="g-rooms" id="g-rooms" aria-label="${TABS.find((x) => x[0] === tab)?.[1] || ''}"></ul>
       ${tab === 'chats' ? '<button type="button" class="g-new" id="g-new">مجموعة جديدة</button>' : ''}
@@ -393,6 +394,10 @@ async function mountList(root, s, syncErr, mode, tab = 'chats') {
   root.querySelector('#g-new')?.addEventListener('click', () => openEditor(root));
   const list = root.querySelector('#g-rooms');
   const statusEl = root.querySelector('#g-status');
+  // بحث الأقسام: يبقى نصه عند إعادة الرسم، ويتجاهل الهمزات والتشكيل والتاء المربوطة
+  let q = '';
+  const normQ = (s) => String(s || '').toLowerCase().replace(/[ً-ٟ]/g, '').replace(/[أإآ]/g, 'ا').replace(/ة/g, 'ه').replace(/ى/g, 'ي').trim();
+  root.querySelector('#g-search')?.addEventListener('input', (e) => { q = e.target.value; render(); });
 
   // مراسلة موظف مباشرة: محادثة من شخصين (تُعاد إن وُجدت)، والقواعد تمنع من ليس في جهاتك
   async function openDirect(uid) {
@@ -459,8 +464,11 @@ async function mountList(root, s, syncErr, mode, tab = 'chats') {
         <span class="wa-avatar wa-avatar--group" style="background:${esc(r.color)};color:${textOn(r.color)}" aria-hidden="true">${esc(initial(r.name))}</span>
         <span class="g-room__body"><b>${esc(r.name)}</b><small>دعوة من ${esc(members.get(r.owner)?.name || 'عضو')}${r.enrich ? ' · تُثري عقل المؤسسة' : ''}</small></span>
         <button type="button" class="text-btn" data-join="${esc(id)}">انضم</button><button type="button" class="text-btn text-btn--muted" data-decline="${esc(id)}">رفض</button></li>`).join('') : '';
-    const empty = !items.length && !inv && !top.length ? `<li class="wa-day">${tab === 'chats' ? 'لا مجموعات محادثة بعد. أنشئ واحدة من الزر بالأسفل.' : 'لا كروبات أقسام بعد.'}</li>` : '';
-    list.innerHTML = inv + empty + [...top, ...items].map((it) => {
+    const qn = normQ(q);
+    const shown = [...top, ...items].filter((it) => !qn || normQ(it.name).includes(qn));
+    const searching = tab === 'sections' && !!qn;
+    const empty = !shown.length && !inv ? `<li class="wa-day">${searching ? 'لا كرة بهذا الاسم.' : tab === 'chats' ? 'لا مجموعات محادثة بعد. أنشئ واحدة من الزر بالأسفل.' : 'لا كروبات أقسام بعد.'}</li>` : '';
+    list.innerHTML = inv + empty + shown.map((it) => {
       const m = last.get(it.id);
       const n = unread.get(it.id) || 0;
       const preview = m ? `${m.mine ? 'أنت' : esc(m.fromName)}: ${m.text ? esc(m.text.slice(0, 80)) : '📷 صورة'}` : `<i>${esc(it.kind)}</i>`;
@@ -471,7 +479,7 @@ async function mountList(root, s, syncErr, mode, tab = 'chats') {
           <span class="g-room__bottom"><span class="g-room__last">${preview}</span>${n ? `<span class="g-room__badge">${n > 99 ? '99+' : n}</span>` : ''}</span>
         </span></a></li>`;
     }).join('');
-    const n = items.length + top.length;
+    const n = shown.length;
     statusEl.textContent = !groupOnline() ? 'بلا إنترنت' : !n ? '' : `${n} ${n === 1 ? 'مجموعة' : n === 2 ? 'مجموعتان' : n <= 10 ? 'مجموعات' : 'مجموعة'}`;
   }
   list.addEventListener('click', async (e) => {

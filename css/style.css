@@ -1256,3 +1256,7 @@ body.on-group .tasks .wa-head { padding-top: calc(env(safe-area-inset-top) + 8px
 .pbf-role { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 14px; border-bottom: 1px solid rgba(255,255,255,.06); cursor: pointer; }
 .pbf-role:last-child { border-bottom: 0; }
 .pbf-role input { width: 20px; height: 20px; margin: 0; accent-color: var(--wa-green, #00a884); flex: none; }
+
+/* بحث الأقسام: حقل بسيط فوق قائمة الكرات */
+.g-search { display: block; width: calc(100% - 32px); margin: 6px 16px 4px; padding: 9px 12px; border-radius: 12px; border: 1px solid var(--line, #2a3340); background: var(--surface, #161b22); color: inherit; font: inherit; }
+.g-search::placeholder { color: var(--muted); }
