@@ -94,7 +94,7 @@ export async function mount(root) {
   $('#fit').addEventListener('click', () => { graph.fit(); setMenu(false); });
   const members = () => b.people.map((p) => ({ user_id: p.uid, display_name: p.name }));
   graph = createOrgGraph($('#sg'), { onSelect: (n) => { mode = null; renderName(); if (!n) sheet.hidden = true; else if (!sheet.hidden) renderPanel(); if (n) setMenu(false); } });
-  bindBallSearch(root, { focus: (id) => graph?.focus(id), nodes: () => st?.nodes });
+  bindBallSearch(root, { focus: (id) => graph?.focus(id), nodes: () => toGraph(st, members()).nodes });
   const renderName = () => {
     const id = graph.selected();
     if (!id) { nameBtn.hidden = true; return; }

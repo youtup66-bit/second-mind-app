@@ -165,7 +165,7 @@ export async function mount(root) {
       if (n) setMenu(false);
     },
   });
-  bindBallSearch(root, { focus: (id) => graph?.focus(id), nodes: () => st?.nodes });
+  bindBallSearch(root, { focus: (id) => graph?.focus(id), nodes: () => toGraph(st, members).nodes });
   nameBtn.addEventListener('click', openSheet);
   if (IS_DEV) window.__structGraph = graph; // للاختبار في نسخة التجربة فقط
   sheet.addEventListener('click', (e) => { if (e.target === sheet) closeSheet(); });
