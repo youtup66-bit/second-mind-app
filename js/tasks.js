@@ -51,6 +51,13 @@ async function relay(pending, text, task, extra = {}) {
 }
 
 // ---- المرسل ----
+// كروب المُصدِر: كروب كرته، ورئيس القسم كروبه العامة. يُحفظ مع المهمة فيكون الرد فيه افتراضياً
+function issuerRoom() {
+  const me = groupMe();
+  if (me?.role === 'manager') return GENERAL;
+  const head = groupBranch()?.heads?.[0];
+  return head ? `n_${head}` : GENERAL;
+}
 export async function sendTask({ to, title, text = '', due = '' }) {
   const me = groupMe();
   title = String(title || '').trim().slice(0, 120);
@@ -59,11 +66,11 @@ export async function sendTask({ to, title, text = '', due = '' }) {
   if (!who) throw new Error('اختر من تكلّفه.');
   const t = {
     id: uid(), from: me.uid, fromName: me.name, to, toName: who.name, title, text: String(text).trim().slice(0, 800),
-    due: /^\d{4}-\d{2}-\d{2}$/.test(due) ? due : '', createdAt: Date.now(), lastAt: Date.now(), status: 'sent', updates: [], mine: true,
+    due: /^\d{4}-\d{2}-\d{2}$/.test(due) ? due : '', createdAt: Date.now(), lastAt: Date.now(), status: 'sent', updates: [], mine: true, room: issuerRoom(),
   };
   await upsert(t);
   try {
-    await relay([to], `📌 مهمة: ${title}`, { kind: 'new', id: t.id, title: t.title, text: t.text, due: t.due, toName: t.toName });
+    await relay([to], `📌 مهمة: ${title}`, { kind: 'new', id: t.id, title: t.title, text: t.text, due: t.due, toName: t.toName, room: t.room });
   } catch (err) {
     await upsert({ ...t, failed: String(err?.code || err?.message || err) });
     throw new Error(/permission/i.test(String(err?.code)) ? 'لا تستطيع تكليف هذا الشخص (خارج فرعك)، أو القواعد في Firebase قديمة.' : err.message);
@@ -105,7 +112,7 @@ export async function onTaskMessage(x) {
     if (exists) return;
     await upsert({
       id: k.id, from: x.from, fromName: x.fromName, to: me.uid, toName: me.name, title: k.title || x.text, text: k.text || '',
-      due: k.due || '', createdAt: x.sentAt || Date.now(), lastAt: Date.now(), status: 'received', updates: [], mine: false, unseen: true,
+      due: k.due || '', createdAt: x.sentAt || Date.now(), lastAt: Date.now(), status: 'received', updates: [], mine: false, unseen: true, room: k.room || '',
     });
     // إشعار الاستلام للمرسل («وصلت»)
     relay([x.from], `📥 وصلت: ${k.title || ''}`, { kind: 'update', id: k.id, status: 'received' }).catch(() => {});

@@ -96,6 +96,9 @@ export async function mount(root) {
   async function openReply(t, status) {
     const [works, room] = await Promise.all([catalog(), taskRoom()]);
     const rooms = [[GENERAL, 'العامة'], ...[...groupRooms()].filter(([id]) => !isChatRoom(id)).map(([id, r]) => [id, r.name])];
+    // كروب المُصدِر: الافتراضي للرد، ويبقى الاختيار متاحاً
+    const pick = t.room || room;
+    if (t.room && !rooms.some(([id]) => id === t.room)) rooms.push([t.room, 'كروب المُصدِر']);
     const all = groupMembers();
     const me = groupMe();
     // من في وحدته (ومن تحتها)؛ ورئيس القسم يرى الجميع
@@ -119,7 +122,7 @@ export async function mount(root) {
       <textarea id="tr-note" rows="2" maxlength="600" placeholder="ملاحظة (اختياري): المكان، المدة، ما بقي…"></textarea>
       <div class="row"><button type="button" class="btn btn--ghost" id="tr-photo">📷 صورة</button><span class="muted" id="tr-photo-st"></span></div>
       <input type="file" id="tr-file" accept="image/*" hidden>
-      <label class="struct-field">يُنشر في<select id="tr-room">${rooms.map(([id, n]) => `<option value="${esc(id)}" ${id === room ? 'selected' : ''}>${esc(n)}</option>`).join('')}</select></label>
+      <label class="struct-field">يُنشر في<select id="tr-room">${rooms.map(([id, n]) => `<option value="${esc(id)}" ${id === pick ? 'selected' : ''}>${esc(n)}</option>`).join('')}</select></label>
       <small class="muted">تبقى مجموعة النشر كما اخترتها للمرات القادمة.</small>
       <p class="status" id="tr-msg" role="status"></p>
       <div class="g-sheet__actions"><button class="btn" type="submit">نشر</button><button class="btn btn--ghost" type="button" data-close>إلغاء</button></div>`;
