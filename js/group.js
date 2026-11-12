@@ -366,10 +366,17 @@ async function doPublishRooms() {
   await membersReady;
   const { loadStructure } = await import('./org-structure.js');
   const st = await loadStructure();
+  // هيكل فارغ (بلا كرات) لا يحذف الكرات المنشورة: قد يكون الهيكل لم يُقرأ بعد
+  if ((st.nodes || []).length <= 1) return;
   const want = roomsFromStructure(st, me.uid, (u) => members.has(u));
 
   const { db, F } = await api();
   published ||= await getSetting(ROOMS_KEY, {}) || {};
+  // مرة واحدة بعد هذا الإصلاح: تُعاد كتابة كل الكرات، لأن بعضها حُذف من الخادم وبقي توقيعه محفوظاً
+  if (!(await getSetting('roomsRepubAt', 0))) {
+    published = {};
+    await setSetting('roomsRepubAt', Date.now());
+  }
   let msgs = null;
   for (const [id, r] of want) {
     const sig = JSON.stringify([r.name, r.color, [...r.members].sort()]);
@@ -388,8 +395,9 @@ async function doPublishRooms() {
   }
   // كرات حُذفت من الهيكل
   for (const d of (await F.getDocs(F.query(F.collection(db, 'rooms'), F.where('kind', 'in', BALL_KINDS)))).docs) {
-    if (!want.has(d.id)) await F.deleteDoc(d.ref).catch(() => {});
+    if (!want.has(d.id)) { await F.deleteDoc(d.ref).catch(() => {}); delete published[d.id]; }
   }
+  await setSetting(ROOMS_KEY, published);
   for (const id of Object.keys(published)) if (id.startsWith('n_') && !want.has(id)) delete published[id];
   // لكل موظف: أسماء كراته، ومن يضيفه مباشرة لمجموعة محادثة
   const { placesOf, nodeById } = await import('./org-structure.js');
