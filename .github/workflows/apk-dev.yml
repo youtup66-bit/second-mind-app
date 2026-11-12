@@ -1,0 +1,50 @@
+# بناء ملف APK لنسخة التجربة (/dev/) يدوياً، ويُحمَّل من صفحة التشغيل (Artifacts).
+# يحتاج أسراراً في إعدادات المستودع: APK_KEYSTORE_B64 (ملف المفتاح بترميز base64)،
+# APK_STORE_PASS (كلمة مرور المخزن)، APK_KEY_PASS (كلمة مرور المفتاح).
+name: APK (dev)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: dev
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: مفتاح التوقيع
+        env:
+          KS: ${{ secrets.APK_KEYSTORE_B64 }}
+        run: |
+          if [ -z "$KS" ]; then echo "أضف السر APK_KEYSTORE_B64 في إعدادات المستودع"; exit 1; fi
+          echo "$KS" | base64 -d > apk/aqli-dev.jks
+
+      - name: بناء APK
+        working-directory: apk
+        env:
+          BUBBLEWRAP_KEYSTORE_PASSWORD: ${{ secrets.APK_STORE_PASS }}
+          BUBBLEWRAP_KEY_PASSWORD: ${{ secrets.APK_KEY_PASS }}
+        run: |
+          npm i -g @bubblewrap/cli
+          bubblewrap build --skipPwaValidation --skipWebManifestValidation || bubblewrap build --skipPwaValidation
+
+      - name: رفع الملف
+        uses: actions/upload-artifact@v4
+        with:
+          name: aqli-dev-apk
+          path: apk/app-release-signed.apk
+          if-no-files-found: error
