@@ -44,6 +44,8 @@ jobs:
           mkdir -p ~/.bubblewrap
           printf '{"jdkPath":"%s","androidSdkPath":"%s"}' "$JAVA_HOME" "$ANDROID_HOME" > ~/.bubblewrap/config.json
           cat ~/.bubblewrap/config.json
+          # Bubblewrap يتحقق من وجود مجلد bin في جذر SDK، وهو غير موجود في بيئة GitHub
+          if [ ! -e "$ANDROID_HOME/bin" ]; then sudo ln -s "$ANDROID_HOME/cmdline-tools/latest/bin" "$ANDROID_HOME/bin"; fi
           SDKM="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
           ls "$ANDROID_HOME" || true
           ls "$ANDROID_HOME/build-tools" "$ANDROID_HOME/platforms" 2>/dev/null || true
