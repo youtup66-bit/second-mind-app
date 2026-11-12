@@ -50,13 +50,15 @@ function roomMembersHTML(st, n, members) {
   const cur = roomPeople(st, n, (u) => names.has(u)).filter((u) => names.has(u));
   const ov = n.room || {};
   const notIn = members.filter((m) => !cur.includes(m.user_id));
+  // كرات الموظفين بلا حساب بعد المرتبطة بهذه الكرة أو المتفرعة منها: تظهر هنا كما يظهر الحساب
+  const pending = st.nodes.filter((x) => x.type === 'employee' && (x.parent === n.id || (x.extraParents || []).includes(n.id)));
   const balls = st.nodes.filter((x) => x.id !== 'root' && x.id !== n.id && x.type !== 'employee' && x.type !== 'personnel');
   const ballEntries = [
     ...(ov.addNodes || []).map((id) => ({ id, label: 'أُضيفت' })),
     ...(ov.removeNodes || []).map((id) => ({ id, label: 'أُخرجت' })),
   ];
-  return `<details class="struct-more struct-room"><summary>أعضاء كروب الكرة (${cur.length})</summary>
-    <ul class="struct-report-list">${cur.map((u) => `<li><span>${esc(names.get(u))}</span> <button type="button" class="text-btn text-btn--danger" data-rp="${esc(u)}">إخراج</button></li>`).join('') || '<li class="muted">لا أحد بعد</li>'}</ul>
+  return `<details class="struct-more struct-room"><summary>أعضاء كروب الكرة (${cur.length + pending.length})</summary>
+    <ul class="struct-report-list">${cur.map((u) => `<li><span>${esc(names.get(u))}</span> <button type="button" class="text-btn text-btn--danger" data-rp="${esc(u)}">إخراج</button></li>`).join('')}${pending.map((c) => `<li><span>${esc(c.name)}</span> <small class="muted">بلا حساب بعد</small></li>`).join('')}${cur.length || pending.length ? '' : '<li class="muted">لا أحد بعد</li>'}</ul>
     <div class="struct-actions">
       <select id="rp-add" aria-label="شخص للإضافة">${notIn.map((m) => `<option value="${esc(m.user_id)}">${esc(m.display_name)}</option>`).join('')}</select>
       <button type="button" class="text-btn" id="rp-add-go">إضافة شخص</button>
