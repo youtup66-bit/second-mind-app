@@ -51,7 +51,8 @@ jobs:
           ls "$ANDROID_HOME/build-tools" "$ANDROID_HOME/platforms" 2>/dev/null || true
           yes | "$SDKM" --licenses >/dev/null 2>&1 || true
           "$SDKM" --install "platforms;android-34" "build-tools;34.0.0" "platform-tools" >/dev/null 2>&1 || true
-          bubblewrap build --skipPwaValidation --skipWebManifestValidation || bubblewrap build --skipPwaValidation
+          # Bubblewrap يسأل عن إعادة إنشاء المشروع أول مرة: نجيب بالموافقة تلقائياً
+          yes | bubblewrap build --skipPwaValidation --skipWebManifestValidation || yes | bubblewrap build --skipPwaValidation
 
       - name: رفع الملف
         uses: actions/upload-artifact@v4
