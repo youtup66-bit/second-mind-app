@@ -10,6 +10,7 @@ import {
   projOf, setProject, projectLine, projectLate, moveMemberPlaces,
 } from '../org-structure.js';
 import { createOrgGraph } from '../org-graph.js';
+import { ballSearchHTML, bindBallSearch } from '../ball-search.js';
 import { totals, pointsEvents } from '../points.js';
 import { getGroupMessages } from '../storage.js';
 import { groupEvents, groupMembers, countsForPoints } from '../group.js';
@@ -103,6 +104,7 @@ export async function mount(root) {
     <div class="struct struct--full">
       <div class="struct-stage">
         <canvas id="sg" aria-label="عقل المؤسسة"></canvas>
+        ${ballSearchHTML()}
         <button type="button" class="struct-handle" id="handle" aria-label="القائمة" aria-expanded="false"><span></span></button>
         <div class="struct-menu" id="menu" hidden>
           ${mindTabs('structure', 'structure', true)}
@@ -163,6 +165,7 @@ export async function mount(root) {
       if (n) setMenu(false);
     },
   });
+  bindBallSearch(root, { focus: (id) => graph?.focus(id), nodes: () => st?.nodes });
   nameBtn.addEventListener('click', openSheet);
   if (IS_DEV) window.__structGraph = graph; // للاختبار في نسخة التجربة فقط
   sheet.addEventListener('click', (e) => { if (e.target === sheet) closeSheet(); });

@@ -4,6 +4,7 @@
 import { startGroupSync, groupEvents, groupBranch, groupMembers, groupMe, waitBranch } from '../group.js';
 import { TYPES, PERSON, ASSISTANT, PALETTE, colorOf, nodeById, toGraph, canHaveHead, projOf, projectLine, projectLate } from '../org-structure.js';
 import { createOrgGraph } from '../org-graph.js';
+import { ballSearchHTML, bindBallSearch } from '../ball-search.js';
 import { createInvite, inviteLink } from '../cloud.js';
 import { sendRequest } from '../org-branches.js';
 import { recoveryInvite, TITLES } from '../org-accounts.js';
@@ -36,6 +37,7 @@ export async function mount(root) {
     <div class="struct struct--full">
       <div class="struct-stage">
         <canvas id="sg" aria-label="فرعك"></canvas>
+        ${ballSearchHTML()}
         <button type="button" class="struct-handle" id="handle" aria-label="القائمة" aria-expanded="false"><span></span></button>
         <div class="struct-menu" id="menu" hidden>
           ${b.perms.mind ? mindTabs('branch', 'branch') : ''}
@@ -92,6 +94,7 @@ export async function mount(root) {
   $('#fit').addEventListener('click', () => { graph.fit(); setMenu(false); });
   const members = () => b.people.map((p) => ({ user_id: p.uid, display_name: p.name }));
   graph = createOrgGraph($('#sg'), { onSelect: (n) => { mode = null; renderName(); if (!n) sheet.hidden = true; else if (!sheet.hidden) renderPanel(); if (n) setMenu(false); } });
+  bindBallSearch(root, { focus: (id) => graph?.focus(id), nodes: () => st?.nodes });
   const renderName = () => {
     const id = graph.selected();
     if (!id) { nameBtn.hidden = true; return; }

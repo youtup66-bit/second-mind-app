@@ -224,6 +224,8 @@ export function createOrgGraph(canvas, { onSelect } = {}) {
   return {
     setData,
     select,
+    // يتمركز الرسم على الكرة ويحددها (لبحث الكرات)
+    focus: (id) => { const n = byId.get(id); if (!n) return; select(id); view.k = Math.max(view.k, 1.2); view.x = w / 2 - n.x * view.k; view.y = h / 2 - n.y * view.k; redraw(); },
     selected: () => selected,
     zoom: (f) => { zoomAt(w / 2, h / 2, view.k * f); redraw(); },
     fit: () => { fit(); redraw(); },
