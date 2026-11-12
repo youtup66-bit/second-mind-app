@@ -295,6 +295,7 @@ export async function mount(root) {
       const opts = [];
       if (childT === 'division') opts.push(['division', 'شعبة']);
       if (childT === 'unit') opts.push(['unit', 'وحدة']);
+      if (childT === 'section') opts.push(['section', 'قسم وحدة']);
       if (canHaveAssistant(n.type)) opts.push(['assistant', 'معاون']);
       opts.push(['personnel', 'ذاتية'], ['custom', 'مخصصة'], ['member', 'موظف']);
       sub = `<form class="struct-form struct-form--col" id="pbf">
@@ -553,8 +554,8 @@ export async function mount(root) {
         const title = panel.querySelector('[name=pbf-title]:checked').value;
         const { addPersonBall, addNode, addCustom, PALETTE: PAL } = await import('../org-structure.js');
         let made;
-        if (title === 'division' || title === 'unit') {
-          // شعبة أو وحدة باسم الاسم المكتوب (تُضاف تحت هذه الكرة حسب نوعها)
+        if (title === 'division' || title === 'unit' || title === 'section') {
+          // شعبة أو وحدة أو قسم وحدة باسم الاسم المكتوب (تُضاف تحت هذه الكرة حسب نوعها)
           made = addNode(st, n.id, name);
         } else if (title === 'custom') {
           // كرة مخصصة (مشروع أو لجنة): بلا حساب
