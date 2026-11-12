@@ -36,6 +36,13 @@ const dot = (c) => `<i class="sdot" style="background:${c}"></i>`;
 
 let graph = null;
 
+// كرات الموظفين (بحساب أو بلا) التي يصح نقلها إلى الكرة n: لا كرات الأقسام، ولا ما فوق n أو n نفسها
+function cardsToPick(st, n) {
+  const above = new Set();
+  for (let c = n.id, g = 0; c && !above.has(c) && g < 500; c = nodeById(st, c)?.parent, g++) above.add(c);
+  return st.nodes.filter((x) => x.type === 'employee' && x.parent !== n.id && !above.has(x.id));
+}
+
 // أعضاء كروب الكرة: إضافة شخص أو كرة (أهلها)، وإخراج شخص أو كرة. تُحفظ على الكرة نفسها
 function roomMembersHTML(st, n, members) {
   const names = new Map(members.map((m) => [m.user_id, m.display_name]));
@@ -374,7 +381,7 @@ export async function mount(root) {
         return mode === 'pick-assistant' ? !pl?.assistant : !pl;
       });
       sub = `<p class="struct-sub">${mode === 'pick-assistant' ? `اختر معاون ${esc(n.name)}` : `أضف موظفاً إلى ${esc(n.name)} (يبقى في أماكنه الأخرى أيضاً)`}:</p>
-        <div class="struct-pick">${list.map((m) => `<button type="button" data-u="${esc(m.user_id)}"><b>${esc(m.display_name)}</b><small>${esc(placeLabel(m.user_id))}</small></button>`).join('') || '<p class="muted">لا موظفين متاحين.</p>'}</div>
+        <div class="struct-pick">${list.map((m) => `<button type="button" data-u="${esc(m.user_id)}"><b>${esc(m.display_name)}</b><small>${esc(placeLabel(m.user_id))}</small></button>`).join('')}${mode === 'pick-person' ? cardsToPick(st, n).map((c) => `<button type="button" data-card="${esc(c.id)}"><b>${esc(c.name)}</b><small>كرة موظف · ${esc(pathOf(st, c.parent))}</small></button>`).join('') : ''}${list.length || (mode === 'pick-person' && cardsToPick(st, n).length) ? '' : '<p class="muted">لا موظفين متاحين.</p>'}</div>
         <button class="btn btn--ghost" type="button" data-a="cancel">إلغاء</button>`;
     }
 
@@ -603,6 +610,13 @@ export async function mount(root) {
     }));
     panel.querySelectorAll('[data-u]').forEach((b) => b.addEventListener('click', async () => {
       placePerson(st, b.dataset.u, n.id, mode === 'pick-assistant');
+      await commit(n.id);
+    }));
+    // كرة موظف بلا حساب بعد: تُنقل إلى هذه الكرة (تبقى كرة الموظف نفسها ورابطها)
+    panel.querySelectorAll('[data-card]').forEach((b) => b.addEventListener('click', async () => {
+      const c = nodeById(st, b.dataset.card);
+      if (!c) return;
+      c.parent = n.id;
       await commit(n.id);
     }));
     panel.querySelectorAll('[data-a]').forEach((b) => b.addEventListener('click', async () => {
