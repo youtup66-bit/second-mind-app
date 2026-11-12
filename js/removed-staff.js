@@ -39,11 +39,18 @@ export async function setArchived(uid, on) {
   await setSetting(KEY, list.map((x) => (x.uid === uid ? { ...x, archived: !!on } : x)));
 }
 // حذف نهائي: تُمسح اللقطة من الجهاز، ويمكن أن تُمسح منشوراته ونقاطه من الجهاز أيضاً (اختياري)
-export async function deleteRemovedForever(uid, { alsoData = false } = {}) {
-  const { getPoints, deletePoint, getGroupMessages, deleteGroupMessage } = await import('./storage.js');
-  if (alsoData) {
-    for (const p of (await getPoints()).filter((x) => x.user === uid)) await deletePoint(p.id).catch(() => {});
-    for (const m of (await getGroupMessages()).filter((x) => x.from === uid)) await deleteGroupMessage(m.id).catch(() => {});
+export async function deleteRemovedForever(uid) {
+  const { getPoints, deletePoint, getGroupMessages, deleteGroupMessage, getSetting: gs, setSetting: ss } = await import('./storage.js');
+  const { groupMe } = await import('./group.js');
+  // نقاطه ومنشوراته في أرشيف المجموعة
+  for (const p of (await getPoints()).filter((x) => x.user === uid)) await deletePoint(p.id).catch(() => {});
+  for (const m of (await getGroupMessages()).filter((x) => x.from === uid)) await deleteGroupMessage(m.id).catch(() => {});
+  // مهامه (المرسلة إليه أو منه) في مهام هذا الحساب على الجهاز
+  const me = groupMe();
+  if (me?.uid) {
+    const tk = `tasks_${me.uid}`;
+    const tasks = (await gs(tk, [])) || [];
+    await ss(tk, tasks.filter((t) => t.from !== uid && t.to !== uid));
   }
   const list = (await getSetting(KEY, [])) || [];
   await setSetting(KEY, list.filter((x) => x.uid !== uid));

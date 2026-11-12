@@ -322,20 +322,41 @@ export function contactsFromStructure(st, uid) {
   return [...out];
 }
 
-export function roomsFromStructure(st, managerUid, isMember = () => true) {
-  const under = (id) => {
-    const ids = new Set([id]);
-    let grew = true;
-    while (grew) { grew = false; for (const n of st.nodes) if (!ids.has(n.id) && ids.has(n.parent)) { ids.add(n.id); grew = true; } }
-    return ids;
-  };
-  // الكرة وما فوقها: من يُوضع في كرة يرى محادثتها ومحادثات كل ما تحتها (رئيس القسم يرى أقسامه)
+// كرة وما تحتها من الكرات (بما فيها الكرة نفسها)
+function underIds(st, id) {
+  const ids = new Set([id]);
+  let grew = true;
+  while (grew) { grew = false; for (const n of st.nodes) if (!ids.has(n.id) && ids.has(n.parent)) { ids.add(n.id); grew = true; } }
+  return ids;
+}
+// الكرة وما فوقها
+function chainIds(st, id) {
   const parentOf = new Map(st.nodes.map((x) => [x.id, x.parent]));
-  const chainOf = (id) => {
-    const set = new Set();
-    for (let c = id, g = 0; c && !set.has(c) && g < 500; c = parentOf.get(c), g++) set.add(c);
-    return set;
-  };
+  const set = new Set();
+  for (let c = id, g = 0; c && !set.has(c) && g < 500; c = parentOf.get(c), g++) set.add(c);
+  return set;
+}
+// أعضاء كروب كرة n (بلا المدير). القاعدة: من في الكرة أو تحتها أو فوقها يكون عضواً،
+// ثم تعديلات المدير على الكروب: أشخاص وكرات تُضاف، وتُخرج. الإخراج يغلب الإضافة.
+export function roomPeople(st, n, isMember = () => true) {
+  const ov = n.room || {};
+  const ids = n.type === 'custom' ? new Set([n.id]) : underIds(st, n.id);
+  const above = chainIds(st, n.id);
+  const addSet = new Set((ov.addNodes || []).flatMap((id) => [...underIds(st, id)]));
+  const removeSet = new Set((ov.removeNodes || []).flatMap((id) => [...underIds(st, id)]));
+  const set = new Set();
+  for (const [u, p] of Object.entries(st.people || {})) {
+    if (!isMember(u)) continue;
+    const places = p.places || [];
+    if (places.some((pl) => ids.has(pl.node) || above.has(pl.node) || addSet.has(pl.node))) set.add(u);
+  }
+  for (const u of ov.addPeople || []) if (isMember(u)) set.add(u);
+  for (const [u, p] of Object.entries(st.people || {})) if ((p.places || []).some((pl) => removeSet.has(pl.node))) set.delete(u);
+  for (const u of ov.removePeople || []) set.delete(u);
+  return [...set];
+}
+
+export function roomsFromStructure(st, managerUid, isMember = () => true) {
   const out = new Map();
   for (const n of st.nodes) {
     if (n.id === 'root') continue;
@@ -343,10 +364,8 @@ export function roomsFromStructure(st, managerUid, isMember = () => true) {
     if (n.type === 'employee' || n.type === 'personnel') continue;
     // المشروع المغلق: تُحذف مجموعته، فتبقى رسائلها عند أعضائها للقراءة فقط
     if (n.type === 'custom' && n.project?.status === 'closed') continue;
-    const ids = n.type === 'custom' ? new Set([n.id]) : under(n.id);
-    const above = chainOf(n.id); // الكرة نفسها وما فوقها
-    const people = Object.entries(st.people || {})
-      .filter(([u, p]) => isMember(u) && (p.places || []).some((pl) => ids.has(pl.node) || above.has(pl.node))).map(([u]) => u);
+    // الكرة وما فوقها: من يُوضع في كرة يرى محادثتها ومحادثات كل ما تحتها (رئيس القسم يرى أقسامه)
+    const people = roomPeople(st, n, isMember);
     out.set(roomIdOf(n.id), {
       name: String(n.name).slice(0, 60), color: (n.type === 'custom' && n.color) || COLORS[n.type] || '#c084fc',
       kind: n.type, members: [...new Set([managerUid, ...people])].slice(0, 500),

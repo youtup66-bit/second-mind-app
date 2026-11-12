@@ -169,9 +169,9 @@ export async function mount(root) {
     if (e.target.closest('[data-restore]')) { await m.setArchived(uid, false); return render(); }
     if (e.target.closest('[data-forever]')) {
       const name = li.querySelector('b')?.textContent || 'هذا الموظف';
-      if (!confirm(`حذف ${name} نهائياً من هذا الجهاز؟ لا يمكن التراجع.`)) return;
-      const alsoData = confirm('هل تحذف أيضاً منشوراته ونقاطه من هذا الجهاز؟\nموافق = نعم، وتختفي من التقارير والنقاط.\nإلغاء = لا، وتبقى.');
-      await m.deleteRemovedForever(uid, { alsoData });
+      if (!confirm(`حذف ${name} نهائياً مع كل ما يرتبط به (منشوراته ونقاطه ومهامه) من هذا الجهاز؟ لا يمكن التراجع.`)) return;
+      // الحذف النهائي يشمل كل ما يرتبط بالموظف على هذا الجهاز: منشوراته ونقاطه ومهامه
+      await m.deleteRemovedForever(uid);
       return render();
     }
   };

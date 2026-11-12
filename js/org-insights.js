@@ -5,7 +5,7 @@ import {
 } from './storage.js';
 import { totals, periodStart, getWorks, addManual, suggestions } from './points.js';
 import { loadStructure, nodeById, placesOf, projOf, projectLine, projectLate } from './org-structure.js';
-import { groupMembers, sendGroup, startGroupSync, countsForPoints } from './group.js';
+import { groupMembers, sendGroup, startGroupSync, countsForPoints, roomOf } from './group.js';
 import { writeOrgReport } from './gemini.js';
 
 export const insightsEvents = new EventTarget(); // change
@@ -20,6 +20,14 @@ const employees = () => [...groupMembers()].filter(([, m]) => m.role === 'employ
 export const REPORT_PERIODS = { week: 'هذا الأسبوع', month: 'هذا الشهر' };
 export const listReports = () => getSetting('orgReports', []);
 
+// الكرات التي اختار المدير ألا تدخل التقرير (وكل ما تحتها) على جهازه
+export function excludedNodes(st) {
+  const out = new Set();
+  const down = (id) => { out.add(id); st.nodes.filter((x) => x.parent === id).forEach((c) => down(c.id)); };
+  st.nodes.filter((x) => x.noReport).forEach((x) => down(x.id));
+  return out;
+}
+
 // period: week | month | project (مع node: كرة المشروع؛ منشورات مجموعته ونقاطها منذ بدايته)
 export async function makeReport(period = 'week', { node = null } = {}) {
   if (period === 'project') return makeProjectReport(node);
@@ -27,10 +35,12 @@ export async function makeReport(period = 'week', { node = null } = {}) {
   const [t, posts, st, works] = await Promise.all([totals(period), getGroupMessages().then((l) => l.filter(countsForPoints)), loadStructure(), getWorks()]);
   const emps = employees();
   const name = (u) => emps.find(([id]) => id === u)?.[1].name || 'موظف سابق';
-  const inPeriod = posts.filter((m) => m.sentAt >= from && m.text);
-  const people = emps.map(([u, m]) => ({
+  const excl = excludedNodes(st);
+  const inRoom = (m) => { const r = roomOf(m); return !(r.startsWith('n_') && excl.has(r.slice(2))); };
+  const inPeriod = posts.filter((m) => m.sentAt >= from && m.text && inRoom(m));
+  const people = emps.filter(([u]) => !placesOf(st, u).length || placesOf(st, u).some((x) => !excl.has(x.node))).map(([u, m]) => ({
     name: m.name,
-    places: placesOf(st, u).map((x) => nodeById(st, x.node).name),
+    places: placesOf(st, u).filter((x) => !excl.has(x.node)).map((x) => nodeById(st, x.node).name),
     points: t.get(u)?.points || 0,
     works: (t.get(u)?.items || []).map((p) => `${p.workName}${p.count > 1 ? ` ×${p.count}` : ''}`),
     posts: inPeriod.filter((x) => x.from === u).length,

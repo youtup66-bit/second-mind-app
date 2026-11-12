@@ -13,7 +13,7 @@ import { createOrgGraph } from '../org-graph.js';
 import { ballSearchHTML, bindBallSearch } from '../ball-search.js';
 import { totals, pointsEvents } from '../points.js';
 import { getGroupMessages } from '../storage.js';
-import { groupEvents, groupMembers, countsForPoints } from '../group.js';
+import { groupEvents, groupMembers, countsForPoints, roomPeople } from '../group.js';
 import { mindTabs } from '../staff-nav.js';
 import { IS_DEV } from '../env.js';
 
@@ -35,6 +35,44 @@ const count = (n, kind) => {
 const dot = (c) => `<i class="sdot" style="background:${c}"></i>`;
 
 let graph = null;
+
+// أعضاء كروب الكرة: إضافة شخص أو كرة (أهلها)، وإخراج شخص أو كرة. تُحفظ على الكرة نفسها
+function roomMembersHTML(st, n, members) {
+  const names = new Map(members.map((m) => [m.user_id, m.display_name]));
+  const nameOfNode = (id) => st.nodes.find((x) => x.id === id)?.name || '';
+  const cur = roomPeople(st, n, (u) => names.has(u)).filter((u) => names.has(u));
+  const ov = n.room || {};
+  const notIn = members.filter((m) => !cur.includes(m.user_id));
+  const balls = st.nodes.filter((x) => x.id !== 'root' && x.id !== n.id && x.type !== 'employee' && x.type !== 'personnel');
+  const ballEntries = [
+    ...(ov.addNodes || []).map((id) => ({ id, label: 'أُضيفت' })),
+    ...(ov.removeNodes || []).map((id) => ({ id, label: 'أُخرجت' })),
+  ];
+  return `<details class="struct-more struct-room"><summary>أعضاء كروب الكرة (${cur.length})</summary>
+    <ul class="struct-report-list">${cur.map((u) => `<li><span>${esc(names.get(u))}</span> <button type="button" class="text-btn text-btn--danger" data-rp="${esc(u)}">إخراج</button></li>`).join('') || '<li class="muted">لا أحد بعد</li>'}</ul>
+    <div class="struct-actions">
+      <select id="rp-add" aria-label="شخص للإضافة">${notIn.map((m) => `<option value="${esc(m.user_id)}">${esc(m.display_name)}</option>`).join('')}</select>
+      <button type="button" class="text-btn" id="rp-add-go">إضافة شخص</button>
+    </div>
+    <div class="struct-actions">
+      <select id="rb-add" aria-label="كرة للإضافة">${balls.map((x) => `<option value="${esc(x.id)}">${esc(x.name)}</option>`).join('')}</select>
+      <button type="button" class="text-btn" id="rb-add-go">إضافة كرة (أهلها)</button>
+      <select id="rb-rem" aria-label="كرة للإخراج">${balls.map((x) => `<option value="${esc(x.id)}">${esc(x.name)}</option>`).join('')}</select>
+      <button type="button" class="text-btn text-btn--danger" id="rb-rem-go">إخراج كرة (أهلها)</button>
+    </div>
+    ${ballEntries.length ? `<ul class="struct-report-list">${ballEntries.map((e) => `<li><span>${esc(e.label)}: ${esc(nameOfNode(e.id))}</span> <button type="button" class="text-btn text-btn--muted" data-rbdel="${esc(e.id)}">إزالة</button></li>`).join('')}</ul>` : ''}
+  </details>`;
+}
+
+// الكرات تحت الكرة مع خيار دخولها في التقرير (الافتراضي: تدخل). إلغاء العلامة يُخرجها مع ما تحتها
+function reportScopeHTML(st, n) {
+  const rows = [];
+  const walk = (pid, depth) => st.nodes.filter((x) => x.parent === pid).forEach((c) => { rows.push({ c, depth }); walk(c.id, depth + 1); });
+  walk(n.id, 0);
+  if (!rows.length) return '';
+  return `<details class="struct-more struct-report"><summary>الكرات التي تدخل في التقرير</summary>
+    <ul class="struct-report-list">${rows.map(({ c, depth }) => `<li style="padding-inline-start:${depth * 14}px"><label><input type="checkbox" data-rep="${esc(c.id)}" ${c.noReport ? '' : 'checked'}> ${esc(c.name)}</label></li>`).join('')}</ul></details>`;
+}
 let alive = false;
 let accountPref = null; // المنصب المختار مسبقاً في نموذج الحساب
 let accountName = ''; // اسم مُعبّأ مسبقاً (كرة الموظف التي أنشأتها ثم نضيف لها الرابط)
@@ -356,6 +394,8 @@ export async function mount(root) {
         ${n.type !== 'employee' ? '<button type="button" data-a="person-ball">إنشاء كرة</button>' : ''}
         ${n.person ? '<button type="button" data-a="send-link">إرسال رابط</button>' : ''}
         ${canHaveHead(n.type) ? '<button type="button" data-a="perms">خيارات الإظهار</button>' : ''}
+        ${st.nodes.some((x) => x.parent === n.id) ? reportScopeHTML(st, n) : ''}
+        ${n.id !== 'root' && n.type !== 'employee' && n.type !== 'personnel' ? roomMembersHTML(st, n, members) : ''}
         ${custom ? '<button type="button" data-a="project">تفاصيل المشروع: الحالة والتواريخ والإنجاز</button><button type="button" data-a="report">تقرير المشروع</button>' : ''}
         <button type="button" data-a="rename">تعديل الاسم</button>
         ${n.id !== 'root' ? '<button type="button" data-a="delete" class="is-danger">حذف</button>' : ''}
@@ -364,7 +404,6 @@ export async function mount(root) {
             ${n.type === 'employee' && !n.person ? '<button type="button" data-a="account-new">إنشاء رابط</button>' : ''}
             ${n.type !== 'employee' ? '<button type="button" data-a="account">إنشاء رابط لشخص موجود أو مسؤول</button>' : ''}
             ${n.type !== 'employee' ? '<button type="button" data-a="pick-person">ربط موظف موجود بالكرة</button>' : ''}
-            ${asst ? '<button type="button" data-a="no-assistant">إلغاء المعاون</button>' : ''}
             ${custom ? '<button type="button" data-a="links">الربط بفروع</button><button type="button" data-a="color">اللون</button>' : ''}
           </div>
         </details>
@@ -406,6 +445,40 @@ export async function mount(root) {
       await cancelBallInvite(b.dataset.cancelCode);
       await reloadPending();
       renderPanel();
+    }));
+    const roomOv = () => (n.room ||= { addPeople: [], removePeople: [], addNodes: [], removeNodes: [] });
+    const onRoom = (fn) => async () => { fn(roomOv()); await commit(n.id); };
+    panel.querySelectorAll('[data-rp]').forEach((b) => b.addEventListener('click', onRoom((r) => {
+      const u = b.dataset.rp;
+      r.removePeople = [...new Set([...r.removePeople, u])];
+      r.addPeople = r.addPeople.filter((x) => x !== u);
+    })));
+    panel.querySelector('#rp-add-go')?.addEventListener('click', onRoom((r) => {
+      const u = panel.querySelector('#rp-add').value;
+      if (!u) return;
+      r.addPeople = [...new Set([...r.addPeople, u])];
+      r.removePeople = r.removePeople.filter((x) => x !== u);
+    }));
+    panel.querySelector('#rb-add-go')?.addEventListener('click', onRoom((r) => {
+      const id = panel.querySelector('#rb-add').value;
+      r.addNodes = [...new Set([...r.addNodes, id])];
+      r.removeNodes = r.removeNodes.filter((x) => x !== id);
+    }));
+    panel.querySelector('#rb-rem-go')?.addEventListener('click', onRoom((r) => {
+      const id = panel.querySelector('#rb-rem').value;
+      r.removeNodes = [...new Set([...r.removeNodes, id])];
+      r.addNodes = r.addNodes.filter((x) => x !== id);
+    }));
+    panel.querySelectorAll('[data-rbdel]').forEach((b) => b.addEventListener('click', onRoom((r) => {
+      const id = b.dataset.rbdel;
+      r.addNodes = r.addNodes.filter((x) => x !== id);
+      r.removeNodes = r.removeNodes.filter((x) => x !== id);
+    })));
+    panel.querySelectorAll('[data-rep]').forEach((c) => c.addEventListener('change', async () => {
+      const x = nodeById(st, c.dataset.rep);
+      if (!x) return;
+      if (c.checked) delete x.noReport; else x.noReport = true;
+      await saveStructure(st);
     }));
     panel.querySelectorAll('[data-perm]').forEach((c) => c.addEventListener('change', async () => {
       setPerm(st, n.id, c.dataset.perm, c.checked);
