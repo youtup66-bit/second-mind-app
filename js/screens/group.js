@@ -6,6 +6,7 @@ import {
 } from '../group.js';
 import { PALETTE } from '../org-structure.js';
 import { getGroupMessages } from '../storage.js';
+import { sendObjection, listObjections } from '../objections.js';
 import { session, cloudConfig } from '../cloud.js';
 import { attachHoldMic } from '../hold-mic.js';
 import { canListen, canBrowserListen } from '../voice.js';
@@ -85,6 +86,15 @@ export async function mountMode(root, mode) {
   const input = root.querySelector('#g-input');
   const statusEl = root.querySelector('#g-status');
   const note = root.querySelector('#g-note');
+  // قرارات اعتراضاتي (تصل من المدير): تظهر في أعلى القائمة
+  async function showDecisions() {
+    const el = root.querySelector('#g-decisions');
+    if (!el) return;
+    const decided = (await listObjections()).filter((o) => o.sentByMe && (o.status === 'accepted' || o.status === 'rejected')).slice(0, 3);
+    el.innerHTML = decided.map((o) => `<p class="wa-note">${o.status === 'accepted' ? '✅ قُبل اعتراضك' : '❌ لم يُقبل اعتراضك'}${o.reply ? `: ${esc(o.reply)}` : ''}</p>`).join('');
+  }
+  showDecisions();
+  window.addEventListener('sm:objections', showDecisions);
   const view = root.querySelector('#g-view');
   let noteTimer = 0;
   const say = (html) => {
@@ -132,6 +142,7 @@ export async function mountMode(root, mode) {
       m.text ? `<span class="msg__text">${esc(m.text)}</span>` : '',
       `<span class="msg__time">${fmtTime.format(m.sentAt)}${m.mine ? ` <span class="tick tick--${m.status}">${TICKS[m.status] || ''}</span>` : ''}</span>`,
       m.mine && m.status === 'failed' ? '<button type="button" class="msg__retry">لم تُرسل · أعد المحاولة</button>' : '',
+      m.mine && m.status !== 'failed' && (m.works?.length || m.work) ? '<button type="button" class="msg__object">اعتراض على النقطة</button>' : '',
     ].join('');
   }
   function addDay(t) {
@@ -216,6 +227,17 @@ export async function mountMode(root, mode) {
   log.addEventListener('click', async (e) => {
     const img = e.target.closest('.msg__img');
     if (img) { view.querySelector('img').src = img.src; view.hidden = false; return; }
+    const obj = e.target.closest('.msg__object');
+    if (obj) {
+      const id = obj.closest('.msg').dataset.id;
+      const m = (await getGroupMessages()).find((x) => x.id === id);
+      const reason = m && window.prompt('اكتب سبب الاعتراض (يصل إلى المدير وحده):');
+      if (m && reason && reason.trim()) {
+        try { await sendObjection(m, reason.trim()); window.alert('أُرسل اعتراضك إلى المدير.'); }
+        catch (err) { window.alert(err.message); }
+      }
+      return;
+    }
     const retry = e.target.closest('.msg__retry');
     if (retry) {
       const id = retry.closest('.msg').dataset.id;
@@ -388,6 +410,7 @@ async function mountList(root, s, syncErr, mode, tab = 'chats') {
       <small class="chats-status" id="g-status"></small>
       ${tab === 'sections' ? '<input type="search" class="g-search" id="g-search" placeholder="ابحث عن كرة بالاسم" aria-label="ابحث عن كرة">' : ''}
       <p class="wa-note" id="g-note" ${syncErr ? '' : 'hidden'} role="status">${esc(syncErr)}</p>
+      <div id="g-decisions"></div>
       <ul class="g-rooms" id="g-rooms" aria-label="${TABS.find((x) => x[0] === tab)?.[1] || ''}"></ul>
       ${tab === 'chats' ? '<button type="button" class="g-new" id="g-new">مجموعة جديدة</button>' : ''}
     </section>`;
