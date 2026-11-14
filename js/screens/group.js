@@ -74,8 +74,8 @@ export async function mountMode(root, mode) {
       <form class="composer" id="g-form" autocomplete="off">
         <button type="button" class="composer__mic" id="g-mic" aria-label="اضغط مطولاً للتسجيل" ${micOk ? '' : 'hidden'}>🎙</button>
         <textarea id="g-input" rows="1" placeholder="اكتب منشور عمل" aria-label="منشورك"></textarea>
-        <button type="button" class="composer__attach" id="g-attach" aria-label="أرسل صورة">📷</button>
-        <input type="file" id="g-file" accept="image/*" hidden>
+        <label class="composer__attach" for="g-file" role="button" tabindex="0" aria-label="أرسل صورة">📷</label>
+        <input type="file" id="g-file" accept="image/*" class="g-file-input">
         <button type="submit" class="composer__send" id="g-send" aria-label="إرسال">➤</button>
       </form>
       <div class="img-view" id="g-view" hidden><img alt=""></div>
@@ -199,7 +199,6 @@ export async function mountMode(root, mode) {
   });
 
   const file = root.querySelector('#g-file');
-  root.querySelector('#g-attach').addEventListener('click', () => file.click());
   file.addEventListener('change', async () => {
     const f = file.files?.[0];
     file.value = '';
