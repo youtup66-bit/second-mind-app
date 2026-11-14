@@ -74,8 +74,7 @@ export async function mountMode(root, mode) {
       <form class="composer" id="g-form" autocomplete="off">
         <button type="button" class="composer__mic" id="g-mic" aria-label="اضغط مطولاً للتسجيل" ${micOk ? '' : 'hidden'}>🎙</button>
         <textarea id="g-input" rows="1" placeholder="اكتب منشور عمل" aria-label="منشورك"></textarea>
-        <label class="composer__attach" for="g-file" role="button" tabindex="0" aria-label="أرسل صورة">📷</label>
-        <input type="file" id="g-file" accept="image/*" class="g-file-input">
+        <label class="composer__attach" aria-label="أرسل صورة">📷<input type="file" id="g-file" accept="image/*" class="g-file-input"></label>
         <button type="submit" class="composer__send" id="g-send" aria-label="إرسال">➤</button>
       </form>
       <div class="img-view" id="g-view" hidden><img alt=""></div>
