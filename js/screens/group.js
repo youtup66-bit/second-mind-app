@@ -199,6 +199,7 @@ export async function mountMode(root, mode) {
 
   // إرسال صورة: كل ضغطة تنشئ حقل اختيار جديداً وتفتحه داخل حدث النقر نفسه (أضمن طريقة على أندرويد)
   root.querySelector('#g-attach').addEventListener('click', () => {
+    say('افتح الصور…');
     const pick = document.createElement('input');
     pick.type = 'file';
     pick.accept = 'image/*';
@@ -217,7 +218,7 @@ export async function mountMode(root, mode) {
         note.hidden = true;
       } catch (err) { say(`تعذّر إرسال الصورة: ${esc(err.message)}`); }
     });
-    pick.click();
+    try { pick.click(); } catch (err) { say(`تعذّر فتح نافذة الصور: ${esc(err.message)}`); }
   });
 
   const mic = root.querySelector('#g-mic');
