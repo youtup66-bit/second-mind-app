@@ -3,7 +3,7 @@
 // الخطوط: المخزّن أولاً. طلبات Gemini لا تمر عبر المخزّن أبداً.
 // نسخة التجربة (‎/dev/‎) لها مخازنها، فلا تمس النسخة الحقيقية
 const PREFIX = /\/dev\/$/.test(new URL(self.registration.scope).pathname) ? 'second-mind-dev' : 'second-mind';
-const VERSION = 151;
+const VERSION = 152;
 const CACHE = `${PREFIX}-v${VERSION}`;
 const ASSETS = [
   './',
@@ -36,7 +36,7 @@ const ASSETS = [
   './js/cloud.js',
   './js/group.js',
   './js/hold-mic.js',
-  './js/screens/group.js', './js/screens/chats.js', './js/orb-float.js', './js/org-accounts.js', './js/org-branches.js', './js/screens/branch.js', './js/account-card.js', './js/pw-hint.js', './js/screens/tasks.js', './js/tasks.js', './js/org-mind.js',
+  './js/share-inbox.js', './js/screens/group.js', './js/screens/chats.js', './js/orb-float.js', './js/org-accounts.js', './js/org-branches.js', './js/screens/branch.js', './js/account-card.js', './js/pw-hint.js', './js/screens/tasks.js', './js/tasks.js', './js/org-mind.js',
   './js/screens/structure.js',
   './js/screens/points.js',
   './js/points.js',
@@ -99,7 +99,25 @@ async function cacheFirst(req) {
   return res;
 }
 
+// ---- مشاركة صورة من تطبيق المعرض إلى التطبيق ----
+// يحفظ عامل الخدمة الصورة في مخزن خاص، ثم يفتح التطبيق على قائمة المحادثات لاختيار الوجهة
+const SHARE_CACHE = 'second-mind-share';
+async function handleShare(req) {
+  const scope = self.registration.scope;
+  try {
+    const form = await req.formData();
+    const file = form.get('image');
+    if (file && file.size) {
+      const c = await caches.open(SHARE_CACHE);
+      await c.put(new URL('__share', scope).href, new Response(file, { headers: { 'content-type': file.type || 'image/jpeg' } }));
+      return Response.redirect(new URL('./#/chats?share=1', scope).href, 303);
+    }
+  } catch { /* لا شيء */ }
+  return Response.redirect(new URL('./#/chats', scope).href, 303);
+}
+
 self.addEventListener('fetch', (e) => {
+  if (e.request.method === 'POST' && new URL(e.request.url).pathname.endsWith('/share/')) return e.respondWith(handleShare(e.request));
   if (e.request.method !== 'GET') return;
   const url = new URL(e.request.url);
   if (url.origin === location.origin) return e.respondWith(networkFirst(e.request));

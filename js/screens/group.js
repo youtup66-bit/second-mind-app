@@ -9,6 +9,7 @@ import { getGroupMessages } from '../storage.js';
 import { sendObjection, listObjections } from '../objections.js';
 import { session, cloudConfig } from '../cloud.js';
 import { attachHoldMic } from '../hold-mic.js';
+import { pendingShare, takeShare } from '../share-inbox.js';
 import { canListen, canBrowserListen } from '../voice.js';
 
 export const title = 'منشورات الأعمال';
@@ -224,6 +225,20 @@ export async function mountMode(root, mode) {
     try { pick.click(); } catch (err) { say(`تعذّر فتح نافذة الصور: ${esc(err.message)}`); }
   });
 
+  // صورة مشاركة من المعرض: تُرسل إلى هذه المحادثة مرة واحدة (اختارها المستخدم من القائمة)
+  if (new URLSearchParams(location.hash.split('?')[1] || '').get('share') === '1') {
+    history.replaceState(null, '', location.href.replace(/[&?]share=1/, ''));
+    takeShare().then(async (blob) => {
+      if (!blob) return;
+      say('أجهّز الصورة المشاركة…');
+      try {
+        const image = await compressImage(new File([blob], 'shared.jpg', { type: blob.type || 'image/jpeg' }));
+        await sendGroup({ image, text: '', room });
+        say('أُرسلت الصورة ✓');
+      } catch (err) { say(`تعذّر إرسال الصورة: ${esc(err.message)}`); }
+    });
+  }
+
   const mic = root.querySelector('#g-mic');
   const holdMic = micOk ? attachHoldMic({
     mic, form, input, say, gemini: manager,
@@ -408,6 +423,7 @@ async function mountList(root, s, syncErr, mode, tab = 'chats') {
   const orgName = s.org?.name || 'المؤسسة';
   const chat = true;
   const base = '#/chats';
+  const shareReady = await pendingShare().catch(() => false);
   const showOrb = s.member.role === 'manager' || !!groupBranch()?.perms?.assistant;
   root.innerHTML = `
     <section class="chat chat--wa chat--plain chat--group g-list">
@@ -501,11 +517,12 @@ async function mountList(root, s, syncErr, mode, tab = 'chats') {
     const shown = [...top, ...items].filter((it) => !qn || normQ(it.name).includes(qn));
     const searching = tab === 'sections' && !!qn;
     const empty = !shown.length && !inv ? `<li class="wa-day">${searching ? 'لا كرة بهذا الاسم.' : tab === 'chats' ? 'لا مجموعات محادثة بعد. أنشئ واحدة من الزر بالأسفل.' : 'لا كروبات أقسام بعد.'}</li>` : '';
-    list.innerHTML = inv + empty + shown.map((it) => {
+    const shareBanner = shareReady && !qn ? '<li class="wa-day">صورة جاهزة للإرسال: اختر المحادثة التي ترسلها إليها</li>' : '';
+    list.innerHTML = shareBanner + inv + empty + shown.map((it) => {
       const m = last.get(it.id);
       const n = unread.get(it.id) || 0;
       const preview = m ? `${m.mine ? 'أنت' : esc(m.fromName)}: ${m.text ? esc(m.text.slice(0, 80)) : '📷 صورة'}` : `<i>${esc(it.kind)}</i>`;
-      return `<li><a class="g-room${it.past ? ' is-past' : ''}" href="${base}?room=${encodeURIComponent(it.id)}">
+      return `<li><a class="g-room${it.past ? ' is-past' : ''}" href="${base}?room=${encodeURIComponent(it.id)}${shareReady ? '&share=1' : ''}">
         <span class="wa-avatar wa-avatar--group" style="background:${esc(it.color)};color:${textOn(it.color)}" aria-hidden="true">${esc(initial(it.name))}</span>
         <span class="g-room__body">
           <span class="g-room__top"><b>${esc(it.name)}</b>${m ? `<small class="${n ? 'is-new' : ''}">${listTime(m.sentAt)}</small>` : ''}</span>
