@@ -198,7 +198,9 @@ export async function mountMode(root, mode) {
   });
 
   // إرسال صورة: كل ضغطة تنشئ حقل اختيار جديداً وتفتحه داخل حدث النقر نفسه (أضمن طريقة على أندرويد)
-  root.querySelector('#g-attach').addEventListener('click', () => {
+  // يفتح عند بداية اللمس (كما يفعل زر الميكروفون)، لأن حدث النقر قد لا يصل على بعض الهواتف
+  root.querySelector('#g-attach').addEventListener('pointerdown', (e) => {
+    e.preventDefault();
     say('افتح الصور…');
     const pick = document.createElement('input');
     pick.type = 'file';
