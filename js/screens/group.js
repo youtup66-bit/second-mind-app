@@ -74,7 +74,7 @@ export async function mountMode(root, mode) {
       <form class="composer" id="g-form" autocomplete="off">
         <button type="button" class="composer__mic" id="g-mic" aria-label="اضغط مطولاً للتسجيل" ${micOk ? '' : 'hidden'}>🎙</button>
         <textarea id="g-input" rows="1" placeholder="اكتب منشور عمل" aria-label="منشورك"></textarea>
-        <label class="composer__attach" aria-label="أرسل صورة">📷<input type="file" id="g-file" accept="image/*" class="g-file-input"></label>
+        <button type="button" class="composer__attach" id="g-attach" aria-label="أرسل صورة">📎</button>
         <button type="submit" class="composer__send" id="g-send" aria-label="إرسال">➤</button>
       </form>
       <div class="img-view" id="g-view" hidden><img alt=""></div>
@@ -197,19 +197,27 @@ export async function mountMode(root, mode) {
     try { await sendGroup({ text, room }); } catch (err) { say(esc(err.message)); input.value = text; syncComposer(); }
   });
 
-  const file = root.querySelector('#g-file');
-  file.addEventListener('change', async () => {
-    const f = file.files?.[0];
-    file.value = '';
-    if (!f) return;
-    say('أجهّز الصورة…');
-    try {
-      const image = await compressImage(f);
-      if (log.querySelector('.wa-day') && !log.querySelector('.msg')) log.innerHTML = '';
-      await sendGroup({ image, text: input.value.trim(), room });
-      input.value = ''; autosize(); syncComposer();
-      note.hidden = true;
-    } catch (err) { say(`تعذّر إرسال الصورة: ${esc(err.message)}`); }
+  // إرسال صورة: كل ضغطة تنشئ حقل اختيار جديداً وتفتحه داخل حدث النقر نفسه (أضمن طريقة على أندرويد)
+  root.querySelector('#g-attach').addEventListener('click', () => {
+    const pick = document.createElement('input');
+    pick.type = 'file';
+    pick.accept = 'image/*';
+    pick.style.display = 'none';
+    document.body.appendChild(pick);
+    pick.addEventListener('change', async () => {
+      const f = pick.files?.[0];
+      pick.remove();
+      if (!f) return;
+      say('أجهّز الصورة…');
+      try {
+        const image = await compressImage(f);
+        if (log.querySelector('.wa-day') && !log.querySelector('.msg')) log.innerHTML = '';
+        await sendGroup({ image, text: input.value.trim(), room });
+        input.value = ''; autosize(); syncComposer();
+        note.hidden = true;
+      } catch (err) { say(`تعذّر إرسال الصورة: ${esc(err.message)}`); }
+    });
+    pick.click();
   });
 
   const mic = root.querySelector('#g-mic');
