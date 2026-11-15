@@ -1,0 +1,47 @@
+# بناء تطبيق أندرويد (الغلاف) يدوياً، ويُحمَّل من صفحة التشغيل (Artifacts).
+# أسرار مطلوبة: APK_KEYSTORE_B64 (ملف المفتاح base64)، APK_STORE_PASS، APK_KEY_PASS.
+name: Android app
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: dev
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+
+      - name: مفتاح التوقيع
+        env:
+          KS: ${{ secrets.APK_KEYSTORE_B64 }}
+        run: |
+          if [ -z "$KS" ]; then echo "أضف السر APK_KEYSTORE_B64"; exit 1; fi
+          echo "$KS" | base64 -d > "$RUNNER_TEMP/aqli.jks"
+          echo "APK_KEYSTORE_PATH=$RUNNER_TEMP/aqli.jks" >> "$GITHUB_ENV"
+
+      - name: بناء APK
+        working-directory: android
+        env:
+          APK_STORE_PASS: ${{ secrets.APK_STORE_PASS }}
+          APK_KEY_PASS: ${{ secrets.APK_KEY_PASS }}
+        run: gradle :app:assembleRelease --no-daemon
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: aqli-app-apk
+          path: android/app/build/outputs/apk/release/*.apk
+          if-no-files-found: error
