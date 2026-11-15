@@ -205,7 +205,8 @@ export async function mountMode(root, mode) {
     const pick = document.createElement('input');
     pick.type = 'file';
     pick.accept = 'image/*';
-    pick.style.display = 'none';
+    // غير مرئي لكن موجود في الصفحة بحجم صغير: بعض الهواتف لا تفتح حقلاً مخفياً تماماً
+    Object.assign(pick.style, { position: 'fixed', left: '0', top: '0', width: '1px', height: '1px', opacity: '0', pointerEvents: 'none' });
     document.body.appendChild(pick);
     pick.addEventListener('change', async () => {
       const f = pick.files?.[0];
