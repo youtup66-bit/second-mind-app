@@ -5,6 +5,7 @@ import {
   approve, reject, remove, totals, suggestions, scan, pointsEvents,
 } from '../points.js';
 import { getSetting, setSetting } from '../storage.js';
+import { listObjections, decideObjection } from '../objections.js';
 import { staffTabs } from '../staff-nav.js';
 
 export const title = 'النقاط';
@@ -44,6 +45,7 @@ export async function mount(root) {
       <div class="pts-periods" role="radiogroup" aria-label="الفترة">
         ${Object.entries(PERIODS).map(([k, l]) => `<button type="button" data-p="${k}" role="radio">${l}</button>`).join('')}
       </div>
+      <section id="objs"></section>
       <section id="sugg"></section>
       <ul class="staff-list" id="totals" aria-label="نقاط الموظفين"></ul>
       <button type="button" class="text-row text-row--accent" id="open-add">الأعمال ونقاطها، وتسجيل نقاط</button>
@@ -73,7 +75,21 @@ export async function mount(root) {
       b.classList.toggle('is-active', b.dataset.p === period);
       b.setAttribute('aria-checked', String(b.dataset.p === period));
     });
-    const [t, sug, works, auto] = await Promise.all([totals(period), suggestions(), getWorks(), isAuto()]);
+    const [t, sug, works, auto, objList] = await Promise.all([totals(period), suggestions(), getWorks(), isAuto(), listObjections()]);
+    const open = objList.filter((o) => o.status === 'open');
+    $('#objs').innerHTML = open.length ? `
+      <div class="pts-sugg">
+        <h3>اعتراضات <span class="pts-count">${open.length}</span></h3>
+        ${open.map((o) => `<div class="pts-sugg__item"><b>${esc(o.fromName || 'موظف')}</b><small>${esc(o.reason)}</small>
+          <div class="text-btns"><button type="button" class="text-btn" data-obj="${esc(o.id)}" data-dec="accepted">قبول (إلغاء النقطة)</button><button type="button" class="text-btn text-btn--danger" data-obj="${esc(o.id)}" data-dec="rejected">رفض</button></div></div>`).join('')}
+      </div>` : '';
+    $('#objs').onclick = async (e) => {
+      const b = e.target.closest('[data-obj]');
+      if (!b) return;
+      const reply = (window.prompt('ملاحظتك للموظف (اختياري):', '') || '').trim();
+      await decideObjection(b.dataset.obj, b.dataset.dec, reply);
+      render();
+    };
     $('#auto').checked = auto;
 
     $('#sugg').innerHTML = sug.length ? `

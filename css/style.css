@@ -1268,3 +1268,6 @@ body.on-group .tasks .wa-head { padding-top: calc(env(safe-area-inset-top) + 8px
 .ball-hits { display: flex; flex-wrap: wrap; gap: 6px; pointer-events: auto; }
 .ball-hit { padding: 5px 11px; border-radius: 999px; border: 1px solid var(--border); background: rgba(16,20,28,.92); color: inherit; font: inherit; font-size: .9rem; }
 .ball-none { color: var(--muted); font-size: .9rem; background: rgba(16,20,28,.92); padding: 4px 10px; border-radius: 10px; }
+
+/* زر إرسال الصورة في المحادثة */
+.composer__attach { width: 40px; height: 40px; border: 0; background: transparent; font-size: 1.2rem; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }

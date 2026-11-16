@@ -6,8 +6,10 @@ import {
 } from '../group.js';
 import { PALETTE } from '../org-structure.js';
 import { getGroupMessages } from '../storage.js';
+import { sendObjection, listObjections } from '../objections.js';
 import { session, cloudConfig } from '../cloud.js';
 import { attachHoldMic } from '../hold-mic.js';
+import { pendingShare, takeShare } from '../share-inbox.js';
 import { canListen, canBrowserListen } from '../voice.js';
 
 export const title = 'منشورات الأعمال';
@@ -73,8 +75,7 @@ export async function mountMode(root, mode) {
       <form class="composer" id="g-form" autocomplete="off">
         <button type="button" class="composer__mic" id="g-mic" aria-label="اضغط مطولاً للتسجيل" ${micOk ? '' : 'hidden'}>🎙</button>
         <textarea id="g-input" rows="1" placeholder="اكتب منشور عمل" aria-label="منشورك"></textarea>
-        <button type="button" class="composer__attach" id="g-attach" aria-label="أرسل صورة">📷</button>
-        <input type="file" id="g-file" accept="image/*" hidden>
+        <button type="button" class="composer__attach" id="g-attach" aria-label="أرسل صورة">📎</button>
         <button type="submit" class="composer__send" id="g-send" aria-label="إرسال">➤</button>
       </form>
       <div class="img-view" id="g-view" hidden><img alt=""></div>
@@ -85,6 +86,15 @@ export async function mountMode(root, mode) {
   const input = root.querySelector('#g-input');
   const statusEl = root.querySelector('#g-status');
   const note = root.querySelector('#g-note');
+  // قرارات اعتراضاتي (تصل من المدير): تظهر في أعلى القائمة
+  async function showDecisions() {
+    const el = root.querySelector('#g-decisions');
+    if (!el) return;
+    const decided = (await listObjections()).filter((o) => o.sentByMe && (o.status === 'accepted' || o.status === 'rejected')).slice(0, 3);
+    el.innerHTML = decided.map((o) => `<p class="wa-note">${o.status === 'accepted' ? '✅ قُبل اعتراضك' : '❌ لم يُقبل اعتراضك'}${o.reply ? `: ${esc(o.reply)}` : ''}</p>`).join('');
+  }
+  showDecisions();
+  window.addEventListener('sm:objections', showDecisions);
   const view = root.querySelector('#g-view');
   let noteTimer = 0;
   const say = (html) => {
@@ -132,6 +142,7 @@ export async function mountMode(root, mode) {
       m.text ? `<span class="msg__text">${esc(m.text)}</span>` : '',
       `<span class="msg__time">${fmtTime.format(m.sentAt)}${m.mine ? ` <span class="tick tick--${m.status}">${TICKS[m.status] || ''}</span>` : ''}</span>`,
       m.mine && m.status === 'failed' ? '<button type="button" class="msg__retry">لم تُرسل · أعد المحاولة</button>' : '',
+      m.mine && m.status !== 'failed' && (m.works?.length || m.work) ? '<button type="button" class="msg__object">اعتراض على النقطة</button>' : '',
     ].join('');
   }
   function addDay(t) {
@@ -187,21 +198,46 @@ export async function mountMode(root, mode) {
     try { await sendGroup({ text, room }); } catch (err) { say(esc(err.message)); input.value = text; syncComposer(); }
   });
 
-  const file = root.querySelector('#g-file');
-  root.querySelector('#g-attach').addEventListener('click', () => file.click());
-  file.addEventListener('change', async () => {
-    const f = file.files?.[0];
-    file.value = '';
-    if (!f) return;
-    say('أجهّز الصورة…');
-    try {
-      const image = await compressImage(f);
-      if (log.querySelector('.wa-day') && !log.querySelector('.msg')) log.innerHTML = '';
-      await sendGroup({ image, text: input.value.trim(), room });
-      input.value = ''; autosize(); syncComposer();
-      note.hidden = true;
-    } catch (err) { say(`تعذّر إرسال الصورة: ${esc(err.message)}`); }
+  // إرسال صورة: كل ضغطة تنشئ حقل اختيار جديداً وتفتحه داخل حدث النقر نفسه (أضمن طريقة على أندرويد)
+  // يفتح عند بداية اللمس (كما يفعل زر الميكروفون)، لأن حدث النقر قد لا يصل على بعض الهواتف
+  root.querySelector('#g-attach').addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    say('افتح الصور…');
+    const pick = document.createElement('input');
+    pick.type = 'file';
+    pick.accept = 'image/*';
+    // غير مرئي لكن موجود في الصفحة بحجم صغير: بعض الهواتف لا تفتح حقلاً مخفياً تماماً
+    Object.assign(pick.style, { position: 'fixed', left: '0', top: '0', width: '1px', height: '1px', opacity: '0', pointerEvents: 'none' });
+    document.body.appendChild(pick);
+    pick.addEventListener('change', async () => {
+      const f = pick.files?.[0];
+      pick.remove();
+      if (!f) return;
+      say('أجهّز الصورة…');
+      try {
+        const image = await compressImage(f);
+        if (log.querySelector('.wa-day') && !log.querySelector('.msg')) log.innerHTML = '';
+        await sendGroup({ image, text: input.value.trim(), room });
+        input.value = ''; autosize(); syncComposer();
+        note.hidden = true;
+      } catch (err) { say(`تعذّر إرسال الصورة: ${esc(err.message)}`); }
+    });
+    try { pick.click(); } catch (err) { say(`تعذّر فتح نافذة الصور: ${esc(err.message)}`); }
   });
+
+  // صورة مشاركة من المعرض: تُرسل إلى هذه المحادثة مرة واحدة (اختارها المستخدم من القائمة)
+  if (new URLSearchParams(location.hash.split('?')[1] || '').get('share') === '1') {
+    history.replaceState(null, '', location.href.replace(/[&?]share=1/, ''));
+    takeShare().then(async (blob) => {
+      if (!blob) return;
+      say('أجهّز الصورة المشاركة…');
+      try {
+        const image = await compressImage(new File([blob], 'shared.jpg', { type: blob.type || 'image/jpeg' }));
+        await sendGroup({ image, text: '', room });
+        say('أُرسلت الصورة ✓');
+      } catch (err) { say(`تعذّر إرسال الصورة: ${esc(err.message)}`); }
+    });
+  }
 
   const mic = root.querySelector('#g-mic');
   const holdMic = micOk ? attachHoldMic({
@@ -216,6 +252,17 @@ export async function mountMode(root, mode) {
   log.addEventListener('click', async (e) => {
     const img = e.target.closest('.msg__img');
     if (img) { view.querySelector('img').src = img.src; view.hidden = false; return; }
+    const obj = e.target.closest('.msg__object');
+    if (obj) {
+      const id = obj.closest('.msg').dataset.id;
+      const m = (await getGroupMessages()).find((x) => x.id === id);
+      const reason = m && window.prompt('اكتب سبب الاعتراض (يصل إلى المدير وحده):');
+      if (m && reason && reason.trim()) {
+        try { await sendObjection(m, reason.trim()); window.alert('أُرسل اعتراضك إلى المدير.'); }
+        catch (err) { window.alert(err.message); }
+      }
+      return;
+    }
     const retry = e.target.closest('.msg__retry');
     if (retry) {
       const id = retry.closest('.msg').dataset.id;
@@ -376,6 +423,7 @@ async function mountList(root, s, syncErr, mode, tab = 'chats') {
   const orgName = s.org?.name || 'المؤسسة';
   const chat = true;
   const base = '#/chats';
+  const shareReady = await pendingShare().catch(() => false);
   const showOrb = s.member.role === 'manager' || !!groupBranch()?.perms?.assistant;
   root.innerHTML = `
     <section class="chat chat--wa chat--plain chat--group g-list">
@@ -388,6 +436,7 @@ async function mountList(root, s, syncErr, mode, tab = 'chats') {
       <small class="chats-status" id="g-status"></small>
       ${tab === 'sections' ? '<input type="search" class="g-search" id="g-search" placeholder="ابحث عن كرة بالاسم" aria-label="ابحث عن كرة">' : ''}
       <p class="wa-note" id="g-note" ${syncErr ? '' : 'hidden'} role="status">${esc(syncErr)}</p>
+      <div id="g-decisions"></div>
       <ul class="g-rooms" id="g-rooms" aria-label="${TABS.find((x) => x[0] === tab)?.[1] || ''}"></ul>
       ${tab === 'chats' ? '<button type="button" class="g-new" id="g-new">مجموعة جديدة</button>' : ''}
     </section>`;
@@ -468,11 +517,12 @@ async function mountList(root, s, syncErr, mode, tab = 'chats') {
     const shown = [...top, ...items].filter((it) => !qn || normQ(it.name).includes(qn));
     const searching = tab === 'sections' && !!qn;
     const empty = !shown.length && !inv ? `<li class="wa-day">${searching ? 'لا كرة بهذا الاسم.' : tab === 'chats' ? 'لا مجموعات محادثة بعد. أنشئ واحدة من الزر بالأسفل.' : 'لا كروبات أقسام بعد.'}</li>` : '';
-    list.innerHTML = inv + empty + shown.map((it) => {
+    const shareBanner = shareReady && !qn ? '<li class="wa-day">صورة جاهزة للإرسال: اختر المحادثة التي ترسلها إليها</li>' : '';
+    list.innerHTML = shareBanner + inv + empty + shown.map((it) => {
       const m = last.get(it.id);
       const n = unread.get(it.id) || 0;
       const preview = m ? `${m.mine ? 'أنت' : esc(m.fromName)}: ${m.text ? esc(m.text.slice(0, 80)) : '📷 صورة'}` : `<i>${esc(it.kind)}</i>`;
-      return `<li><a class="g-room${it.past ? ' is-past' : ''}" href="${base}?room=${encodeURIComponent(it.id)}">
+      return `<li><a class="g-room${it.past ? ' is-past' : ''}" href="${base}?room=${encodeURIComponent(it.id)}${shareReady ? '&share=1' : ''}">
         <span class="wa-avatar wa-avatar--group" style="background:${esc(it.color)};color:${textOn(it.color)}" aria-hidden="true">${esc(initial(it.name))}</span>
         <span class="g-room__body">
           <span class="g-room__top"><b>${esc(it.name)}</b>${m ? `<small class="${n ? 'is-new' : ''}">${listTime(m.sentAt)}</small>` : ''}</span>

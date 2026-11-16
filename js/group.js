@@ -157,7 +157,10 @@ async function receive(d, F) {
   const x = d.data();
   // المهام لا تظهر في المجموعات: لها شاشتها
   if (x.task) {
-    try { await (await import('./tasks.js')).onTaskMessage(x); } catch (e) { console.warn('task', e); }
+    try {
+      if (String(x.task.kind || '').startsWith('objection')) await (await import('./objections.js')).onObjectionMessage(x);
+      else await (await import('./tasks.js')).onTaskMessage(x);
+    } catch (e) { console.warn('task', e); }
     const rest = (x.pending || []).filter((u) => u !== me.uid);
     (rest.length ? F.updateDoc(d.ref, { pending: F.arrayRemove(me.uid) }) : F.deleteDoc(d.ref)).catch(() => {});
     return;

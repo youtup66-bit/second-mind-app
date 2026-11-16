@@ -298,7 +298,7 @@ export async function mount(root) {
         <div class="row">
           <button class="btn" id="sb-save" type="button">حفظ في التنزيلات</button>
           <button class="btn btn--ghost" id="sb-share" type="button" hidden>مشاركة (اختر المكان)</button>
-          <label class="btn btn--ghost file-btn">استعادة الهيكل…<input type="file" id="sb-file" accept=".smorg,application/json" hidden></label>
+          <label class="btn btn--ghost file-btn">📄 استعادة الهيكل…<input type="file" id="sb-file" accept=".smorg,application/json" hidden></label>
         </div>
         <p class="status" id="sb-msg" role="status"></p>
       </div>
@@ -309,7 +309,7 @@ export async function mount(root) {
         <label class="switch"><input type="radio" name="mode" value="replace"><span>استبدال الكل</span></label>
       </div>
       <div class="row">
-        <label class="btn btn--ghost file-btn">اختيار ملف…
+        <label class="btn btn--ghost file-btn">📄 اختيار ملف…
           <input type="file" id="import" accept=".zip,application/zip,.json,application/json" hidden>
         </label>
       </div>
