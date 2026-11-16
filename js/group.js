@@ -538,6 +538,39 @@ export async function markSeen(room = GENERAL) {
 }
 
 // ---- الصور: تصغير قبل الإرسال (السحابة تقبل حتى ~٩٠٠ ألف حرف للرسالة) ----
+// فيديو قصير مضغوط يُرسل داخل الرسالة نفسها (بلا تخزين خارجي): يُعاد رسمه بحجم صغير ومعدل بت منخفض
+// ملاحظة: بلا صوت حالياً
+export async function compressVideo(file, { maxSec = 8, width = 360, bps = 300_000 } = {}) {
+  const url = URL.createObjectURL(file);
+  const v = document.createElement('video');
+  v.src = url; v.muted = true; v.playsInline = true; v.preload = 'auto';
+  await new Promise((res, rej) => { v.onloadedmetadata = res; v.onerror = () => rej(new Error('تعذّر قراءة الفيديو.')); });
+  const type = ['video/webm;codecs=vp8', 'video/webm'].find((t) => window.MediaRecorder?.isTypeSupported(t));
+  if (!type) { URL.revokeObjectURL(url); throw new Error('هذا المتصفح لا يدعم ضغط الفيديو.'); }
+  const c = document.createElement('canvas');
+  c.width = width; c.height = Math.round(width * ((v.videoHeight / v.videoWidth) || 0.5625));
+  const ctx = c.getContext('2d');
+  const stream = c.captureStream(15);
+  const rec = new MediaRecorder(stream, { mimeType: type, videoBitsPerSecond: bps });
+  const chunks = [];
+  rec.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
+  const stopped = new Promise((r) => { rec.onstop = r; });
+  const draw = () => { if (!v.paused && !v.ended) { ctx.drawImage(v, 0, 0, c.width, c.height); requestAnimationFrame(draw); } };
+  const limit = Math.min(maxSec, v.duration || maxSec);
+  rec.start(500);
+  await v.play();
+  draw();
+  setTimeout(() => { v.pause(); if (rec.state !== 'inactive') rec.stop(); }, limit * 1000);
+  await stopped;
+  URL.revokeObjectURL(url);
+  stream.getTracks().forEach((t) => t.stop());
+  return new Blob(chunks, { type: 'video/webm' });
+}
+
+export function blobToDataUrl(blob) {
+  return new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(blob); });
+}
+
 export async function compressImage(file, maxSide = 1280, limit = 600_000) {
   const bmp = await createImageBitmap(file);
   let side = maxSide;
