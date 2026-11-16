@@ -28,7 +28,7 @@ class MainActivity : ComponentActivity() {
     private var filePathCallback: ValueCallback<Array<Uri>>? = null
     private var pendingShare: String? = null
 
-    private val pickImages = registerForActivityResult(ActivityResultContracts.GetMultipleContents()) { uris ->
+    private val pickFiles = registerForActivityResult(ActivityResultContracts.GetMultipleContents()) { uris ->
         filePathCallback?.onReceiveValue(uris.toTypedArray())
         filePathCallback = null
     }
@@ -74,7 +74,10 @@ class MainActivity : ComponentActivity() {
             ): Boolean {
                 filePathCallback?.onReceiveValue(null)
                 filePathCallback = callback
-                pickImages.launch("image/*")
+                // نوع الملفات يأتي من خاصية accept في الصفحة: صور للمرفقات، وملفات النسخ الاحتياطي لها أنواعها
+                val accepted = params.acceptTypes.map { it.trim() }.filter { it.isNotEmpty() }
+                val mime = accepted.singleOrNull()?.takeIf { it.contains('/') } ?: "*/*"
+                pickFiles.launch(mime)
                 return true
             }
         }
