@@ -13,6 +13,12 @@ android {
         targetSdk = 35
         versionCode = 2
         versionName = "1.1"
+        ndk { abiFilters += listOf("arm64-v8a") }
+        externalNativeBuild { cmake { cppFlags += listOf("-std=c++17"); arguments += listOf("-DANDROID_STL=c++_shared") } }
+    }
+
+    externalNativeBuild {
+        cmake { path = file("src/main/cpp/CMakeLists.txt"); version = "3.22.1" }
     }
 
     // مفتاح التوقيع يأتي من أسرار المستودع عبر متغيرات البيئة (لا يُخزَّن في المستودع)
@@ -44,4 +50,5 @@ android {
 dependencies {
     implementation("androidx.activity:activity-ktx:1.9.0")
     implementation("androidx.core:core-ktx:1.13.1")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
 }

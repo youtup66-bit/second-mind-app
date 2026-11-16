@@ -25,6 +25,13 @@ jobs:
         with:
           gradle-version: '8.7'
 
+      - name: تحضير llama.cpp (المحرك الأصلي للذكاء)
+        run: |
+          git clone --depth 1 https://github.com/ggerganov/llama.cpp llama-src
+          mkdir -p android/app/src/main/java/android/llama/cpp
+          cp llama-src/examples/llama.android/llama/src/main/cpp/llama-android.cpp android/app/src/main/cpp/
+          cp llama-src/examples/llama.android/llama/src/main/java/android/llama/cpp/*.kt android/app/src/main/java/android/llama/cpp/
+
       - name: مفتاح التوقيع
         env:
           KS: ${{ secrets.APK_KEYSTORE_B64 }}
