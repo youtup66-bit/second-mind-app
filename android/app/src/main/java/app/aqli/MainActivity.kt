@@ -76,7 +76,8 @@ class MainActivity : ComponentActivity() {
                 filePathCallback = callback
                 // نوع الملفات يأتي من خاصية accept في الصفحة: صور للمرفقات، وملفات النسخ الاحتياطي لها أنواعها
                 val accepted = params.acceptTypes.map { it.trim() }.filter { it.isNotEmpty() }
-                val mime = accepted.singleOrNull()?.takeIf { it.contains('/') } ?: "*/*"
+                // نوع واحد واضح يُستعمل كما هو؛ وإلا تُعرض كل الملفات
+                val mime = if (accepted.size == 1 && accepted[0].contains('/')) accepted[0] else "*/*"
                 pickFiles.launch(mime)
                 return true
             }
