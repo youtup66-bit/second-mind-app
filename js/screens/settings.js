@@ -436,6 +436,13 @@ export async function mount(root) {
     root.querySelector('#install-help').hidden = installed || can;
   };
   renderInstall();
+  root.querySelector('#ai-check-btn').addEventListener('click', async () => {
+    const { aiCheck } = await import('../ai-check.js');
+    const out = root.querySelector('#ai-check');
+    out.hidden = false;
+    out.textContent = 'أفحص…';
+    out.textContent = await aiCheck();
+  });
   const onInstallable = () => renderInstall();
   window.addEventListener('sm:installable', onInstallable);
   cleanup.push(() => window.removeEventListener('sm:installable', onInstallable));
@@ -629,13 +636,6 @@ export async function mount(root) {
     renderModels();
   });
 
-  root.querySelector('#ai-check-btn').addEventListener('click', async () => {
-    const { aiCheck } = await import('../ai-check.js');
-    const out = root.querySelector('#ai-check');
-    out.hidden = false;
-    out.textContent = 'أفحص…';
-    out.textContent = await aiCheck();
-  });
   root.querySelector('#local-test').addEventListener('click', async (e) => {
     const btn = e.currentTarget;
     btn.disabled = true;
