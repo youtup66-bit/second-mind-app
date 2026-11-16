@@ -195,7 +195,9 @@ export async function mount(root) {
       <ul class="models" id="models"></ul>
       <div class="row">
         <button class="btn btn--ghost" id="local-test">💬 جرّب النموذج المختار</button>
+        <button class="btn btn--ghost" id="ai-check-btn">🔍 فحص الذكاء (دون إنترنت)</button>
       </div>
+      <pre class="ai-check" id="ai-check" dir="ltr" hidden></pre>
       <p class="status" id="local-status" role="status"></p>
       <p class="muted">على الجهاز يعمل: المحادثة والتصنيف. وتبقى من Gemini: الملخصات، وأسماء المجموعات، وتحويل 🎙 إلى نص (استخدم مايك لوحة المفاتيح دون إنترنت)، وصوت Gemini (صوت Piper يعمل دون إنترنت).</p>
     </section>
@@ -627,6 +629,13 @@ export async function mount(root) {
     renderModels();
   });
 
+  root.querySelector('#ai-check-btn').addEventListener('click', async () => {
+    const { aiCheck } = await import('../ai-check.js');
+    const out = root.querySelector('#ai-check');
+    out.hidden = false;
+    out.textContent = 'أفحص…';
+    out.textContent = await aiCheck();
+  });
   root.querySelector('#local-test').addEventListener('click', async (e) => {
     const btn = e.currentTarget;
     btn.disabled = true;
