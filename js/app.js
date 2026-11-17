@@ -171,12 +171,10 @@ async function refreshBadge() {
 groupEvents.addEventListener('message', refreshBadge);
 groupEvents.addEventListener('seen', refreshBadge);
 
-// المظهر: auto = واتساب حين تُخفى المساعد، وإلا البنفسجي
-let appTheme = 'auto';
+// المظهر: أخضر واتساب دائماً (لا خيار آخر)
 function applyTheme() {
-  const wa = appTheme === 'whatsapp' || (appTheme === 'auto' && noCompanion);
-  document.body.classList.toggle('theme-wa', wa);
-  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', wa ? '#202c33' : '#140f2e');
+  document.body.classList.add('theme-wa');
+  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', '#202c33');
 }
 function applyNoCompanion() {
   document.body.classList.toggle('no-companion', noCompanion);
@@ -191,7 +189,6 @@ function applyNoCompanion() {
 
 (async () => {
   applyRole(await getSetting('orgRole', null));
-  appTheme = await getSetting('appTheme', 'auto');
   applyNoCompanion();
 })();
 
@@ -199,7 +196,6 @@ function applyNoCompanion() {
 window.addEventListener('sm:setting', (e) => {
   const { key, value } = e.detail;
   if (key === 'orgRole') applyRole(value);
-  if (key === 'appTheme') { appTheme = value; applyTheme(); }
 });
 
 window.addEventListener('hashchange', navigate);

@@ -155,10 +155,7 @@ async function run(a, ctx) {
       return say(true, `سأذكّرك ${fmt.format(r.at)}: ${r.text}`, '#/reports');
     }
     case 'set_theme': {
-      const theme = v.startsWith('p') || v.includes('بنفس') ? 'purple' : 'whatsapp';
-      await setSetting('appTheme', theme);
-      window.dispatchEvent(new CustomEvent('sm:setting', { detail: { key: 'appTheme', value: theme } }));
-      return say(true, theme === 'purple' ? 'غيّرتُ الألوان إلى البنفسجي' : 'غيّرتُ الألوان إلى ألوان واتساب');
+      return say(true, 'الألوان ثابتة: أخضر واتساب في كل الشاشات');
     }
     default:
       return ORG_ACTIONS.has(a.action) ? runOrgAction(a) : null;

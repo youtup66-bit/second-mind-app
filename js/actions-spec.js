@@ -37,7 +37,6 @@ export function actionsPrompt() {
 - open_screen: target: mind (الكرات) أو folder (المجلد) أو summaries (الملخصات) أو settings (الإعدادات)
   أو structure (عقل المؤسسة) أو staff (الموظفين) أو points (النقاط) أو group (منشورات المجموعة).
 - delete_note: حذف ملاحظة. target: كلمات من نصها. (سيُطلب منه التأكيد)
-- set_theme: value: whatsapp أو purple (ألوان التطبيق).
 - set_reminder: تذكير في موعد. value: الموعد بصيغة ISO 8601 بتوقيت الجهاز (احسبيه من الوقت الحالي المذكور)، name: نص التذكير.
 - make_summary: value: day أو week أو month.
 - complete_task: تعليم مهمة بأنها أُنجزت. target: كلمات من نص المهمة.

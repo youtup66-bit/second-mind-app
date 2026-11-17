@@ -1,15 +1,15 @@
 :root {
-  --bg: #0b0820;
-  --bg-2: #140f2e;
-  --surface: #1c1640;
-  --surface-2: #261e55;
-  --border: #352a6e;
-  --text: #ece9ff;
-  --muted: #a39cd0;
-  --accent: #8b6cff;
-  --accent-2: #4f7dff;
-  --danger: #ff6b8a;
-  --ok: #5fe0b0;
+  --bg: #0b141a;
+  --bg-2: #202c33;
+  --surface: #111b21;
+  --surface-2: #2a3942;
+  --border: #2a3942;
+  --text: #e9edef;
+  --muted: #8696a0;
+  --accent: #00a884;
+  --accent-2: #00a884;
+  --danger: #f15c6d;
+  --ok: #00a884;
   --radius: 16px;
   --tabbar-h: 64px;
   font-family: "Tajawal", system-ui, sans-serif;
@@ -21,7 +21,7 @@
 html, body { margin: 0; height: 100%; }
 
 body {
-  background: radial-gradient(120% 80% at 50% 0%, #1d1650 0%, var(--bg) 60%) fixed;
+  background: var(--bg);
   background-color: var(--bg);
   color: var(--text);
   font-size: 16px;
@@ -606,7 +606,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); margin: 4px 0 12
   background: var(--wa-head); padding: 8px 12px; border-bottom: 1px solid rgba(255,255,255,.06);
 }
 .wa-head__who { flex: 1; display: flex; align-items: center; gap: 10px; background: none; border: 0; color: var(--wa-text); font: inherit; cursor: pointer; text-align: start; padding: 0; }
-.wa-avatar { width: 40px; height: 40px; border-radius: 50%; overflow: hidden; flex: none; background: radial-gradient(circle at 50% 40%, #2c3a7a, #141a3a); }
+.wa-avatar { width: 40px; height: 40px; border-radius: 50%; overflow: hidden; flex: none; background: #2a3942; }
 .wa-avatar svg { width: 100%; height: 100%; display: block; }
 .wa-avatar * { animation: none !important; }
 .wa-avatar .cmp-shadow, .wa-avatar .cmp-aura, .wa-avatar .cmp-think { display: none; }

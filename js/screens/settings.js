@@ -18,7 +18,7 @@ import { aiMode } from '../ai.js';
 const GROUP_HINTS = {
   'المطوّر': 'المؤسسة التجريبية، والدخول بأي حساب (نسخة التجربة فقط)',
   'المؤسسة': 'الدخول، وحساب المدير، والموظفون',
-  'المظهر': 'ألوان التطبيق: واتساب أو البنفسجي',
+  'المظهر': 'ألوان التطبيق: أخضر واتساب',
   'تثبيت التطبيق': 'التثبيت، والإصدار، والتحقق من التحديثات',
   'صوت الردود': 'نوع الصوت وطبقته وسرعته',
   'استهلاك Gemini اليوم': 'عدد الطلبات والحصة',
@@ -118,10 +118,7 @@ export async function mount(root) {
 
     <section class="card" id="look">
       <h2>المظهر</h2>
-      <div class="radio-col" role="radiogroup" aria-label="ألوان التطبيق">
-        <label class="switch"><input type="radio" name="theme" value="auto" ${appTheme === 'auto' ? 'checked' : ''}><span>ألوان واتساب (الافتراضي)</span></label>
-        <label class="switch"><input type="radio" name="theme" value="purple" ${appTheme === 'purple' ? 'checked' : ''}><span>البنفسجي الأصلي</span></label>
-      </div>
+      <p class="muted">الألوان ثابتة: أخضر واتساب في كل الشاشات.</p>
     </section>
 
     <section class="card" id="install">
@@ -762,7 +759,6 @@ export async function mount(root) {
     setTimeout(() => { btn.disabled = false; }, 15000);
   });
 
-  root.querySelectorAll('input[name="theme"]').forEach((r) => r.addEventListener('change', () => saveAndAnnounce('appTheme', r.value)));
   root.querySelector('#mic-on').addEventListener('change', (e) => setSetting('micOn', e.target.checked));
   root.querySelector('#speak').addEventListener('change', (e) => setSetting('speakReplies', e.target.checked));
   root.querySelector('#memory').addEventListener('change', (e) => setSetting('useMemory', e.target.checked));
