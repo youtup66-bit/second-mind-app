@@ -3,6 +3,7 @@ package app.notes.ai
 import app.notes.data.Msg
 import app.notes.data.Note
 import app.notes.data.Section
+import app.notes.data.path
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
@@ -35,7 +36,7 @@ class GeminiEngine(private val key: String, private val model: String) : AiEngin
     }
 
     override suspend fun classify(text: String, sections: List<Section>): Section? {
-        val list = sections.mapIndexed { i, s -> "${i + 1}. ${s.name}" }.joinToString("\n")
+        val list = sections.mapIndexed { i, s -> "${i + 1}. ${s.path(sections)}" }.joinToString("\n")
         val out = generate(
             "أنت مصنِّف ملاحظات. اختر القسم الأنسب للملاحظة من القائمة، وأجب برقم القسم فقط.\n$list",
             listOf("user" to "الملاحظة: ${text.take(1000)}"),

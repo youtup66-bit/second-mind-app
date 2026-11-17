@@ -45,6 +45,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.notes.data.Note
 import app.notes.data.Section
+import app.notes.data.path
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -68,7 +69,7 @@ fun BookScreen(state: AppState, book: Section, startNoteId: Long? = null, onBack
                 Modifier.size(40.dp).clip(CircleShape).clickable(onClick = onBack),
                 contentAlignment = Alignment.Center,
             ) { Text("→", color = TextMain, fontSize = 22.sp) }
-            Text("${section.icon}  ${section.name}", color = TextMain, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+            Text(section.path(state.sections), color = TextMain, fontSize = 20.sp, fontWeight = FontWeight.Bold)
         }
 
         val list = notes ?: return@Column
@@ -103,7 +104,7 @@ fun BookScreen(state: AppState, book: Section, startNoteId: Long? = null, onBack
                 LazyColumn(Modifier.height(320.dp)) {
                     items(state.sections.filter { it.id != section.id }, key = { it.id }) { s ->
                         Text(
-                            "${s.icon}  ${s.name}", color = TextMain,
+                            s.path(state.sections), color = TextMain,
                             modifier = Modifier.fillMaxWidth().clickable {
                                 state.moveNote(note.id, s.id); moving = null; reload++
                             }.padding(vertical = 12.dp),

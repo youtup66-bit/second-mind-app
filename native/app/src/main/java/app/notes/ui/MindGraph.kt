@@ -64,12 +64,32 @@ class MindGraph(
         nodes += GNode("brain", GKind.BRAIN, "عقلي", Color(0xFFB9A6FF), 13f, null, null, 0f, 0f)
 
         val secIndex = HashMap<Long, Int>()
-        sections.forEachIndexed { i, s ->
-            val a = (2 * PI * i / sections.size.coerceAtLeast(1) - PI / 2).toFloat()
+        val ids = sections.map { it.id }.toSet()
+        // الأقسام الرئيسية حول العقل
+        val roots = sections.filter { it.parentId == 0L || it.parentId !in ids || it.parentId == it.id }
+        roots.forEachIndexed { i, s ->
+            val a = (2 * PI * i / roots.size.coerceAtLeast(1) - PI / 2).toFloat()
             val (x, y) = place("s:${s.id}", 130 * cos(a), 130 * sin(a))
             secIndex[s.id] = nodes.size
             nodes += GNode("s:${s.id}", GKind.SECTION, s.name, sectionColor(i), 7f + minOf(s.count, 30) * 0.25f, s, null, x, y)
             edges += GEdge(0, nodes.size - 1, 125f, 0.5f, GEdge.Kind.STRUCTURE)
+        }
+        // الأقسام الفرعية حول أقسامها الأب (بأي عمق)، بلون أبيها وحجم أصغر
+        var pending = sections.filter { it.id !in secIndex }
+        var guard = 0
+        while (pending.isNotEmpty() && guard++ < 10) {
+            val ready = pending.filter { it.parentId in secIndex }
+            if (ready.isEmpty()) break
+            ready.forEach { s ->
+                val pi = secIndex.getValue(s.parentId)
+                val parent = nodes[pi]
+                val a = rnd.nextFloat() * 2 * PI.toFloat()
+                val (x, y) = place("s:${s.id}", parent.x * 1.35f + 40 * cos(a), parent.y * 1.35f + 40 * sin(a))
+                secIndex[s.id] = nodes.size
+                nodes += GNode("s:${s.id}", GKind.SECTION, s.name, parent.color, 5.5f + minOf(s.count, 30) * 0.2f, s, null, x, y)
+                edges += GEdge(pi, nodes.size - 1, 75f, 0.6f, GEdge.Kind.STRUCTURE)
+            }
+            pending = pending - ready.toSet()
         }
 
         // آخر الملاحظات فقط حتى تبقى الحركة سلسة

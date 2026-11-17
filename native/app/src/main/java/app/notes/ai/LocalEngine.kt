@@ -4,6 +4,7 @@ import android.content.Context
 import app.notes.data.Msg
 import app.notes.data.Note
 import app.notes.data.Section
+import app.notes.data.path
 import com.google.mediapipe.tasks.genai.llminference.LlmInference
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -46,7 +47,7 @@ class LocalEngine(
     }
 
     override suspend fun classify(text: String, sections: List<Section>): Section? {
-        val list = sections.mapIndexed { i, s -> "${i + 1}. ${s.name}" }.joinToString("\n")
+        val list = sections.mapIndexed { i, s -> "${i + 1}. ${s.path(sections)}" }.joinToString("\n")
         val out = generate(
             "أنت مصنِّف ملاحظات. اقرأ الملاحظة واختر القسم الأنسب لها من القائمة. أجب برقم القسم فقط دون أي كلمة أخرى.\n$list",
             "الملاحظة: ${text.take(400)}\nرقم القسم:",

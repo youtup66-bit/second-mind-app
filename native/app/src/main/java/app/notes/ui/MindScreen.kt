@@ -46,7 +46,13 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import app.notes.data.Section
+import app.notes.data.path
 
 /** شاشة العقل: كرات تتحرك بحرية، العقل في الوسط، والخطوط تربط ما بينها أمور مشتركة. */
 @Composable
@@ -189,6 +195,7 @@ fun MindScreen(state: AppState, onOpen: (Section, Long?) -> Unit) {
     if (adding) {
         var name by remember { mutableStateOf("") }
         var icon by remember { mutableStateOf("📘") }
+        var parent by remember { mutableStateOf(0L) }
         AlertDialog(
             onDismissRequest = { adding = false },
             containerColor = Panel,
@@ -198,13 +205,34 @@ fun MindScreen(state: AppState, onOpen: (Section, Long?) -> Unit) {
                     OutlinedTextField(name, { name = it }, label = { Text("الاسم") }, singleLine = true)
                     Spacer(Modifier.height(8.dp))
                     OutlinedTextField(icon, { icon = it.take(4) }, label = { Text("الأيقونة (رمز تعبيري)") }, singleLine = true)
+                    Spacer(Modifier.height(12.dp))
+                    Text("يتبع لـ", color = TextDim, fontSize = 13.sp)
+                    // قسم رئيسي، أو فرعي تحت أي قسم موجود
+                    LazyColumn(Modifier.fillMaxWidth().heightIn(max = 220.dp)) {
+                        item { ParentRow("بلا — قسم رئيسي", parent == 0L) { parent = 0L } }
+                        items(state.sections, key = { it.id }) { sec ->
+                            ParentRow(sec.path(state.sections), parent == sec.id) { parent = sec.id }
+                        }
+                    }
                 }
             },
             confirmButton = {
-                TextButton(enabled = name.isNotBlank(), onClick = { state.addSection(name, icon); adding = false }) { Text("إضافة") }
+                TextButton(enabled = name.isNotBlank(), onClick = { state.addSection(name, icon, parent); adding = false }) { Text("إضافة") }
             },
             dismissButton = { TextButton(onClick = { adding = false }) { Text("إلغاء") } },
         )
+    }
+}
+
+@Composable
+private fun ParentRow(label: String, selected: Boolean, onClick: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).clickable(onClick = onClick).padding(vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(if (selected) "◉" else "○", color = if (selected) Accent else TextDim)
+        Spacer(Modifier.width(10.dp))
+        Text(label, color = TextMain, fontSize = 14.sp)
     }
 }
 

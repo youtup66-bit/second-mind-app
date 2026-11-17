@@ -197,8 +197,8 @@ class AppState(private val repo: Repo, val models: ModelManager, private val sco
 
     suspend fun notesOf(sectionId: Long): List<Note> = io { repo.notes(sectionId) }
 
-    fun addSection(name: String, icon: String) = scope.launch {
-        io { repo.addSection(name.trim(), icon.trim().ifEmpty { "📘" }) }
+    fun addSection(name: String, icon: String, parentId: Long = 0) = scope.launch {
+        io { repo.addSection(name.trim(), icon.trim().ifEmpty { "📘" }, parentId) }
         refresh()
     }
 

@@ -9,16 +9,30 @@ data class Section(
     val id: Long, val name: String, val icon: String, val keywords: String, val count: Int = 0,
     /** آخر ملخص للكتاب، وعدد صفحاته وقت التلخيص. */
     val summary: String = "", val summaryCount: Int = 0,
+    /** القسم الأب (0 = قسم رئيسي). */
+    val parentId: Long = 0,
 )
+
+/** الاسم الكامل مع الآباء، مثل: رياضة ← جيم. */
+fun Section.path(all: List<Section>): String {
+    val names = mutableListOf(name)
+    var p = parentId
+    var guard = 0
+    while (p != 0L && guard++ < 10) {
+        val parent = all.firstOrNull { it.id == p } ?: break
+        names.add(0, parent.name); p = parent.parentId
+    }
+    return names.joinToString(" ← ")
+}
 data class Note(val id: Long, val text: String, val sectionId: Long, val convId: Long, val time: Long)
 data class Msg(val id: Long, val convId: Long, val role: String, val text: String, val time: Long)
 data class Conversation(val id: Long, val title: String, val time: Long)
 
 /** كل البيانات محفوظة على الهاتف فقط في قاعدة SQLite. */
-class Db(ctx: Context) : SQLiteOpenHelper(ctx, "notes.db", null, 3) {
+class Db(ctx: Context) : SQLiteOpenHelper(ctx, "notes.db", null, 4) {
 
     override fun onCreate(db: SQLiteDatabase) {
-        db.execSQL("CREATE TABLE sections(id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, icon TEXT, keywords TEXT, summary TEXT DEFAULT '', summary_count INTEGER DEFAULT 0)")
+        db.execSQL("CREATE TABLE sections(id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, icon TEXT, keywords TEXT, summary TEXT DEFAULT '', summary_count INTEGER DEFAULT 0, parent_id INTEGER DEFAULT 0)")
         db.execSQL("CREATE TABLE notes(id INTEGER PRIMARY KEY AUTOINCREMENT, text TEXT, section_id INTEGER, conv_id INTEGER, time INTEGER)")
         db.execSQL("CREATE TABLE conversations(id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT, time INTEGER)")
         db.execSQL(EMBED_TABLE)
@@ -36,6 +50,7 @@ class Db(ctx: Context) : SQLiteOpenHelper(ctx, "notes.db", null, 3) {
             db.execSQL("ALTER TABLE sections ADD COLUMN summary_count INTEGER DEFAULT 0")
         }
         if (oldVersion < 3) db.execSQL(EMBED_TABLE)
+        if (oldVersion < 4) db.execSQL("ALTER TABLE sections ADD COLUMN parent_id INTEGER DEFAULT 0")
     }
 
     companion object {
@@ -70,14 +85,14 @@ class Repo(private val helper: Db) {
     fun sections(): List<Section> {
         val out = mutableListOf<Section>()
         db.rawQuery(
-            "SELECT s.id, s.name, s.icon, s.keywords, (SELECT COUNT(*) FROM notes n WHERE n.section_id = s.id), s.summary, s.summary_count FROM sections s ORDER BY s.id",
+            "SELECT s.id, s.name, s.icon, s.keywords, (SELECT COUNT(*) FROM notes n WHERE n.section_id = s.id), s.summary, s.summary_count, s.parent_id FROM sections s ORDER BY s.id",
             null
-        ).use { c -> while (c.moveToNext()) out += Section(c.getLong(0), c.getString(1), c.getString(2), c.getString(3), c.getInt(4), c.getString(5) ?: "", c.getInt(6)) }
+        ).use { c -> while (c.moveToNext()) out += Section(c.getLong(0), c.getString(1), c.getString(2), c.getString(3), c.getInt(4), c.getString(5) ?: "", c.getInt(6), c.getLong(7)) }
         return out
     }
 
-    fun addSection(name: String, icon: String): Long = db.insert("sections", null, ContentValues().apply {
-        put("name", name); put("icon", icon); put("keywords", "")
+    fun addSection(name: String, icon: String, parentId: Long = 0): Long = db.insert("sections", null, ContentValues().apply {
+        put("name", name); put("icon", icon); put("keywords", ""); put("parent_id", parentId)
     })
 
     fun setSummary(sectionId: Long, summary: String, count: Int) {
