@@ -1,14 +1,16 @@
 // تقرير Word من رسائل كروبات التطبيق: نطاق (قسم أو شعبة أو وحدة أو كرات محددة) وفترة.
 // النص فقط يُرسل إلى Gemini للتلخيص (إن فعّله المدير)؛ الصور لا تُرسل إلى أي خدمة، تُضمّن في الملف فقط.
+// كل تقرير يُحفظ في الجهاز مع نسخه (v1، v2...)، ويرى المساعد قائمة تقاريره فيعدّل أيّاً منها.
 import { getGroupMessages, getSetting, setSetting } from './storage.js';
 import { loadStructure, childrenOf } from './org-structure.js';
-import { excludedNodes } from './org-insights.js';
+import { excludedNodes, listReports } from './org-insights.js';
 import { GENERAL, roomIdOf, roomOf, roomNameOf } from './group.js';
 import { reportSummary, reviseDocument } from './gemini.js';
 import { buildDocx } from './docx.js';
 
 const DAY = 86_400_000;
 const MAX_TRANSCRIPT = 25_000; // حروف تُرسل كحد أقصى للتلخيص
+const MAX_STORED = 30;         // عدد التقارير المحفوظة في الجهاز
 const fmtDate = new Intl.DateTimeFormat('ar', { day: 'numeric', month: 'long', year: 'numeric' });
 const fmtTime = new Intl.DateTimeFormat('ar', { hour: 'numeric', minute: '2-digit' });
 const isImg = (x) => typeof x === 'string' && /^data:image\//.test(x);
@@ -42,15 +44,56 @@ export async function preview(opts) {
   return { count: msgs.length, images: msgs.filter((m) => isImg(m.image)).length };
 }
 
-// نص للتلخيص: الرسائل النصية فقط، من الأحدث إلى الأقدم ضمن الحد
-function transcript(msgs) {
-  const lines = msgs.filter((m) => m.text).map((m) => {
-    const room = m.room && m.room !== GENERAL ? roomNameOf(m.room) || 'مجموعة' : 'المجموعة العامة';
-    return `${fmtDate.format(m.sentAt)} ${fmtTime.format(m.sentAt)} | ${m.fromName || ''} | ${room}: ${m.text}`;
-  });
-  let out = '';
-  for (let i = lines.length - 1; i >= 0 && out.length < MAX_TRANSCRIPT; i--) out = `${lines[i]}\n${out}`;
-  return out.trim();
+// ---- مخزن التقارير في الجهاز ----
+// الفهرس: بيانات خفيفة لكل تقرير (الأحدث أولاً)؛ محتوى كل نسخة في مفتاح مستقل
+const INDEX_KEY = 'wordReportIndex';
+const docKey = (id) => `wordReport_${id}`;
+
+export async function listWordReports() {
+  return getSetting(INDEX_KEY, []);
+}
+
+// يحفظ نسخة جديدة. family: معرّف السلسلة (يبقى نفسه بين النسخ)
+export async function saveWordReport({ title, filename, version, blocks, family = null }) {
+  const id = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+  const meta = { id, family: family || id, title, filename, version, createdAt: Date.now() };
+  await setSetting(docKey(id), { ...meta, blocks });
+  const index = await listWordReports();
+  const keep = [meta, ...index].slice(0, MAX_STORED);
+  for (const old of index.filter((m) => !keep.some((k) => k.id === m.id))) await setSetting(docKey(old.id), null);
+  await setSetting(INDEX_KEY, keep);
+  return meta;
+}
+
+async function getWordReport(id) {
+  return getSetting(docKey(id), null);
+}
+
+const STOP = /^(تقرير|التقرير|احفظ|احفظه|صدّر|صدر|صدرلياه|عدّل|عدل|نسخة|النسخة|جديد|آخر|اخر|بالتنزيلات|التنزيلات|في|من|على|ال)$/;
+
+// أقرب تقرير لعبارة البحث (عنوان أو اسم ملف أو تاريخ)، وإلا الأحدث
+export async function findWordReport(query = '') {
+  const index = await listWordReports();
+  if (!index.length) return null;
+  const words = String(query).toLowerCase().split(/\s+/).filter((w) => w.length > 1 && !STOP.test(w));
+  if (words.length) {
+    const scored = index.map((m) => {
+      const hay = `${m.title} ${m.filename} ${fmtDate.format(m.createdAt)}`.toLowerCase();
+      return { m, s: words.filter((w) => hay.includes(w)).length };
+    }).sort((a, b) => b.s - a.s);
+    if (scored[0].s > 0) return scored[0].m;
+  }
+  return index[0];
+}
+
+// ما يراه المساعد من التقارير: تقارير Word المحفوظة، والتقارير النصية في شاشة التقارير
+export async function reportsContext() {
+  const word = (await listWordReports()).slice(0, 20)
+    .map((m) => `- ${m.title} (النسخة ${m.version}، ${fmtDate.format(m.createdAt)}، ملف ${m.filename})`);
+  const text = (await listReports()).slice(0, 10)
+    .map((r) => `- ${r.headline} (${r.label || ''}، ${fmtDate.format(r.createdAt)}) [تقرير نصي]`);
+  const lines = [...word, ...text];
+  return lines.length ? lines.join('\n') : '';
 }
 
 // يبني ملف Word للنطاق والفترة. onStatus(نص) لعرض الحالة أثناء العمل
@@ -94,17 +137,28 @@ export async function buildReport({ scopeName, rooms, names, days, withAi, withI
   const blob = await buildDocx(blocks);
   const iso = new Date().toISOString().slice(0, 10);
   const filename = `تقرير-${scopeName}-${iso}.docx`.replace(/[\\/:*?"<>|]/g, '_');
-  // نحفظ محتوى آخر تقرير ليعدّله المساعد لاحقاً
-  await setSetting('lastReportDoc', { title, filename, version: 1, blocks });
+  await saveWordReport({ title, filename, version: 1, blocks });
   return { blob, filename, count: msgs.length, images: imgCount, version: 1 };
 }
 
-// آخر تقرير محفوظ كملف (يُبنى من محتواه المحفوظ)، للحفظ أو المشاركة من المحادثة
-export async function lastReportFile() {
-  const doc = await getSetting('lastReportDoc', null);
-  if (!doc?.blocks?.length) throw new Error('لا يوجد تقرير محفوظ بعد. أنشئ تقريراً من نافذة التقارير أولاً.');
-  return { blob: await buildDocx(doc.blocks), filename: doc.filename || 'تقرير.docx', version: doc.version || 1 };
+// ملف تقرير محفوظ (للحفظ أو المشاركة من المحادثة): الأحدث، أو المطابق لعبارة البحث
+export async function reportFile(query = '') {
+  const meta = await findWordReport(query);
+  if (!meta) throw new Error('لا توجد تقارير محفوظة بعد. أنشئ تقريراً من نافذة التقارير أولاً.');
+  const doc = await getWordReport(meta.id);
+  if (!doc?.blocks?.length) throw new Error('محتوى هذا التقرير لم يعد متاحاً. أنشئه من جديد.');
+  return { blob: await buildDocx(doc.blocks), filename: doc.filename, version: doc.version, title: doc.title };
 }
+
+const transcript = (msgs) => {
+  const lines = msgs.filter((m) => m.text).map((m) => {
+    const room = m.room && m.room !== GENERAL ? roomNameOf(m.room) || 'مجموعة' : 'المجموعة العامة';
+    return `${fmtDate.format(m.sentAt)} ${fmtTime.format(m.sentAt)} | ${m.fromName || ''} | ${room}: ${m.text}`;
+  });
+  let out = '';
+  for (let i = lines.length - 1; i >= 0 && out.length < MAX_TRANSCRIPT; i--) out = `${lines[i]}\n${out}`;
+  return out.trim();
+};
 
 const REVISE_SYSTEM = `أنت تعدّل تقريراً عربياً في ملف Word. ستصلك مسودة التقرير الحالية كمصفوفة blocks، وتعليمات التعديل.
 أعد التقرير كاملاً بعد التعديل، بصيغة JSON فقط: مصفوفة، كل عنصر {"t":"title|h|h2|meta|p|img","text":"..."} أو {"t":"img","ref":رقم}.
@@ -112,10 +166,13 @@ const REVISE_SYSTEM = `أنت تعدّل تقريراً عربياً في ملف
 - لا تضف عناوين أو فقرات لم يطلبها المستخدم، ولا تخترع وقائع غير موجودة في المسودة.
 - بلا أي نص خارج JSON ولا رموز تنسيق.`;
 
-// يعدّل آخر تقرير حسب التعليمات، ويعيد ملفاً جديداً (نسخة أحدث)
-export async function editLastReport(instruction) {
-  const doc = await getSetting('lastReportDoc', null);
-  if (!doc?.blocks?.length) throw new Error('لا يوجد تقرير سابق للتعديل. أنشئ تقريراً من نافذة التقارير أولاً.');
+// يعدّل تقريراً محفوظاً (المطابق لعبارة البحث، أو الأحدث) حسب التعليمات، ويحفظ نسخة جديدة في السلسلة نفسها
+export async function editLastReport(instruction, query = '') {
+  const meta = await findWordReport(query);
+  if (!meta) throw new Error('لا يوجد تقرير سابق للتعديل. أنشئ تقريراً من نافذة التقارير أولاً.');
+  const doc = await getWordReport(meta.id);
+  if (!doc?.blocks?.length) throw new Error('محتوى هذا التقرير لم يعد متاحاً. أنشئه من جديد.');
+
   const images = [];
   const outline = doc.blocks.map((b) => {
     if (b.t === 'img') { images.push(b.dataUrl); return { t: 'img', ref: images.length - 1 }; }
@@ -141,11 +198,11 @@ export async function editLastReport(instruction) {
       blocks.push({ t: b.t, text: b.text.slice(0, 4000) });
     }
   }
-  const version = (doc.version || 1) + 1;
-  const base = (doc.filename || 'تقرير.docx').replace(/\.docx$/, '').replace(/-v\d+$/, '');
+  const version = (meta.version || 1) + 1;
+  const base = (meta.filename || 'تقرير.docx').replace(/\.docx$/, '').replace(/-v\d+$/, '');
   const filename = `${base}-v${version}.docx`;
   const blob = await buildDocx(blocks);
-  await setSetting('lastReportDoc', { title: doc.title, filename, version, blocks });
+  await saveWordReport({ title: meta.title, filename, version, blocks, family: meta.family });
   return { blob, filename, version };
 }
 

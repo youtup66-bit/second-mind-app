@@ -6,10 +6,10 @@ import {
 import { transcribe } from '../gemini.js';
 import { smartChat } from '../ai.js';
 import { exportChatFile } from '../backup.js';
-import { editLastReport } from '../report-build.js';
+import { editLastReport, reportFile, reportsContext } from '../report-build.js';
 import { saveFile, shareFile } from '../native-files.js';
 import { executeActions } from '../actions.js';
-import { setActionContext } from '../actions-spec.js';
+import { setActionContext, setReportsContext } from '../actions-spec.js';
 import { orgContext } from '../org-actions.js';
 import { CATEGORIES, NONE, categoryById } from '../categories.js';
 import { classifyEntry, classifyPending, setCategory } from '../classifier.js';
@@ -595,10 +595,9 @@ export async function mount(root) {
     if (!image && isSaveReportCommand(text0)) {
       try {
         append(await addMessage({ role: 'user', text }));
-        const { lastReportFile } = await import('../report-build.js');
-        const doc = await lastReportFile();
+        const doc = await reportFile(text0);
         const note = /جديد/.test(text0) ? ' (لإنشاء تقرير جديد اختر النطاق من نافذة التقارير)' : '';
-        append(await addMessage({ role: 'model', text: `هذا آخر تقرير أنشأتُه (النسخة ${doc.version})${note}:` }));
+        append(await addMessage({ role: 'model', text: `هذا التقرير «${doc.title}» (النسخة ${doc.version})${note}:` }));
         appendFileCard(doc);
       } catch (err) {
         append(await addMessage({ role: 'model', text: `⚠️ ${err.message || err}` }));
@@ -631,6 +630,7 @@ export async function mount(root) {
       // طلب واحد يعيد الرد وتصنيف رسالتك معاً (توفيراً للحصة)، من Gemini أو من النموذج على الجهاز
       // المدير: نُطلع الذكاء على عقل المؤسسة الحالي ليديره بالأسماء الصحيحة
       setActionContext(await orgContext().catch(() => ''));
+      setReportsContext(await reportsContext().catch(() => ''));
       // الصورة تُرسل مع رسالتك الحالية فقط، لا مع كل السجل
       const result = await smartChat(recent.map(({ role, text: t, image: img, id }) => ({ role, text: t, image: img && id === userMsg.id ? img : undefined })), {
         memories,
@@ -645,7 +645,7 @@ export async function mount(root) {
       if (editReq) {
         result.actions = result.actions.filter((a) => a !== editReq);
         try {
-          const doc = await editLastReport(editReq.name || '');
+          const doc = await editLastReport(editReq.name || '', editReq.target || '');
           appendFileCard(doc);
         } catch (err) {
           append(await addMessage({ role: 'model', text: `⚠️ ${err.message || err}` }));
