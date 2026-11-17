@@ -39,6 +39,13 @@ class Db(ctx: Context) : SQLiteOpenHelper(ctx, "notes.db", null, 3) {
     }
 
     companion object {
+        @Volatile private var instance: Db? = null
+
+        /** نسخة واحدة لكل التطبيق (الواجهة والنسخ الاحتياطي في الخلفية). */
+        fun get(ctx: Context): Db = instance ?: synchronized(this) {
+            instance ?: Db(ctx.applicationContext).also { instance = it }
+        }
+
         /** بصمة المعنى لكل ملاحظة (متجه أرقام). */
         const val EMBED_TABLE = "CREATE TABLE embeddings(note_id INTEGER PRIMARY KEY, vec BLOB)"
 

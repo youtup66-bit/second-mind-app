@@ -54,7 +54,12 @@ import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.platform.LocalContext
 import android.content.Intent
 import android.net.Uri
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Switch
 import app.notes.ai.DownloadState
+import app.notes.data.Backup
+import java.text.SimpleDateFormat
+import java.util.Locale
 import app.notes.ai.GeminiEngine
 import app.notes.data.AppVersion
 import app.notes.data.Updater
@@ -77,6 +82,22 @@ fun ModelsScreen(state: AppState) {
     // القوائم المنسدلة: كلها مغلقة في البداية
     val open = remember { mutableStateMapOf<String, Boolean>() }
     var gKey by remember { mutableStateOf(mm.geminiKey) }
+
+    // النسخ الاحتياطي
+    val backup = remember { Backup(ctxApp(state)) }
+    var folderName by remember { mutableStateOf(runCatching { backup.folderName() }.getOrNull()) }
+    var autoBackup by remember { mutableStateOf(backup.auto) }
+    var lastBackup by remember { mutableStateOf(backup.lastTime) }
+    var backupMsg by remember { mutableStateOf(backup.lastError.let { if (it.isEmpty()) "" else "آخر محاولة فشلت: $it" }) }
+    var backupBusy by remember { mutableStateOf(false) }
+    var restoreUri by remember { mutableStateOf<android.net.Uri?>(null) }
+    val folderPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
+        if (uri != null) {
+            backupMsg = try { backup.setFolder(uri); folderName = backup.folderName(); "" } catch (e: Throwable) { "تعذّر اختيار المجلد: ${e.message}" }
+        }
+    }
+    val restorePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> restoreUri = uri }
+
     var gModel by remember { mutableStateOf(mm.geminiModel) }
     val ctx = LocalContext.current
     val update = remember { UpdateUi(Updater(ctx.applicationContext), scope) }
@@ -246,7 +267,68 @@ fun ModelsScreen(state: AppState) {
                 )
             }
         }
+        item { SectionTitle("النسخ الاحتياطي", open["backup"] == true) { open["backup"] = open["backup"] != true } }
+        if (open["backup"] == true) item {
+            Card {
+                Text("مجلد النسخة", color = TextMain)
+                Text(folderName ?: "لم يُختر مجلد بعد", color = if (folderName == null) TextDim else Accent2, fontSize = 13.sp)
+                TextButton(onClick = { folderPicker.launch(null) }) { Text(if (folderName == null) "اختر المجلد" else "غيّر المجلد") }
+
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("نسخ تلقائي كل ٢٤ ساعة", color = TextMain)
+                        Text("يحدّث الملف نفسه في الخلفية حتى لو كان التطبيق مغلقاً.", color = TextDim, fontSize = 12.sp)
+                    }
+                    Switch(
+                        checked = autoBackup,
+                        enabled = folderName != null,
+                        onCheckedChange = { backup.setAuto(it); autoBackup = it },
+                    )
+                }
+
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    if (lastBackup > 0) "آخر نسخة: ${backupFmt.format(java.util.Date(lastBackup))}" else "لم تُنشأ نسخة بعد",
+                    color = TextDim, fontSize = 12.sp,
+                )
+                if (backupMsg.isNotEmpty()) Text(backupMsg, color = Accent2, fontSize = 13.sp)
+                Row {
+                    TextButton(enabled = folderName != null && !backupBusy, onClick = {
+                        backupBusy = true; backupMsg = "جارٍ النسخ…"
+                        scope.launch {
+                            backupMsg = try {
+                                withContext(Dispatchers.IO) { backup.runNow() }
+                                lastBackup = backup.lastTime
+                                "تم حفظ النسخة ✓ (${Backup.FILE_NAME})"
+                            } catch (e: Throwable) { "فشل النسخ: ${e.message}" }
+                            backupBusy = false
+                        }
+                    }) { Text("نسخ الآن") }
+                    TextButton(onClick = { restorePicker.launch(arrayOf("*/*")) }) { Text("استعادة من نسخة", color = TextDim) }
+                }
+            }
+        }
+
         if (message.isNotEmpty()) item { Text(message, color = Accent2) }
+    }
+
+    restoreUri?.let { uri ->
+        AlertDialog(
+            onDismissRequest = { restoreUri = null },
+            containerColor = Panel,
+            title = { Text("استعادة النسخة؟", color = TextMain) },
+            text = { Text("ستُستبدل كل ملاحظاتك ومحادثاتك الحالية بما في النسخة، ثم يُعاد تشغيل التطبيق. تُحفظ القاعدة الحالية احتياطاً داخل التطبيق.", color = TextDim) },
+            confirmButton = {
+                TextButton(onClick = {
+                    restoreUri = null
+                    scope.launch {
+                        try { withContext(Dispatchers.IO) { backup.restore(uri) } }
+                        catch (e: Throwable) { backupMsg = "فشلت الاستعادة: ${e.message}" }
+                    }
+                }) { Text("استعادة") }
+            },
+            dismissButton = { TextButton(onClick = { restoreUri = null }) { Text("إلغاء") } },
+        )
     }
 }
 
@@ -388,3 +470,7 @@ private fun UpdateCard(u: UpdateUi) {
         if (u.available != null && !u.busy) TextButton(onClick = { u.install() }) { Text("تنزيل وتثبيت") }
     }
 }
+
+private val backupFmt = SimpleDateFormat("d MMMM yyyy · HH:mm", Locale("ar"))
+
+private fun ctxApp(state: AppState) = state.models.ctx

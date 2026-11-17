@@ -14,7 +14,7 @@ import app.notes.ui.NotesTheme
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val repo = Repo(Db(applicationContext))
+        val repo = Repo(Db.get(applicationContext))
         setContent {
             NotesTheme {
                 CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
