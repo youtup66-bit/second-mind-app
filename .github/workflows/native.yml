@@ -1,0 +1,37 @@
+# بناء تطبيق الملاحظات الأصلي (Kotlin) تلقائياً عند أي تغيير في native/، ويُحمَّل الـ APK من صفحة التشغيل (Artifacts).
+name: Native notes app
+
+on:
+  push:
+    paths:
+      - 'native/**'
+      - '.github/workflows/native.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+
+      - name: بناء APK (نسخة تجربة)
+        working-directory: native
+        run: gradle :app:assembleDebug --no-daemon
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: aqli-notes-apk
+          path: native/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error

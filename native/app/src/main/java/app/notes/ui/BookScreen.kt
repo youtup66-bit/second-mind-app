@@ -1,0 +1,145 @@
+package app.notes.ui
+
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import app.notes.data.Note
+import app.notes.data.Section
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+
+private val dateFmt = SimpleDateFormat("EEEE d MMMM yyyy · HH:mm", Locale("ar"))
+
+/** الكرة تفتح كتاباً: غلاف، ثم صفحة لكل ملاحظة تُقلب أفقياً. */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+fun BookScreen(state: AppState, section: Section, onBack: () -> Unit) {
+    var notes by remember { mutableStateOf<List<Note>?>(null) }
+    var reload by remember { mutableIntStateOf(0) }
+    var moving by remember { mutableStateOf<Note?>(null) }
+    LaunchedEffect(section.id, reload) { notes = state.notesOf(section.id) }
+
+    Column(Modifier.fillMaxSize().background(Bg)) {
+        Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                Modifier.size(40.dp).clip(CircleShape).clickable(onClick = onBack),
+                contentAlignment = Alignment.Center,
+            ) { Text("→", color = TextMain, fontSize = 22.sp) }
+            Text("${section.icon}  ${section.name}", color = TextMain, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+        }
+
+        val list = notes ?: return@Column
+        val pager = rememberPagerState { list.size + 1 }
+        HorizontalPager(state = pager, modifier = Modifier.weight(1f).fillMaxWidth()) { page ->
+            Surface(
+                shape = RoundedCornerShape(topStart = 6.dp, bottomStart = 6.dp, topEnd = 18.dp, bottomEnd = 18.dp),
+                color = Paper,
+                shadowElevation = 6.dp,
+                modifier = Modifier.fillMaxSize().padding(horizontal = 20.dp, vertical = 12.dp),
+            ) {
+                if (page == 0) Cover(section, list.size)
+                else NotePage(list[page - 1], page, list.size, onMove = { moving = it }, onDelete = {
+                    state.deleteNote(it.id); reload++
+                })
+            }
+        }
+        Text(
+            if (list.isEmpty()) "الكتاب فارغ — اكتب في المحادثة وسيُملأ" else "اسحب لتقليب الصفحات",
+            color = TextDim, fontSize = 13.sp, textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
+        )
+    }
+
+    moving?.let { note ->
+        AlertDialog(
+            onDismissRequest = { moving = null },
+            containerColor = Panel,
+            title = { Text("انقل إلى كتاب", color = TextMain) },
+            text = {
+                LazyColumn(Modifier.height(320.dp)) {
+                    items(state.sections.filter { it.id != section.id }, key = { it.id }) { s ->
+                        Text(
+                            "${s.icon}  ${s.name}", color = TextMain,
+                            modifier = Modifier.fillMaxWidth().clickable {
+                                state.moveNote(note.id, s.id); moving = null; reload++
+                            }.padding(vertical = 12.dp),
+                        )
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = { moving = null }) { Text("إلغاء") } },
+        )
+    }
+}
+
+@Composable
+private fun Cover(section: Section, count: Int) {
+    Column(
+        Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Accent, Panel2))).padding(24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        Text(section.icon, fontSize = 64.sp)
+        Spacer(Modifier.height(12.dp))
+        Text(section.name, color = TextMain, fontSize = 32.sp, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(8.dp))
+        Text("$count صفحة", color = TextMain.copy(alpha = 0.8f), fontSize = 16.sp)
+    }
+}
+
+@Composable
+private fun NotePage(note: Note, page: Int, total: Int, onMove: (Note) -> Unit, onDelete: (Note) -> Unit) {
+    Column(Modifier.fillMaxSize().padding(22.dp)) {
+        Text(dateFmt.format(Date(note.time)), color = Ink.copy(alpha = 0.6f), fontSize = 13.sp)
+        Spacer(Modifier.height(14.dp))
+        Text(
+            note.text, color = Ink, fontSize = 19.sp, lineHeight = 32.sp, fontFamily = FontFamily.Serif,
+            modifier = Modifier.weight(1f).verticalScroll(rememberScrollState()),
+        )
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            TextButton(onClick = { onMove(note) }) { Text("نقل", color = Accent) }
+            TextButton(onClick = { onDelete(note) }) { Text("حذف", color = Ink.copy(alpha = 0.6f)) }
+            Spacer(Modifier.weight(1f))
+            Text("$page / $total", color = Ink.copy(alpha = 0.5f), fontSize = 13.sp)
+        }
+    }
+}
