@@ -4,6 +4,7 @@ import android.content.Context
 import android.webkit.JavascriptInterface
 import android.webkit.WebView
 import com.arm.aichat.AiChat
+import com.arm.aichat.InferenceEngine
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -131,7 +132,11 @@ class NativeAI(private val context: Context, private val web: WebView) {
             try {
                 lock.withLock {
                     val engine = AiChat.getInferenceEngine(context)
-                    withContext(Dispatchers.IO) { engine.cleanUp() }
+                    // cleanUp لا يقبل إلا النموذج المحمّل أو حالة الخطأ (فيعيدها للتهيئة)؛ في غيرهما يُرمى استثناء
+                    val state = engine.state.value
+                    if (state is InferenceEngine.State.ModelReady || state is InferenceEngine.State.Error) {
+                        withContext(Dispatchers.IO) { engine.cleanUp() }
+                    }
                     engine.loadModel(file.absolutePath)
                     if (system.isNotBlank()) engine.setSystemPrompt(system)
                     engine.sendUserPrompt(user, maxTokens).collect { piece ->
