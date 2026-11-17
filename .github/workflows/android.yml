@@ -28,9 +28,10 @@ jobs:
       - name: تحضير llama.cpp (المحرك الأصلي للذكاء)
         run: |
           git clone --depth 1 https://github.com/ggerganov/llama.cpp llama-src
-          mkdir -p android/app/src/main/java/android/llama/cpp
-          cp llama-src/examples/llama.android/llama/src/main/cpp/llama-android.cpp android/app/src/main/cpp/
-          cp llama-src/examples/llama.android/llama/src/main/java/android/llama/cpp/*.kt android/app/src/main/java/android/llama/cpp/
+          SRC=llama-src/examples/llama.android/lib/src/main
+          cp $SRC/cpp/ai_chat.cpp android/app/src/main/cpp/
+          mkdir -p android/app/src/main/java/com/arm
+          cp -r $SRC/java/com/arm/aichat android/app/src/main/java/com/arm/
 
       - name: مفتاح التوقيع
         env:
