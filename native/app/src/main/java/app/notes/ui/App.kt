@@ -31,11 +31,12 @@ fun App(repo: Repo) {
     val state = remember { AppState(repo, ModelManager(ctx.applicationContext), scope) }
     var tab by rememberSaveable { mutableIntStateOf(0) }
     var openBook by remember { mutableStateOf<Section?>(null) }
+    var openNote by remember { mutableStateOf<Long?>(null) }
 
     val book = openBook
     if (book != null) {
         BackHandler { openBook = null }
-        BookScreen(state, book, onBack = { openBook = null })
+        BookScreen(state, book, startNoteId = openNote, onBack = { openBook = null })
     } else {
         Scaffold(
             containerColor = Bg,
@@ -56,7 +57,7 @@ fun App(repo: Repo) {
             Box(Modifier.fillMaxSize().padding(pad)) {
                 when (tab) {
                     0 -> ChatScreen(state, onModels = { tab = 2 })
-                    1 -> MindScreen(state, onOpen = { openBook = it })
+                    1 -> MindScreen(state, onOpen = { s, noteId -> openNote = noteId; openBook = s })
                     else -> ModelsScreen(state)
                 }
             }

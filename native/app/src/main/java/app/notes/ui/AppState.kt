@@ -7,6 +7,9 @@ import androidx.compose.runtime.setValue
 import app.notes.ai.AiEngine
 import app.notes.ai.BasicEngine
 import app.notes.ai.Classifier
+import app.notes.ai.Links
+import app.notes.ai.SectionLink
+import app.notes.ai.SuggestedLink
 import app.notes.ai.InstalledModel
 import app.notes.ai.LocalEngine
 import app.notes.ai.ModelManager
@@ -24,6 +27,13 @@ import java.io.File
 
 class AppState(private val repo: Repo, val models: ModelManager, private val scope: CoroutineScope) {
     var sections by mutableStateOf(listOf<Section>())
+    /** كل الملاحظات والروابط المقترحة (لشاشة العقل). */
+    var allNotes by mutableStateOf(listOf<Note>())
+        private set
+    var links by mutableStateOf(listOf<SuggestedLink>())
+        private set
+    var sectionLinks by mutableStateOf(listOf<SectionLink>())
+        private set
     var conversations by mutableStateOf(listOf<Conversation>())
     val messages = mutableStateListOf<Msg>()
     var convId by mutableStateOf(0L)
@@ -58,6 +68,9 @@ class AppState(private val repo: Repo, val models: ModelManager, private val sco
     private fun refresh() = scope.launch {
         val (s, c) = io { repo.sections() to repo.conversations() }
         sections = s; conversations = c
+        val notes = io { repo.notes() }
+        val (l, sl) = withContext(Dispatchers.Default) { Links.suggest(notes).let { it to Links.bySection(it, notes) } }
+        allNotes = notes; links = l; sectionLinks = sl
     }
 
     fun newChat() { convId = 0L; messages.clear() }

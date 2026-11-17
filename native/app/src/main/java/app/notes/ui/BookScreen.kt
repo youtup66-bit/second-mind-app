@@ -54,7 +54,7 @@ private val dateFmt = SimpleDateFormat("EEEE d MMMM yyyy · HH:mm", Locale("ar")
 /** الكرة تفتح كتاباً: غلاف، ثم صفحة لكل ملاحظة تُقلب أفقياً. */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun BookScreen(state: AppState, book: Section, onBack: () -> Unit) {
+fun BookScreen(state: AppState, book: Section, startNoteId: Long? = null, onBack: () -> Unit) {
     // نسخة محدثة من القسم (العدد والملخص)
     val section = state.sections.firstOrNull { it.id == book.id } ?: book
     var notes by remember { mutableStateOf<List<Note>?>(null) }
@@ -72,7 +72,8 @@ fun BookScreen(state: AppState, book: Section, onBack: () -> Unit) {
         }
 
         val list = notes ?: return@Column
-        val pager = rememberPagerState { list.size + 1 }
+        val start = list.indexOfFirst { it.id == startNoteId }.let { if (it < 0) 0 else it + 1 }
+        val pager = rememberPagerState(initialPage = start) { list.size + 1 }
         HorizontalPager(state = pager, modifier = Modifier.weight(1f).fillMaxWidth()) { page ->
             Surface(
                 shape = RoundedCornerShape(topStart = 6.dp, bottomStart = 6.dp, topEnd = 18.dp, bottomEnd = 18.dp),
