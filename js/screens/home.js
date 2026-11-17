@@ -6,7 +6,7 @@ import {
 import { transcribe } from '../gemini.js';
 import { smartChat } from '../ai.js';
 import { exportChatFile } from '../backup.js';
-import { editLastReport, reportFile, reportsContext } from '../report-build.js';
+import { editLastReport, reportFile, textReportFile, reportsContext } from '../report-build.js';
 import { saveFile, shareFile } from '../native-files.js';
 import { executeActions } from '../actions.js';
 import { setActionContext, setReportsContext } from '../actions-spec.js';
@@ -595,7 +595,14 @@ export async function mount(root) {
     if (!image && isSaveReportCommand(text0)) {
       try {
         append(await addMessage({ role: 'user', text }));
-        const doc = await reportFile(text0);
+        let doc;
+        try {
+          doc = await reportFile(text0);
+        } catch (err) {
+          // لا تقرير Word محفوظ: نحوّل أحدث تقرير نصي إلى Word ونحفظه
+          if (!/لا توجد تقارير محفوظة/.test(err.message || '')) throw err;
+          doc = await textReportFile(text0);
+        }
         const note = /جديد/.test(text0) ? ' (لإنشاء تقرير جديد اختر النطاق من نافذة التقارير)' : '';
         append(await addMessage({ role: 'model', text: `هذا التقرير «${doc.title}» (النسخة ${doc.version})${note}:` }));
         appendFileCard(doc);

@@ -150,6 +150,36 @@ export async function reportFile(query = '') {
   return { blob: await buildDocx(doc.blocks), filename: doc.filename, version: doc.version, title: doc.title };
 }
 
+// تقرير نصي من شاشة التقارير (مثل تقرير العمل الأسبوعي) يُحوَّل إلى Word عند طلب حفظه، ثم يصبح تقريراً محفوظاً
+export async function textReportFile(query = '') {
+  const reports = await listReports();
+  if (!reports.length) throw new Error('لا توجد تقارير بعد. اطلب من المساعد تقرير العمل أو أنشئ تقريراً من نافذة التقارير.');
+  const words = String(query).toLowerCase().split(/\s+/).filter((w) => w.length > 1 && !STOP.test(w));
+  const hit = words.length ? reports.find((r) => words.some((w) => String(r.headline || '').toLowerCase().includes(w))) : null;
+  const r = hit || reports[0];
+  const title = r.headline || 'تقرير';
+  const blocks = [{ t: 'title', text: title }];
+  if (r.label || r.createdAt) blocks.push({ t: 'meta', text: `${r.label || ''}${r.createdAt ? ` · ${fmtDate.format(r.createdAt)}` : ''}` });
+  if (r.overview) blocks.push({ t: 'p', text: r.overview });
+  if (r.highlights?.length) {
+    blocks.push({ t: 'h', text: 'أبرز الأعمال' });
+    for (const x of r.highlights) blocks.push({ t: 'p', text: `- ${x}` });
+  }
+  if (r.people?.length) {
+    blocks.push({ t: 'h', text: 'الموظفون' });
+    for (const p of r.people) blocks.push({ t: 'p', text: `${p.name}: ${p.summary}` });
+  }
+  if (r.problems?.length) {
+    blocks.push({ t: 'h', text: 'مشاكل ومتابعات' });
+    for (const x of r.problems) blocks.push({ t: 'p', text: `- ${x}` });
+  }
+  const iso = new Date(r.createdAt || Date.now()).toISOString().slice(0, 10);
+  const filename = `${title}-${iso}.docx`.replace(/[\\/:*?"<>|]/g, '_');
+  const blob = await buildDocx(blocks);
+  await saveWordReport({ title, filename, version: 1, blocks });
+  return { blob, filename, version: 1, title };
+}
+
 const transcript = (msgs) => {
   const lines = msgs.filter((m) => m.text).map((m) => {
     const room = m.room && m.room !== GENERAL ? roomNameOf(m.room) || 'مجموعة' : 'المجموعة العامة';
