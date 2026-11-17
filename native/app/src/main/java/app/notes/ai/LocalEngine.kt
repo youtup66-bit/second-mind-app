@@ -45,13 +45,46 @@ class LocalEngine(
         }
     }
 
+    override suspend fun classify(text: String, sections: List<Section>): Section? {
+        val list = sections.mapIndexed { i, s -> "${i + 1}. ${s.name}" }.joinToString("\n")
+        val out = generate(
+            "أنت مصنِّف ملاحظات. اقرأ الملاحظة واختر القسم الأنسب لها من القائمة. أجب برقم القسم فقط دون أي كلمة أخرى.\n$list",
+            "الملاحظة: ${text.take(400)}\nرقم القسم:",
+        )
+        val n = Regex("\\d+").find(toLatinDigits(out))?.value?.toIntOrNull() ?: return null
+        return sections.getOrNull(n - 1)
+    }
+
+    override suspend fun summarize(section: Section, notes: List<Note>): String? {
+        // الأحدث أولاً حتى يتسع النص لحجم النموذج
+        val sb = StringBuilder()
+        for (n in notes.asReversed()) {
+            val line = "- ${n.text.take(200)}\n"
+            if (sb.length + line.length > 1400) break
+            sb.append(line)
+        }
+        return generate(
+            "أنت تلخّص كتاب «${section.name}» من ملاحظات المستخدم الشخصية. اكتب بالعربية ملخصاً قصيراً (٣ إلى ٥ نقاط) يبرز أهم ما فيه وما يتكرر، ثم سطراً واحداً بخطوة مقترحة.",
+            "الملاحظات:\n$sb",
+        ).ifBlank { null }
+    }
+
+    /** طلب واحد بلا سجل محادثة. */
+    private suspend fun generate(system: String, user: String): String = withContext(Dispatchers.Default) {
+        clean(model().generateResponse(format(system, listOf("user" to user))))
+    }
+
+    private fun toLatinDigits(s: String) = s.map { c -> if (c in '٠'..'٩') '0' + (c - '٠') else c }.joinToString("")
+
     private fun buildPrompt(history: List<Msg>, memory: List<Note>, input: String, section: Section): String {
         // آخر الرسائل قبل الحالية، باختصار لتبقى ضمن حجم النموذج
         val past = history.dropLast(1).takeLast(6).map { it.role to it.text.take(300) }
-        val sys = systemText(memory, section)
+        return format(systemText(memory, section), past + ("user" to input))
+    }
+
+    private fun format(sys: String, turns: List<Pair<String, String>>): String {
         return when (template) {
             Template.GEMMA -> buildString {
-                val turns = past + ("user" to input)
                 turns.forEachIndexed { i, (role, text) ->
                     val r = if (role == "user") "user" else "model"
                     append("<start_of_turn>").append(r).append('\n')
@@ -62,7 +95,7 @@ class LocalEngine(
             }
             Template.CHATML -> buildString {
                 append("<|im_start|>system\n").append(sys).append("<|im_end|>\n")
-                (past + ("user" to input)).forEach { (role, text) ->
+                turns.forEach { (role, text) ->
                     append("<|im_start|>").append(if (role == "user") "user" else "assistant").append('\n')
                     append(text).append("<|im_end|>\n")
                 }
@@ -76,5 +109,5 @@ class LocalEngine(
         .replace(Regex("<end_of_turn>|<start_of_turn>|<\\|im_end\\|>|<\\|im_start\\|>|<eos>"), "")
         .trim()
 
-    companion object { const val MAX_TOKENS = 1024 }
+    companion object { const val MAX_TOKENS = 1280 }
 }

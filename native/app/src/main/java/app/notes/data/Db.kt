@@ -5,16 +5,20 @@ import android.content.Context
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
 
-data class Section(val id: Long, val name: String, val icon: String, val keywords: String, val count: Int = 0)
+data class Section(
+    val id: Long, val name: String, val icon: String, val keywords: String, val count: Int = 0,
+    /** آخر ملخص للكتاب، وعدد صفحاته وقت التلخيص. */
+    val summary: String = "", val summaryCount: Int = 0,
+)
 data class Note(val id: Long, val text: String, val sectionId: Long, val convId: Long, val time: Long)
 data class Msg(val id: Long, val convId: Long, val role: String, val text: String, val time: Long)
 data class Conversation(val id: Long, val title: String, val time: Long)
 
 /** كل البيانات محفوظة على الهاتف فقط في قاعدة SQLite. */
-class Db(ctx: Context) : SQLiteOpenHelper(ctx, "notes.db", null, 1) {
+class Db(ctx: Context) : SQLiteOpenHelper(ctx, "notes.db", null, 2) {
 
     override fun onCreate(db: SQLiteDatabase) {
-        db.execSQL("CREATE TABLE sections(id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, icon TEXT, keywords TEXT)")
+        db.execSQL("CREATE TABLE sections(id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, icon TEXT, keywords TEXT, summary TEXT DEFAULT '', summary_count INTEGER DEFAULT 0)")
         db.execSQL("CREATE TABLE notes(id INTEGER PRIMARY KEY AUTOINCREMENT, text TEXT, section_id INTEGER, conv_id INTEGER, time INTEGER)")
         db.execSQL("CREATE TABLE conversations(id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT, time INTEGER)")
         db.execSQL("CREATE TABLE messages(id INTEGER PRIMARY KEY AUTOINCREMENT, conv_id INTEGER, role TEXT, text TEXT, time INTEGER)")
@@ -25,7 +29,12 @@ class Db(ctx: Context) : SQLiteOpenHelper(ctx, "notes.db", null, 1) {
         }
     }
 
-    override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {}
+    override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
+        if (oldVersion < 2) {
+            db.execSQL("ALTER TABLE sections ADD COLUMN summary TEXT DEFAULT ''")
+            db.execSQL("ALTER TABLE sections ADD COLUMN summary_count INTEGER DEFAULT 0")
+        }
+    }
 
     companion object {
         /** الأقسام الافتراضية: الاسم، الأيقونة، كلمات دالة (للتصنيف المبدئي قبل الذكاء الصناعي). */
@@ -49,15 +58,19 @@ class Repo(private val helper: Db) {
     fun sections(): List<Section> {
         val out = mutableListOf<Section>()
         db.rawQuery(
-            "SELECT s.id, s.name, s.icon, s.keywords, (SELECT COUNT(*) FROM notes n WHERE n.section_id = s.id) FROM sections s ORDER BY s.id",
+            "SELECT s.id, s.name, s.icon, s.keywords, (SELECT COUNT(*) FROM notes n WHERE n.section_id = s.id), s.summary, s.summary_count FROM sections s ORDER BY s.id",
             null
-        ).use { c -> while (c.moveToNext()) out += Section(c.getLong(0), c.getString(1), c.getString(2), c.getString(3), c.getInt(4)) }
+        ).use { c -> while (c.moveToNext()) out += Section(c.getLong(0), c.getString(1), c.getString(2), c.getString(3), c.getInt(4), c.getString(5) ?: "", c.getInt(6)) }
         return out
     }
 
     fun addSection(name: String, icon: String): Long = db.insert("sections", null, ContentValues().apply {
         put("name", name); put("icon", icon); put("keywords", "")
     })
+
+    fun setSummary(sectionId: Long, summary: String, count: Int) {
+        db.update("sections", ContentValues().apply { put("summary", summary); put("summary_count", count) }, "id = ?", arrayOf(sectionId.toString()))
+    }
 
     fun addNote(text: String, sectionId: Long, convId: Long): Long = db.insert("notes", null, ContentValues().apply {
         put("text", text); put("section_id", sectionId); put("conv_id", convId); put("time", System.currentTimeMillis())

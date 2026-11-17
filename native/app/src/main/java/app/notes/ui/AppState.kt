@@ -76,11 +76,14 @@ class AppState(private val repo: Repo, val models: ModelManager, private val sco
                 if (convId == 0L) convId = io { repo.newConversation(text.take(40)) }
                 val id = convId
                 messages += io { repo.addMessage(id, "user", text) }
-                val section = Classifier.classify(text, sections)
+                val local = engine is LocalEngine
+                if (local) status = "يصنّف ملاحظتك…"
+                val section = (if (local) runCatching { engine.classify(text, sections) }.getOrNull() else null)
+                    ?: Classifier.classify(text, sections)
                 // الذاكرة تُبحث قبل حفظ الملاحظة الجديدة حتى لا تتذكر نفسها
                 val memory = io { Recall.find(repo.notes(), text) }
                 io { repo.addNote(text, section.id, id) }
-                if (engine is LocalEngine) status = "يفكر على هاتفك…"
+                if (local) status = "يفكر على هاتفك…"
                 val reply = try {
                     engine.reply(messages.toList(), memory, text, section)
                 } catch (e: Throwable) {
@@ -88,13 +91,27 @@ class AppState(private val repo: Repo, val models: ModelManager, private val sco
                     BasicEngine().reply(messages.toList(), memory, text, section) +
                         "\n\n⚠️ تعذّر تشغيل النموذج: ${e.message ?: e.javaClass.simpleName}"
                 }
-                messages += io { repo.addMessage(id, "assistant", reply) }
+                val tagged = if (local) "$reply\n\n— حُفظت في ${section.icon} ${section.name}" else reply
+                messages += io { repo.addMessage(id, "assistant", tagged) }
             } finally {
                 busy = false
                 status = ""
                 refresh()
             }
         }
+    }
+
+    /** تلخيص كتاب بالنموذج المحلي وحفظ الملخص. يعيد رسالة خطأ أو null. */
+    suspend fun summarize(section: Section): String? {
+        if (engine !is LocalEngine) return "اختر نموذجاً من «النماذج» ليلخّص لك الكتاب."
+        val notes = notesOf(section.id)
+        if (notes.isEmpty()) return "الكتاب فارغ."
+        return try {
+            val text = engine.summarize(section, notes) ?: return "لم يكتب النموذج ملخصاً، جرّب مرة أخرى."
+            io { repo.setSummary(section.id, text, notes.size) }
+            refresh().join()
+            null
+        } catch (e: Throwable) { "تعذّر التلخيص: ${e.message ?: e.javaClass.simpleName}" }
     }
 
     suspend fun notesOf(sectionId: Long): List<Note> = io { repo.notes(sectionId) }

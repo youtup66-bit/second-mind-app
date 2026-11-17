@@ -52,6 +52,12 @@ object Recall {
 interface AiEngine {
     val name: String
     suspend fun reply(history: List<Msg>, memory: List<Note>, input: String, section: Section): String
+
+    /** تصنيف بالذكاء الصناعي؛ null يعني استخدم التصنيف بالكلمات. */
+    suspend fun classify(text: String, sections: List<Section>): Section? = null
+
+    /** تلخيص كتاب؛ null يعني أن المحرك لا يلخّص. */
+    suspend fun summarize(section: Section, notes: List<Note>): String? = null
 }
 
 /** محرك أساسي بلا نموذج: يؤكد الحفظ ويذكّر بالملاحظات المرتبطة. يُستبدل بنموذج محلي في المرحلة ٢. */

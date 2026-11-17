@@ -31,6 +31,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -52,7 +54,9 @@ private val dateFmt = SimpleDateFormat("EEEE d MMMM yyyy · HH:mm", Locale("ar")
 /** الكرة تفتح كتاباً: غلاف، ثم صفحة لكل ملاحظة تُقلب أفقياً. */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun BookScreen(state: AppState, section: Section, onBack: () -> Unit) {
+fun BookScreen(state: AppState, book: Section, onBack: () -> Unit) {
+    // نسخة محدثة من القسم (العدد والملخص)
+    val section = state.sections.firstOrNull { it.id == book.id } ?: book
     var notes by remember { mutableStateOf<List<Note>?>(null) }
     var reload by remember { mutableIntStateOf(0) }
     var moving by remember { mutableStateOf<Note?>(null) }
@@ -76,7 +80,7 @@ fun BookScreen(state: AppState, section: Section, onBack: () -> Unit) {
                 shadowElevation = 6.dp,
                 modifier = Modifier.fillMaxSize().padding(horizontal = 20.dp, vertical = 12.dp),
             ) {
-                if (page == 0) Cover(section, list.size)
+                if (page == 0) Cover(state, section, list.size)
                 else NotePage(list[page - 1], page, list.size, onMove = { moving = it }, onDelete = {
                     state.deleteNote(it.id); reload++
                 })
@@ -112,9 +116,13 @@ fun BookScreen(state: AppState, section: Section, onBack: () -> Unit) {
 }
 
 @Composable
-private fun Cover(section: Section, count: Int) {
+private fun Cover(state: AppState, section: Section, count: Int) {
+    val scope = rememberCoroutineScope()
+    var working by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
     Column(
-        Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Accent, Panel2))).padding(24.dp),
+        Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Accent, Panel2)))
+            .verticalScroll(rememberScrollState()).padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
@@ -123,6 +131,36 @@ private fun Cover(section: Section, count: Int) {
         Text(section.name, color = TextMain, fontSize = 32.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(8.dp))
         Text("$count صفحة", color = TextMain.copy(alpha = 0.8f), fontSize = 16.sp)
+
+        if (count > 0) {
+            Spacer(Modifier.height(20.dp))
+            if (section.summary.isNotEmpty()) {
+                Surface(shape = RoundedCornerShape(16.dp), color = Bg.copy(alpha = 0.35f), modifier = Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(14.dp)) {
+                        Text("✦ الملخص", color = TextMain, fontWeight = FontWeight.Bold)
+                        Spacer(Modifier.height(6.dp))
+                        Text(section.summary, color = TextMain, fontSize = 15.sp, lineHeight = 24.sp)
+                        if (section.summaryCount != count) Text(
+                            "أُضيفت صفحات بعد هذا الملخص", color = TextMain.copy(alpha = 0.6f), fontSize = 12.sp,
+                        )
+                    }
+                }
+            }
+            TextButton(enabled = !working, onClick = {
+                working = true; error = null
+                scope.launch { error = state.summarize(section); working = false }
+            }) {
+                Text(
+                    when {
+                        working -> "يلخّص على هاتفك…"
+                        section.summary.isEmpty() -> "✦ لخّص الكتاب"
+                        else -> "✦ حدّث الملخص"
+                    },
+                    color = TextMain,
+                )
+            }
+            error?.let { Text(it, color = TextMain.copy(alpha = 0.8f), fontSize = 13.sp, textAlign = TextAlign.Center) }
+        }
     }
 }
 
