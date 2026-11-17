@@ -43,7 +43,7 @@ import androidx.compose.ui.unit.sp
 import app.notes.data.Msg
 
 @Composable
-fun ChatScreen(state: AppState) {
+fun ChatScreen(state: AppState, onModels: () -> Unit) {
     var input by remember { mutableStateOf("") }
     var showHistory by remember { mutableStateOf(false) }
     val list = rememberLazyListState()
@@ -60,9 +60,9 @@ fun ChatScreen(state: AppState) {
         ) {
             TopIcon("☰") { showHistory = true }
             Spacer(Modifier.weight(1f))
-            Surface(shape = RoundedCornerShape(50), color = Panel2) {
+            Surface(shape = RoundedCornerShape(50), color = Panel2, modifier = Modifier.clickable(onClick = onModels)) {
                 Text(
-                    "✦ ${state.engine.name}",
+                    "✦ ${state.engine.name} ▾",
                     color = TextMain, fontSize = 13.sp,
                     modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
                 )
@@ -82,7 +82,7 @@ fun ChatScreen(state: AppState) {
                     contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
                 ) {
                     items(state.messages, key = { it.id }) { MessageRow(it) }
-                    if (state.busy) item { Text("✦ يفكر…", color = TextDim) }
+                    if (state.busy) item { Text("✦ ${state.status.ifEmpty { "يفكر…" }}", color = TextDim) }
                 }
             }
         }

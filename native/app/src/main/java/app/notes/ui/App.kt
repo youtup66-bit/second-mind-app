@@ -19,13 +19,16 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.platform.LocalContext
+import app.notes.ai.ModelManager
 import app.notes.data.Repo
 import app.notes.data.Section
 
 @Composable
 fun App(repo: Repo) {
     val scope = rememberCoroutineScope()
-    val state = remember { AppState(repo, scope) }
+    val ctx = LocalContext.current
+    val state = remember { AppState(repo, ModelManager(ctx.applicationContext), scope) }
     var tab by rememberSaveable { mutableIntStateOf(0) }
     var openBook by remember { mutableStateOf<Section?>(null) }
 
@@ -38,7 +41,7 @@ fun App(repo: Repo) {
             containerColor = Bg,
             bottomBar = {
                 NavigationBar(containerColor = Panel) {
-                    listOf("💬" to "المحادثة", "🧠" to "العقل").forEachIndexed { i, (icon, label) ->
+                    listOf("💬" to "المحادثة", "🧠" to "العقل", "🤖" to "النماذج").forEachIndexed { i, (icon, label) ->
                         NavigationBarItem(
                             selected = tab == i,
                             onClick = { tab = i },
@@ -52,8 +55,9 @@ fun App(repo: Repo) {
         ) { pad ->
             Box(Modifier.fillMaxSize().padding(pad)) {
                 when (tab) {
-                    0 -> ChatScreen(state)
-                    else -> MindScreen(state, onOpen = { openBook = it })
+                    0 -> ChatScreen(state, onModels = { tab = 2 })
+                    1 -> MindScreen(state, onOpen = { openBook = it })
+                    else -> ModelsScreen(state)
                 }
             }
         }

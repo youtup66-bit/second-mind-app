@@ -7,6 +7,9 @@ import androidx.compose.runtime.setValue
 import app.notes.ai.AiEngine
 import app.notes.ai.BasicEngine
 import app.notes.ai.Classifier
+import app.notes.ai.InstalledModel
+import app.notes.ai.LocalEngine
+import app.notes.ai.ModelManager
 import app.notes.ai.Recall
 import app.notes.data.Conversation
 import app.notes.data.Msg
@@ -17,16 +20,40 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.File
 
-class AppState(private val repo: Repo, private val scope: CoroutineScope) {
+class AppState(private val repo: Repo, val models: ModelManager, private val scope: CoroutineScope) {
     var sections by mutableStateOf(listOf<Section>())
     var conversations by mutableStateOf(listOf<Conversation>())
     val messages = mutableStateListOf<Msg>()
     var convId by mutableStateOf(0L)
     var busy by mutableStateOf(false)
-    var engine: AiEngine = BasicEngine()
+    var engine: AiEngine by mutableStateOf<AiEngine>(BasicEngine())
+        private set
+    var installed by mutableStateOf(listOf<InstalledModel>())
+        private set
+    var status by mutableStateOf("")
 
-    init { refresh() }
+    init {
+        refresh()
+        refreshModels()
+        installed.firstOrNull { it.file.absolutePath == models.activePath }?.let { useModel(it) }
+    }
+
+    fun refreshModels() { installed = models.installed() }
+
+    /** اختيار نموذج محلي، أو null للمحرك الأساسي بلا نموذج. */
+    fun useModel(m: InstalledModel?) {
+        (engine as? LocalEngine)?.close()
+        engine = if (m == null) BasicEngine() else LocalEngine(models.ctx, m.file, m.label, m.template)
+        models.activePath = m?.file?.absolutePath ?: ""
+    }
+
+    fun deleteModel(f: File) {
+        if (f.absolutePath == models.activePath) useModel(null)
+        models.delete(f)
+        refreshModels()
+    }
 
     private fun refresh() = scope.launch {
         val (s, c) = io { repo.sections() to repo.conversations() }
@@ -53,10 +80,18 @@ class AppState(private val repo: Repo, private val scope: CoroutineScope) {
                 // الذاكرة تُبحث قبل حفظ الملاحظة الجديدة حتى لا تتذكر نفسها
                 val memory = io { Recall.find(repo.notes(), text) }
                 io { repo.addNote(text, section.id, id) }
-                val reply = engine.reply(messages.toList(), memory, text, section)
+                if (engine is LocalEngine) status = "يفكر على هاتفك…"
+                val reply = try {
+                    engine.reply(messages.toList(), memory, text, section)
+                } catch (e: Throwable) {
+                    // إن فشل النموذج (ذاكرة لا تكفي أو ملف تالف) لا تضيع الملاحظة
+                    BasicEngine().reply(messages.toList(), memory, text, section) +
+                        "\n\n⚠️ تعذّر تشغيل النموذج: ${e.message ?: e.javaClass.simpleName}"
+                }
                 messages += io { repo.addMessage(id, "assistant", reply) }
             } finally {
                 busy = false
+                status = ""
                 refresh()
             }
         }
