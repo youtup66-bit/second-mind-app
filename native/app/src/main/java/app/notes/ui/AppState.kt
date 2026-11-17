@@ -164,21 +164,86 @@ class AppState(private val repo: Repo, val models: ModelManager, private val sco
                 }
                 val noteId = io { repo.addNote(text, section.id, id) }
                 if (qv != null) io { repo.saveVector(noteId, qv) }
-                if (local) status = "يفكر $where…"
-                val reply = try {
-                    engine.reply(messages.toList(), memory, text, section)
-                } catch (e: Throwable) {
-                    // إن فشل النموذج (ذاكرة لا تكفي أو ملف تالف) لا تضيع الملاحظة
-                    BasicEngine().reply(messages.toList(), memory, text, section) +
-                        "\n\n⚠️ تعذّر تشغيل النموذج: ${e.message ?: e.javaClass.simpleName}"
-                }
-                val tagged = if (local) "$reply\n\n— حُفظت في ${section.icon} ${section.name}" else reply
-                messages += io { repo.addMessage(id, "assistant", tagged) }
+                answer(id, text, section, memory)
             } finally {
                 busy = false
                 status = ""
                 refresh()
             }
+        }
+    }
+
+    /** رد الذكاء وحفظه في المحادثة. */
+    private suspend fun answer(convId: Long, text: String, section: Section, memory: List<Note>) {
+        val local = engine !is BasicEngine
+        val where = if (engine is GeminiEngine) "عبر الإنترنت" else "على هاتفك"
+        if (local) status = "يفكر $where…"
+        val reply = try {
+            engine.reply(messages.toList(), memory, text, section)
+        } catch (e: Throwable) {
+            // إن فشل النموذج (ذاكرة لا تكفي أو ملف تالف) لا تضيع الملاحظة
+            BasicEngine().reply(messages.toList(), memory, text, section) +
+                "\n\n⚠️ تعذّر تشغيل النموذج: ${e.message ?: e.javaClass.simpleName}"
+        }
+        val tagged = if (local) "$reply\n\n— حُفظت في ${section.icon} ${section.name}" else reply
+        messages += io { repo.addMessage(convId, "assistant", tagged) }
+    }
+
+    /** هل يمكن تعديل هذه الرسالة؟ (آخر رسالة كتبها المستخدم فقط) */
+    fun isLastUser(m: Msg) = m.role == "user" && messages.lastOrNull { it.role == "user" }?.id == m.id
+
+    /**
+     * تعديل آخر رسالة: يُحدَّث نصها ونص ملاحظتها، ويُعاد تصنيفها وفهمها،
+     * ويُحذف الرد القديم ويكتب الذكاء رداً جديداً.
+     */
+    fun editLast(raw: String) {
+        val text = raw.trim()
+        val idx = messages.indexOfLast { it.role == "user" }
+        if (text.isEmpty() || busy || idx < 0) return
+        val old = messages[idx]
+        if (old.text == text) return
+        busy = true
+        scope.launch {
+            try {
+                val after = messages.drop(idx + 1)
+                io { after.forEach { repo.deleteMessage(it.id) }; repo.updateMessage(old.id, text) }
+                while (messages.size > idx + 1) messages.removeAt(messages.lastIndex)
+                messages[idx] = old.copy(text = text)
+
+                val noteId = io { repo.findNote(old.convId, old.text) }
+                val local = engine !is BasicEngine
+                if (local) status = "يعيد تصنيف ملاحظتك…"
+                val section = (if (local) runCatching { engine.classify(text, sections) }.getOrNull() else null)
+                    ?: Classifier.classify(text, sections)
+                val e = embedder
+                val qv = if (e != null) runCatching { withContext(Dispatchers.Default) { e.embed(text) } }.getOrNull() else null
+                val memory = io {
+                    val all = repo.notes().filter { it.id != noteId }
+                    if (qv != null) Semantic.recall(repo.vectors(), all, qv).ifEmpty { Recall.find(all, text) }
+                    else Recall.find(all, text)
+                }
+                val nid = if (noteId != null) { io { repo.updateNote(noteId, text, section.id) }; noteId }
+                else io { repo.addNote(text, section.id, old.convId) }
+                if (qv != null) io { repo.saveVector(nid, qv) }
+                answer(old.convId, text, section, memory)
+            } finally {
+                busy = false
+                status = ""
+                refresh()
+            }
+        }
+    }
+
+    /** تعديل ملاحظة من الكتاب (يبقى قسمها كما هو). */
+    fun updateNote(noteId: Long, raw: String) {
+        val text = raw.trim()
+        if (text.isEmpty()) return
+        scope.launch {
+            io { repo.updateNote(noteId, text) }
+            embedder?.let { e ->
+                runCatching { withContext(Dispatchers.Default) { e.embed(text) } }.getOrNull()?.let { v -> io { repo.saveVector(noteId, v) } }
+            }
+            refresh()
         }
     }
 

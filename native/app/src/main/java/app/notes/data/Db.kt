@@ -112,6 +112,25 @@ class Repo(private val helper: Db) {
         db.delete("embeddings", "note_id = ?", arrayOf(noteId.toString()))
     }
 
+    /** تعديل نص ملاحظة (وقسمها اختيارياً)؛ تُحذف بصمة المعنى القديمة لتُحسب من جديد. */
+    fun updateNote(noteId: Long, text: String, sectionId: Long? = null) {
+        db.update("notes", ContentValues().apply {
+            put("text", text); if (sectionId != null) put("section_id", sectionId)
+        }, "id = ?", arrayOf(noteId.toString()))
+        db.delete("embeddings", "note_id = ?", arrayOf(noteId.toString()))
+    }
+
+    /** الملاحظة المحفوظة من رسالة في محادثة. */
+    fun findNote(convId: Long, text: String): Long? =
+        db.rawQuery("SELECT id FROM notes WHERE conv_id = ? AND text = ? ORDER BY id DESC LIMIT 1", arrayOf(convId.toString(), text))
+            .use { c -> if (c.moveToFirst()) c.getLong(0) else null }
+
+    fun updateMessage(id: Long, text: String) {
+        db.update("messages", ContentValues().apply { put("text", text) }, "id = ?", arrayOf(id.toString()))
+    }
+
+    fun deleteMessage(id: Long) { db.delete("messages", "id = ?", arrayOf(id.toString())) }
+
     fun saveVector(noteId: Long, v: FloatArray) {
         val buf = java.nio.ByteBuffer.allocate(v.size * 4).order(java.nio.ByteOrder.LITTLE_ENDIAN)
         v.forEach { buf.putFloat(it) }

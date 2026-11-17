@@ -47,6 +47,8 @@ import app.notes.data.ReportBlock
 @Composable
 fun ChatScreen(state: AppState, onModels: () -> Unit) {
     var input by remember { mutableStateOf("") }
+    // وضع تعديل آخر رسالة
+    var editing by remember { mutableStateOf(false) }
     var showHistory by remember { mutableStateOf(false) }
     val list = rememberLazyListState()
     val savePdf = rememberPdfSaver()
@@ -83,7 +85,9 @@ fun ChatScreen(state: AppState, onModels: () -> Unit) {
                     contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
                 ) {
                     items(state.messages, key = { it.id }) { m ->
-                        MessageRow(m, onPdf = {
+                        MessageRow(m, canEdit = !state.busy && state.isLastUser(m), onEdit = {
+                            input = m.text; editing = true
+                        }, onPdf = {
                             // التقرير: سؤالك (الرسالة السابقة) ثم رد الذكاء
                             val i = state.messages.indexOf(m)
                             val q = state.messages.subList(0, i.coerceAtLeast(0)).lastOrNull { it.role == "user" }
@@ -101,6 +105,15 @@ fun ChatScreen(state: AppState, onModels: () -> Unit) {
                     if (state.busy) item { Text("✦ ${state.status.ifEmpty { "يفكر…" }}", color = TextDim) }
                 }
             }
+        }
+
+        // شريط وضع التعديل
+        if (editing) Row(
+            Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(top = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text("✎ تعديل آخر رسالة — سيكتب الذكاء رداً جديداً", color = Accent, fontSize = 13.sp, modifier = Modifier.weight(1f))
+            Text("✕", color = TextDim, fontSize = 18.sp, modifier = Modifier.clip(CircleShape).clickable { editing = false; input = "" }.padding(6.dp))
         }
 
         // صندوق الكتابة
@@ -129,7 +142,10 @@ fun ChatScreen(state: AppState, onModels: () -> Unit) {
             Box(
                 Modifier.size(42.dp).clip(CircleShape)
                     .background(if (canSend) Brush.linearGradient(listOf(Accent, Accent2)) else Brush.linearGradient(listOf(Panel2, Panel2)))
-                    .clickable(enabled = canSend) { state.send(input); input = "" },
+                    .clickable(enabled = canSend) {
+                        if (editing) state.editLast(input) else state.send(input)
+                        input = ""; editing = false
+                    },
                 contentAlignment = Alignment.Center,
             ) { Text("↑", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold) }
         }
@@ -167,13 +183,18 @@ private fun TopIcon(glyph: String, onClick: () -> Unit) {
 }
 
 @Composable
-private fun MessageRow(m: Msg, onPdf: () -> Unit) {
+private fun MessageRow(m: Msg, canEdit: Boolean, onEdit: () -> Unit, onPdf: () -> Unit) {
     if (m.role == "user") {
-        // رسالة المستخدم: فقاعة في جهة البداية
-        Row(Modifier.fillMaxWidth()) {
+        // رسالة المستخدم: فقاعة في جهة البداية، وتحت آخرها زر تعديل
+        Column(Modifier.fillMaxWidth()) {
             Surface(shape = RoundedCornerShape(20.dp), color = Panel2, modifier = Modifier.widthIn(max = 300.dp)) {
                 Text(m.text, color = TextMain, fontSize = 16.sp, modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp))
             }
+            if (canEdit) Text(
+                "✎ تعديل", color = TextDim, fontSize = 12.sp,
+                modifier = Modifier.padding(top = 4.dp).clip(RoundedCornerShape(8.dp)).clickable(onClick = onEdit)
+                    .padding(horizontal = 8.dp, vertical = 4.dp),
+            )
         }
     } else {
         // رد الذكاء: نص حر مع شعار صغير، كبرامج الذكاء الصناعي

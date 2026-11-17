@@ -22,6 +22,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -63,8 +65,10 @@ fun BookScreen(state: AppState, book: Section, startNoteId: Long? = null, onBack
     var notes by remember { mutableStateOf<List<Note>?>(null) }
     var reload by remember { mutableIntStateOf(0) }
     var moving by remember { mutableStateOf<Note?>(null) }
+    var editingNote by remember { mutableStateOf<Note?>(null) }
+    var editText by remember { mutableStateOf("") }
     val savePdf = rememberPdfSaver()
-    LaunchedEffect(section.id, reload) { notes = state.notesOf(section.id) }
+    LaunchedEffect(section.id, reload, state.allNotes) { notes = state.notesOf(section.id) }
 
     Column(Modifier.fillMaxSize().background(Bg)) {
         Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -99,7 +103,7 @@ fun BookScreen(state: AppState, book: Section, startNoteId: Long? = null, onBack
                 modifier = Modifier.fillMaxSize().padding(horizontal = 20.dp, vertical = 12.dp),
             ) {
                 if (page == 0) Cover(state, section, list.size)
-                else NotePage(list[page - 1], page, list.size, onMove = { moving = it }, onDelete = {
+                else NotePage(list[page - 1], page, list.size, onEdit = { editingNote = it; editText = it.text }, onMove = { moving = it }, onDelete = {
                     state.deleteNote(it.id); reload++
                 })
             }
@@ -108,6 +112,23 @@ fun BookScreen(state: AppState, book: Section, startNoteId: Long? = null, onBack
             if (list.isEmpty()) "الكتاب فارغ — اكتب في المحادثة وسيُملأ" else "اسحب لتقليب الصفحات",
             color = TextDim, fontSize = 13.sp, textAlign = TextAlign.Center,
             modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
+        )
+    }
+
+    editingNote?.let { note ->
+        AlertDialog(
+            onDismissRequest = { editingNote = null },
+            containerColor = Panel,
+            title = { Text("تعديل الملاحظة", color = TextMain) },
+            text = {
+                OutlinedTextField(editText, { editText = it }, modifier = Modifier.fillMaxWidth().heightIn(min = 140.dp))
+            },
+            confirmButton = {
+                TextButton(enabled = editText.isNotBlank(), onClick = {
+                    state.updateNote(note.id, editText); editingNote = null; reload++
+                }) { Text("حفظ") }
+            },
+            dismissButton = { TextButton(onClick = { editingNote = null }) { Text("إلغاء") } },
         )
     }
 
@@ -183,7 +204,7 @@ private fun Cover(state: AppState, section: Section, count: Int) {
 }
 
 @Composable
-private fun NotePage(note: Note, page: Int, total: Int, onMove: (Note) -> Unit, onDelete: (Note) -> Unit) {
+private fun NotePage(note: Note, page: Int, total: Int, onEdit: (Note) -> Unit, onMove: (Note) -> Unit, onDelete: (Note) -> Unit) {
     Column(Modifier.fillMaxSize().padding(22.dp)) {
         Text(dateFmt.format(Date(note.time)), color = Ink.copy(alpha = 0.6f), fontSize = 13.sp)
         Spacer(Modifier.height(14.dp))
@@ -192,6 +213,7 @@ private fun NotePage(note: Note, page: Int, total: Int, onMove: (Note) -> Unit, 
             modifier = Modifier.weight(1f).verticalScroll(rememberScrollState()),
         )
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            TextButton(onClick = { onEdit(note) }) { Text("تعديل", color = Accent) }
             TextButton(onClick = { onMove(note) }) { Text("نقل", color = Accent) }
             TextButton(onClick = { onDelete(note) }) { Text("حذف", color = Ink.copy(alpha = 0.6f)) }
             Spacer(Modifier.weight(1f))
