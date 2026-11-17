@@ -140,7 +140,7 @@ export const deleteEntry = (id) =>
 
 // ---- سجل المحادثة ----
 // role: 'user' | 'model'
-// used: معرّفات الملاحظات التي استعانت بها الرفيقة في ردها
+// used: معرّفات الملاحظات التي استعانت بها المساعد في ردها
 // engine: 'local' إن جاء الرد من النموذج على الجهاز
 export async function addMessage({ role, text, entryId = null, used = [], engine }) {
   const msg = { id: crypto.randomUUID(), role, text, entryId, used, createdAt: Date.now(), ...(engine && { engine }) };

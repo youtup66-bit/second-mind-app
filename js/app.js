@@ -29,7 +29,7 @@ const titleEl = document.getElementById('screen-title');
 let current = null;
 let navId = 0;
 
-// الموظف: منشورات الأعمال والإعدادات فقط (لا عقل ولا رفيقة ولا ذكاء)
+// الموظف: منشورات الأعمال والإعدادات فقط (لا عقل ولا مساعد ولا ذكاء)
 const EMPLOYEE_ROUTES = new Set(['group', 'chats', 'branch', 'tasks', 'settings', 'org', 'join']);
 // ما يفتحه المسؤول بحسب خيارات إظهاره (يقررها رئيس القسم)
 const officialAllows = (name) => {
@@ -95,15 +95,15 @@ window.addEventListener('beforeinstallprompt', (e) => {
 });
 window.addEventListener('appinstalled', () => { window.__installPrompt = null; });
 
-// ---- الرفيقة الطافية داخل التطبيق ----
+// ---- المساعد الطافي داخل التطبيق ----
 let floaterRoute = 'home';
-// تطبيق مؤسسة: لا رفيقة مرسومة ولا رفيقة طافية
+// تطبيق مؤسسة: لا مساعد مرسومة ولا مساعد طافية
 const noCompanion = true;
 // لا تطفو فوق شاشات المحادثة (الرئيسية والمجموعة)
-// كرة المساعد الطافية: عند رئيس القسم في كل الشاشات عدا شاشة المساعد
+// كرة المساعد الطافي: عند رئيس القسم في كل الشاشات عدا شاشة المساعد
 // لا تطفو فوق شاشة المساعد ولا الإعدادات (تغطي أزرارها)
 const syncFloater = () => setOrbVisible((role === 'manager' || (role === 'employee' && !!groupBranch()?.perms?.assistant)) && floaterRoute !== 'home' && floaterRoute !== 'settings');
-// بلا رفيقة: تبويب "المحادثة"، والشاشة الرئيسية بلا شريط عنوان (رأس المحادثة يكفي)
+// بلا مساعد: تبويب "المحادثة"، والشاشة الرئيسية بلا شريط عنوان (رأس المحادثة يكفي)
 // تبويب "الموظفين" يظهر للمدير فقط (الصلاحية الفعلية تفرضها قاعدة البيانات)
 function applyRole(next) {
   const changed = (next || null) !== role;
@@ -171,7 +171,7 @@ async function refreshBadge() {
 groupEvents.addEventListener('message', refreshBadge);
 groupEvents.addEventListener('seen', refreshBadge);
 
-// المظهر: auto = واتساب حين تُخفى الرفيقة، وإلا البنفسجي
+// المظهر: auto = واتساب حين تُخفى المساعد، وإلا البنفسجي
 let appTheme = 'auto';
 function applyTheme() {
   const wa = appTheme === 'whatsapp' || (appTheme === 'auto' && noCompanion);
@@ -185,7 +185,7 @@ function applyNoCompanion() {
   if (tab) {
     tab.querySelector('.tabbar__icon').textContent = noCompanion ? '💬' : '✦';
     // في المؤسسة "المحادثات" تبويب للمجموعات، فالذكاء يُسمى "المساعد"
-    tab.querySelector('span:last-child').textContent = noCompanion ? 'المساعد' : 'الرفيقة';
+    tab.querySelector('span:last-child').textContent = 'المساعد';
   }
 }
 
@@ -195,7 +195,7 @@ function applyNoCompanion() {
   applyNoCompanion();
 })();
 
-// الإعدادات تُعلن عن تغييراتها فنحدّث الرفيقة الطافية فوراً
+// الإعدادات تُعلن عن تغييراتها فنحدّث المساعد الطافي فوراً
 window.addEventListener('sm:setting', (e) => {
   const { key, value } = e.detail;
   if (key === 'orgRole') applyRole(value);

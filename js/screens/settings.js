@@ -13,7 +13,7 @@ import {
 } from '../local-ai.js';
 import { aiMode } from '../ai.js';
 
-// يحفظ إعداداً ويُعلم بقية التطبيق (مثل الرفيقة الطافية)
+// يحفظ إعداداً ويُعلم بقية التطبيق (مثل المساعد الطافي)
 // وصف مختصر تحت اسم كل قسم (مثل إعدادات واتساب)
 const GROUP_HINTS = {
   'المطوّر': 'المؤسسة التجريبية، والدخول بأي حساب (نسخة التجربة فقط)',
@@ -249,13 +249,13 @@ export async function mount(root) {
       <p class="muted">"نص فقط" يوقف نطق الردود تماماً ويُخفي زر الصوت. الميكروفون يبقى حسب الخيار أعلاه.</p>
       <label class="switch">
         <input type="checkbox" id="speak" ${speakOn ? 'checked' : ''} ${canSpeak ? '' : 'disabled'}>
-        <span>الرفيقة تنطق ردودها بصوت (اضبطه من "صوت الرفيقة")</span>
+        <span>المساعد ينطق ردوده بصوت (اضبطه من "صوت المساعد")</span>
       </label>
       <label class="switch">
         <input type="checkbox" id="memory" ${memoryOn ? 'checked' : ''}>
-        <span>الرفيقة تستعين بملاحظاتي في ردودها</span>
+        <span>المساعد يستعين بملاحظاتي في ردوده</span>
       </label>
-      <p class="muted">يبحث التطبيق في ملاحظاتك على جهازك، ويرفق مع رسالتك أقرب ٥ ملاحظات صلة بها فقط، لتقترح الرفيقة حلولاً مبنية على ما دوّنته.</p>
+      <p class="muted">يبحث التطبيق في ملاحظاتك على جهازك، ويرفق مع رسالتك أقرب ٥ ملاحظات صلة بها فقط، لتقترح المساعد حلولاً مبنية على ما دوّنته.</p>
       <h3 class="subhead">التعرف على كلامك 🎙</h3>
       <label class="switch">
         <input type="checkbox" id="voice-review" ${voiceReview ? 'checked' : ''}>
@@ -321,7 +321,7 @@ export async function mount(root) {
       <p class="status" id="wipe-status" role="status"></p>
     </section>
   `;
-  // الموظف: لا رفيقة ولا عقل ولا ذكاء؛ نُبقي الحساب والمظهر والتثبيت والخصوصية فقط
+  // الموظف: لا مساعد ولا عقل ولا ذكاء؛ نُبقي الحساب والمظهر والتثبيت والخصوصية فقط
   if (await getSetting('orgRole', null) === 'employee') {
     const keep = new Set(['account', 'org', 'look', 'install', 'privacy', 'dev']); // dev: أدوات المطوّر في نسخة التجربة
     // المسؤول المسموح له بالمساعد: يضع مفتاحه الخاص (الموظف العادي لا مفتاح على جواله)
@@ -635,7 +635,7 @@ export async function mount(root) {
     retryGpu(); // تجربة صريحة: نمنح كرت الشاشة فرصة جديدة
     try {
       const reply = await localChat([
-        { role: 'system', content: 'أنتِ رفيقة لطيفة. أجيبي بالعربية بجملة واحدة.' },
+        { role: 'system', content: 'أنت مساعد ذكي. أجب بالعربية بجملة واحدة.' },
         { role: 'user', content: 'عرّفي نفسك باختصار.' },
       ], { maxTokens: 80, onToken: (t) => { localStatus.textContent = t; } });
       localStatus.className = 'status status--ok';

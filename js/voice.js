@@ -1,4 +1,4 @@
-// الصوت: تحويل الكلام إلى نص، ونطق ردود الرفيقة بصوت يناسب شخصيتها.
+// الصوت: تحويل الكلام إلى نص، ونطق ردود المساعد بصوت يناسب شخصيتها.
 // محرّكان للنطق: صوت الجهاز (فوري ومجاني) أو صوت Gemini الطبيعي (اختياري).
 import { getSetting } from './storage.js';
 import { tts, ttsCooldownUntil } from './gemini.js';
@@ -190,7 +190,7 @@ function speakDevice(text, profile, opts, { onStart, onEnd, onSilent }, my) {
   const queue = sentences(text);
   let started = false, finished = false;
   const finish = () => { if (!finished) { finished = true; clearTimeout(watchdog); onEnd?.(); } };
-  // إن لم يبدأ الصوت خلال ٤ ثوانٍ (لا أصوات مثبتة مثلاً) نعيد الرفيقة لحالها
+  // إن لم يبدأ الصوت خلال ٤ ثوانٍ (لا أصوات مثبتة مثلاً) نعيد المساعد لحالها
   const watchdog = setTimeout(() => { if (!started) { onSilent?.(); finish(); } }, 4000);
 
   const next = () => {

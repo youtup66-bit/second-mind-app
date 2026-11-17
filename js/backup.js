@@ -25,12 +25,12 @@ function categoryMarkdown(cat, entries) {
 }
 
 function chatMarkdown(messages) {
-  const lines = ['# المحادثة مع الرفيقة', ''];
+  const lines = ['# المحادثة مع المساعد', ''];
   let lastDay = '';
   for (const m of [...messages].sort((a, b) => a.createdAt - b.createdAt)) {
     const d = day(m.createdAt);
     if (d !== lastDay) { lines.push(`## ${d}`, ''); lastDay = d; }
-    lines.push(`**${m.role === 'user' ? 'أنا' : 'الرفيقة'}:** ${m.text}`, '');
+    lines.push(`**${m.role === 'user' ? 'أنا' : 'المساعد'}:** ${m.text}`, '');
   }
   return lines.join('\n');
 }
