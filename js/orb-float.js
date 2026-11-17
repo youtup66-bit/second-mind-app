@@ -80,8 +80,5 @@ function sync() {
 }
 
 // show: رئيس القسم خارج شاشة المساعد
-export function setOrbVisible(show) {
-  wanted = !!show;
-  if (wanted && !el) create();
-  sync();
-}
+// الكرة الطافية أُلغيت: لا تُعرض فوق التطبيقات
+export function setOrbVisible() {}

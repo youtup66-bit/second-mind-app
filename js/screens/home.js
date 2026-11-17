@@ -152,8 +152,7 @@ export async function mount(root) {
   const orgHead = orgRole === 'manager' || orgRole === 'employee'; // المسؤول المسموح له بالمساعد يرجع إلى المحادثات أيضاً
   if (plain) {
     root.querySelector('#wa-name').textContent = 'المساعد';
-    root.querySelector('#wa-avatar').innerHTML = '<span class="g-orb" aria-hidden="true"></span>';
-    root.querySelector('#wa-avatar').classList.add('wa-avatar--orb');
+    root.querySelector('#wa-avatar').textContent = 'م';
     root.querySelector('#wa-who').setAttribute('aria-label', 'المساعد');
     if (orgHead) root.querySelector('#wa-who').insertAdjacentHTML('beforebegin', '<a class="wa-head__back" href="#/chats" aria-label="رجوع إلى المحادثات">→</a>');
     root.querySelector('#wa-tools').append(root.querySelector('#stop-voice'), root.querySelector('#voice-toggle'));
