@@ -12,12 +12,29 @@ android {
         applicationId = "app.aqli.notes"
         minSdk = 26
         targetSdk = 35
-        versionCode = 6
-        versionName = "0.4.1"
+        // في البناء الآلي يرتفع رقم الإصدار مع كل بناء ليعرف زر التحديث أن هناك نسخة أحدث
+        versionCode = System.getenv("APP_VERSION_CODE")?.toIntOrNull() ?: 6
+        versionName = System.getenv("APP_VERSION_NAME") ?: "0.4.1"
+    }
+
+    // مفتاح توقيع ثابت من أسرار المستودع (لا يُخزَّن في المستودع)، حتى تُثبَّت التحديثات فوق النسخة القديمة
+    signingConfigs {
+        create("release") {
+            System.getenv("APK_KEYSTORE_PATH")?.let {
+                storeFile = file(it)
+                storePassword = System.getenv("APK_STORE_PASS")
+                keyAlias = "aqli"
+                keyPassword = System.getenv("APK_KEY_PASS")
+            }
+        }
     }
 
     buildTypes {
-        release { isMinifyEnabled = false }
+        release {
+            isMinifyEnabled = false
+            signingConfig = if (System.getenv("APK_KEYSTORE_PATH") != null) signingConfigs.getByName("release")
+            else signingConfigs.getByName("debug")
+        }
     }
 
     compileOptions {
@@ -34,6 +51,7 @@ dependencies {
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.foundation:foundation")
     implementation("androidx.compose.material3:material3")
+    implementation("androidx.compose.material:material-icons-core")
     implementation("androidx.activity:activity-compose:1.9.2")
     implementation("androidx.core:core-ktx:1.13.1")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")

@@ -37,7 +37,23 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material3.Icon
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.platform.LocalContext
 import app.notes.ai.DownloadState
+import app.notes.data.AppVersion
+import app.notes.data.Updater
+import kotlinx.coroutines.CoroutineScope
 import app.notes.ai.InstalledModel
 import app.notes.ai.MODEL_CATALOG
 import app.notes.ai.ModelInfo
@@ -53,6 +69,8 @@ fun ModelsScreen(state: AppState) {
     var tick by remember { mutableIntStateOf(0) }
     var token by remember { mutableStateOf(mm.hfToken) }
     var message by remember { mutableStateOf("") }
+    val ctx = LocalContext.current
+    val update = remember { UpdateUi(Updater(ctx.applicationContext), scope) }
 
     // تحديث نسب التنزيل كل ثانية
     var downloads by remember { mutableStateOf(mapOf<String, DownloadState>()) }
@@ -84,8 +102,14 @@ fun ModelsScreen(state: AppState) {
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         item {
-            Text("الذكاء الصناعي على هاتفك", color = TextMain, fontSize = 22.sp, fontWeight = FontWeight.Bold)
-            Text("يُنزَّل النموذج مرة واحدة ثم يعمل دون إنترنت، ولا يغادر كلامك الهاتف.", color = TextDim, fontSize = 13.sp)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("الذكاء الصناعي على هاتفك", color = TextMain, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                    Text("يُنزَّل النموذج مرة واحدة ثم يعمل دون إنترنت، ولا يغادر كلامك الهاتف.", color = TextDim, fontSize = 13.sp)
+                }
+                UpdateButton(update)
+            }
+            UpdateCard(update)
         }
 
         // النماذج الموجودة على الهاتف: اختر أحدها
@@ -187,5 +211,76 @@ private fun Choice(title: String, sub: String, selected: Boolean, onClick: () ->
             Text(sub, color = TextDim, fontSize = 12.sp)
         }
         trailing()
+    }
+}
+
+/** حالة زر تحديث التطبيق. */
+class UpdateUi(private val up: Updater, private val scope: CoroutineScope) {
+    var busy by mutableStateOf(false)
+    var text by mutableStateOf("")
+    var available by mutableStateOf<AppVersion?>(null)
+    var progress by mutableIntStateOf(-1)
+
+    fun check() {
+        if (busy) return
+        busy = true; text = "يبحث عن تحديث…"; available = null
+        scope.launch {
+            text = try {
+                val cur = up.current()
+                val last = up.latest()
+                if (last.code > cur.code) { available = last; "نسخة جديدة ${last.versionLabel()} متاحة (لديك ${cur.name})" }
+                else "أنت على آخر نسخة (${cur.name}) ✓"
+            } catch (e: Throwable) { "تعذّر البحث عن تحديث. تأكد من الإنترنت." }
+            busy = false
+        }
+    }
+
+    fun install() {
+        if (busy) return
+        if (!up.canInstall()) {
+            text = "اسمح للتطبيق بتثبيت التحديثات، ثم ارجع واضغط «تنزيل وتثبيت» مرة أخرى."
+            up.openInstallPermission(); return
+        }
+        busy = true; progress = 0; text = "ينزّل التحديث…"
+        scope.launch {
+            try {
+                val apk = up.download { progress = it }
+                text = "اضغط «تحديث» في نافذة أندرويد. ملاحظاتك تبقى كما هي."
+                up.install(apk)
+            } catch (e: Throwable) { text = "فشل تنزيل التحديث: ${e.message ?: ""}" }
+            progress = -1; busy = false
+        }
+    }
+
+    private fun AppVersion.versionLabel() = name
+}
+
+@Composable
+private fun UpdateButton(u: UpdateUi) {
+    val spin = rememberInfiniteTransition(label = "spin")
+    val angle by spin.animateFloat(0f, 360f, infiniteRepeatable(tween(900, easing = LinearEasing), RepeatMode.Restart), label = "a")
+    androidx.compose.foundation.layout.Box(
+        Modifier.size(44.dp).clip(CircleShape).background(Panel2).clickable { u.check() },
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            Icons.Filled.Refresh, contentDescription = "تحديث التطبيق", tint = TextMain,
+            modifier = Modifier.size(24.dp).rotate(if (u.busy && u.progress < 0) angle else 0f),
+        )
+    }
+}
+
+@Composable
+private fun UpdateCard(u: UpdateUi) {
+    if (u.text.isEmpty()) return
+    Spacer(Modifier.height(10.dp))
+    Card {
+        Text(u.text, color = TextMain, fontSize = 14.sp)
+        if (u.progress >= 0) {
+            Spacer(Modifier.height(8.dp))
+            LinearProgressIndicator(progress = { u.progress / 100f }, modifier = Modifier.fillMaxWidth())
+            Text("${u.progress}٪", color = TextDim, fontSize = 12.sp)
+        }
+        if (u.available != null && !u.busy) TextButton(onClick = { u.install() }) { Text("تنزيل وتثبيت") }
     }
 }

@@ -1,4 +1,6 @@
-# بناء تطبيق الملاحظات الأصلي (Kotlin) تلقائياً عند أي تغيير في native/، ويُحمَّل الـ APK من صفحة التشغيل (Artifacts).
+# بناء تطبيق الملاحظات الأصلي (Kotlin) تلقائياً عند أي تغيير في native/،
+# ونشره في إصدار ثابت "notes-latest" ليحدّث التطبيق نفسه من زر التحديث.
+# أسرار التوقيع (اختيارية لكنها لازمة للتحديث فوق النسخة القديمة): APK_KEYSTORE_B64، APK_STORE_PASS، APK_KEY_PASS.
 name: Native notes app
 
 on:
@@ -9,11 +11,14 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      APP_VERSION_CODE: ${{ github.run_number }}0
+      APP_VERSION_NAME: 0.5.${{ github.run_number }}
     steps:
       - uses: actions/checkout@v4
 
@@ -26,12 +31,43 @@ jobs:
         with:
           gradle-version: '8.7'
 
-      - name: بناء APK (نسخة تجربة)
+      - name: مفتاح التوقيع
+        env:
+          KS: ${{ secrets.APK_KEYSTORE_B64 }}
+        run: |
+          if [ -z "$KS" ]; then
+            echo "::warning::لا يوجد السر APK_KEYSTORE_B64؛ سيُوقَّع بمفتاح مؤقت ولن يعمل التحديث فوق النسخة القديمة."
+          else
+            echo "$KS" | base64 -d > "$RUNNER_TEMP/aqli.jks"
+            echo "APK_KEYSTORE_PATH=$RUNNER_TEMP/aqli.jks" >> "$GITHUB_ENV"
+          fi
+
+      - name: بناء APK
         working-directory: native
-        run: gradle :app:assembleDebug --no-daemon
+        env:
+          APK_STORE_PASS: ${{ secrets.APK_STORE_PASS }}
+          APK_KEY_PASS: ${{ secrets.APK_KEY_PASS }}
+        run: gradle :app:assembleRelease --no-daemon
+
+      - name: تجهيز الملفات
+        run: |
+          mkdir -p out
+          cp native/app/build/outputs/apk/release/*.apk out/aqli-notes.apk
+          printf '{"versionCode": %s, "versionName": "%s"}\n' "$APP_VERSION_CODE" "$APP_VERSION_NAME" > out/version.json
+          cat out/version.json
 
       - uses: actions/upload-artifact@v4
         with:
           name: aqli-notes-apk
-          path: native/app/build/outputs/apk/debug/*.apk
+          path: out/aqli-notes.apk
           if-no-files-found: error
+
+      - name: نشر في إصدار notes-latest
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view notes-latest >/dev/null 2>&1 || \
+            gh release create notes-latest --prerelease --target "$GITHUB_SHA" \
+              --title "تطبيق الملاحظات (آخر نسخة)" \
+              --notes "يُحدَّث تلقائياً مع كل بناء. نزّل aqli-notes.apk وثبّته."
+          gh release upload notes-latest out/aqli-notes.apk out/version.json --clobber
