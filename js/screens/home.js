@@ -5,6 +5,8 @@ import {
 } from '../storage.js';
 import { transcribe } from '../gemini.js';
 import { smartChat } from '../ai.js';
+import { exportChatFile } from '../backup.js';
+import { saveFile, shareFile } from '../native-files.js';
 import { executeActions } from '../actions.js';
 import { setActionContext } from '../actions-spec.js';
 import { orgContext } from '../org-actions.js';
@@ -581,6 +583,16 @@ export async function mount(root) {
     pendingImage = null;
     showPending();
 
+    // «صدّر المحادثة»: ملف جاهز داخل المحادثة نفسها، بلا رسالة إلى الذكاء
+    if (!image && /^(صدّر|صدر|احفظ)\s+المحادثة$/.test(text0)) {
+      try {
+        append(await addMessage({ role: 'user', text }));
+        append(await addMessage({ role: 'model', text: 'جهّزتُ ملف المحادثة. احفظه أو شاركه:' }));
+        appendFileCard(await exportChatFile());
+      } finally { busy = false; }
+      return;
+    }
+
     // نحفظ كلام المستخدم أولاً حتى لا يضيع شيء
     const entry = await addEntry({ text, source });
     const userMsg = await addMessage({ role: 'user', text, entryId: entry.id, ...(image ? { image } : {}) });
@@ -637,6 +649,31 @@ export async function mount(root) {
       busy = false;
       if (companion?.state === 'thinking') companion.setState('idle');
     }
+  }
+
+  // بطاقة ملف في المحادثة: حفظ في التنزيلات، أو مشاركة
+  function appendFileCard({ blob, filename }) {
+    const li = document.createElement('li');
+    li.className = 'msg msg--model';
+    const card = document.createElement('div');
+    card.className = 'file-card';
+    card.innerHTML = `<b></b><small>${Math.max(1, Math.round(blob.size / 1024))} ك.ب</small>
+      <div class="file-card__actions">
+        <button type="button" class="btn btn--ghost" data-act="save">حفظ</button>
+        <button type="button" class="btn btn--ghost" data-act="share">مشاركة</button>
+      </div>`;
+    card.querySelector('b').textContent = filename;
+    card.addEventListener('click', async (e) => {
+      const act = e.target.closest('[data-act]')?.dataset.act;
+      if (!act) return;
+      try {
+        if (act === 'save') say(`حُفظ الملف في ${await saveFile(blob, filename)} ✓`);
+        else await shareFile(blob, filename);
+      } catch (err) { say(escapeHtml(err.message || String(err))); }
+    });
+    li.append(card);
+    log.append(li);
+    log.scrollTop = log.scrollHeight;
   }
 
   // يعرض رد النموذج المحلي وهو يُكتب

@@ -4,7 +4,7 @@ import { hasNativeFiles, saveFile, shareFile } from './native-files.js';
 import { CATEGORIES, NONE, categoryById } from './categories.js';
 import {
   exportData, importData, saveSnapshot, listSnapshots, getSnapshot, deleteSnapshot,
-  getSetting, setSetting,
+  getSetting, setSetting, getMessages,
 } from './storage.js';
 import { createZip, readZip } from './zip.js';
 
@@ -23,6 +23,12 @@ function categoryMarkdown(cat, entries) {
     lines.push(e.text, '');
   }
   return lines.join('\n');
+}
+
+// ملف المحادثة مع المساعد (للحفظ أو المشاركة من داخل المحادثة)
+export async function exportChatFile() {
+  const messages = await getMessages(5000);
+  return { blob: new Blob([chatMarkdown(messages)], { type: 'text/markdown;charset=utf-8' }), filename: 'المحادثة.md' };
 }
 
 function chatMarkdown(messages) {
