@@ -1,7 +1,7 @@
 // شاشة منشورات الأعمال: قائمة مجموعات مثل واتساب (العامة، ومجموعة لكل كرة أنت فيها)،
 // وكل مجموعة محادثة مستقلة (نصوص وصور وكلام يتحول إلى نص). ‎#/group‎ القائمة · ‎#/group?room=…‎ المحادثة
 import {
-  startGroupSync, groupEvents, groupMe, groupMembers, groupOnline, groupRooms, sendGroup, resend, markSeen, compressImage, compressVideo, blobToDataUrl,
+  startGroupSync, groupEvents, groupMe, groupMembers, groupOnline, groupRooms, sendGroup, resend, markSeen, compressImage, compressVideo, blobToDataUrl, chunkMax,
   GENERAL, roomOf, unreadByRoom, roomNameOf, groupBranch, isChatRoom, groupInvites, myContacts, saveChat, deleteChat, acceptInvite, declineInvite, leaveChat,
 } from '../group.js';
 import { PALETTE } from '../org-structure.js';
@@ -214,17 +214,23 @@ export async function mountMode(root, mode) {
       pick.remove();
       if (!f) return;
       const isVideo = f.type.startsWith('video/');
-      say(isVideo ? 'أجهّز الفيديو…' : 'أجهّز الصورة…');
+      // خيار إضافي: الملف كاملاً بلا ضغط، يُقسَّم إلى أجزاء (أبطأ، لكنه يحفظ الجودة)
+      const full = confirm('إرسال الملف كاملاً بدون ضغط؟\n\nموافق: كامل، ويُقسَّم إلى أجزاء (أبطأ، حتى نحو 25 ميجابايت)\nإلغاء: مضغوط كالمعتاد (أسرع، وجودة أقل)');
+      say(full ? 'أجهّز الملف كاملاً…' : isVideo ? 'أجهّز الفيديو…' : 'أجهّز الصورة…');
       try {
-        let image;
-        if (isVideo) {
+        let image, chunked = false;
+        if (full) {
+          image = await blobToDataUrl(f);
+          if (image.length > chunkMax) throw new Error('الملف أكبر من 25 ميجابايت، جرّب الوضع المضغوط.');
+          chunked = true;
+        } else if (isVideo) {
           image = await blobToDataUrl(await compressVideo(f));
           if (image.length > 890000) throw new Error('الفيديو طويل، جرّب مقطعاً أقصر.');
         } else {
           image = await compressImage(f);
         }
         if (log.querySelector('.wa-day') && !log.querySelector('.msg')) log.innerHTML = '';
-        await sendGroup({ image, text: input.value.trim(), room });
+        await sendGroup({ image, text: input.value.trim(), room, chunked });
         input.value = ''; autosize(); syncComposer();
         note.hidden = true;
       } catch (err) { say(`تعذّر إرسال الصورة: ${esc(err.message)}`); }

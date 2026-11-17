@@ -152,9 +152,24 @@ export function stopGroupSync() {
 }
 window.addEventListener('sm:signout', stopGroupSync);
 
+// ---- الملفات الكبيرة مقطّعة ----
+// كل جزء رسالة عادية في الترحيل، نصها يبدأ بعلامة خفية (لا تُكتب بلوحة المفاتيح)، ويُجمع عند الاستلام
+const CH_PREFIX = '\u0001CH|';
+const CHUNK = 850000;       // حروف لكل جزء (حد الرسالة 900000 في القواعد)
+const MAX_CHUNKS = 40;      // نحو 25 ميجابايت كحد أقصى
+const CHUNK_CACHE = 'second-mind-chunks';
+export const chunkMax = CHUNK * MAX_CHUNKS;
+
 // ---- الاستلام ----
 async function receive(d, F) {
   const x = d.data();
+  // جزء ملف كبير: نخزّنه حتى تكتمل الأجزاء
+  if (typeof x.text === 'string' && x.text.startsWith(CH_PREFIX) && typeof x.image === 'string') {
+    try { await storeChunk(x); } catch (e) { console.warn('chunk', e); }
+    const rest = (x.pending || []).filter((u) => u !== me.uid);
+    (rest.length ? F.updateDoc(d.ref, { pending: F.arrayRemove(me.uid) }) : F.deleteDoc(d.ref)).catch(() => {});
+    return;
+  }
   // المهام لا تظهر في المجموعات: لها شاشتها
   if (x.task) {
     try {
@@ -183,12 +198,43 @@ async function receive(d, F) {
   (rest.length ? F.updateDoc(d.ref, { pending: F.arrayRemove(me.uid) }) : F.deleteDoc(d.ref)).catch(() => {});
 }
 
+// يخزّن جزءاً من ملف مقطّع في مخزن المتصفح، وإن اكتملت أجزاؤه يجمعها ويحفظها رسالة عادية
+async function storeChunk(x) {
+  const [id, is, ns, capEnc = ''] = x.text.slice(CH_PREFIX.length).split('|');
+  const i = Number(is), n = Number(ns);
+  if (!id || !(n >= 1 && n <= MAX_CHUNKS) || !(i >= 0 && i < n)) return;
+  const cache = await caches.open(CHUNK_CACHE);
+  const key = (k) => `${location.origin}/__chunk/${id}/${k}`;
+  const rec = { i, n, from: x.from, fromName: x.fromName, room: x.room, sentAt: x.sentAt, tag: x.tag, caption: decodeURIComponent(capEnc), data: x.image };
+  await cache.put(key(i), new Response(JSON.stringify(rec)));
+
+  let have = 0;
+  for (let k = 0; k < n; k++) if (await cache.match(key(k))) have++;
+  if (have < n) return;
+
+  const parts = [];
+  for (let k = 0; k < n; k++) parts.push(await (await cache.match(key(k))).json());
+  const head = parts[0];
+  if (head.room && head.room !== GENERAL) await roomsReady;
+  if (!(await getGroupMessage(id))) {
+    const m = {
+      id, from: head.from, fromName: head.fromName, text: head.caption || '', image: parts.map((p) => p.data).join(''),
+      room: head.room || GENERAL, ...(head.room && rooms.get(head.room)?.name ? { roomName: rooms.get(head.room).name } : {}),
+      ...(head.tag ? { tag: head.tag } : {}), sentAt: head.sentAt, mine: head.from === me.uid, status: 'received', receivedAt: Date.now(),
+    };
+    await putGroupMessage(m);
+    emit('message', { msg: m });
+  }
+  for (let k = 0; k < n; k++) await cache.delete(key(k));
+}
+
 // ---- الإرسال ----
 // works: أعمال مؤشَّرة [{ id, name, count }] وhelpers: معاونون (من رد المهمة) تُحسب في النقاط مباشرة
-export async function sendGroup({ text = '', image = null, tag = '', room = GENERAL, work = null, works = null, helpers = null }) {
+export async function sendGroup({ text = '', image = null, tag = '', room = GENERAL, work = null, works = null, helpers = null, chunked = false }) {
   if (!me) throw new Error('لم تدخل إلى المؤسسة بعد.');
-  text = String(text).trim().slice(0, 4000);
+  text = String(text).trim().slice(0, chunked ? 300 : 4000); // الشرح المرسل مع الملف المقطّع قصير (يدخل في الجزء الأول)
   if (!text && !image) return null;
+  if (chunked && image && image.length > chunkMax) throw new Error('الملف أكبر من الحد المسموح للإرسال الكامل (نحو 25 ميجابايت).');
   const { db, F } = await api();
   const ref = F.doc(F.collection(db, 'relay'));
   tag = String(tag || '').trim().slice(0, 60);
@@ -202,6 +248,7 @@ export async function sendGroup({ text = '', image = null, tag = '', room = GENE
     id: ref.id, from: me.uid, fromName: me.name, text, image, sentAt: Date.now(), mine: true, status: 'queued', room,
     ...(roomName ? { roomName } : {}), ...(tag ? { tag } : {}), ...(work ? { work } : {}),
     ...(works?.length ? { works } : {}), ...(helpers?.length ? { helpers } : {}),
+    ...(chunked && image ? { chunked: true } : {}),
   };
   await putGroupMessage(m);
   emit('message', { msg: m });
@@ -225,6 +272,22 @@ async function deliver(m) {
   };
   if (room !== GENERAL && !r) return done('failed', 'لم تعد عضواً في هذه المجموعة.');
   if (!pending.length) return done('sent'); // لا أحد غيرك في المجموعة بعد
+  if (m.chunked && m.image) {
+    const parts = [];
+    for (let i = 0; i < m.image.length; i += CHUNK) parts.push(m.image.slice(i, i + CHUNK));
+    try {
+      await Promise.all(parts.map((piece, i) => F.setDoc(F.doc(db, 'relay', `${m.id}-${i}`), {
+        mid: `${m.id}-${i}`, from: me.uid, fromName: me.name, sentAt: m.sentAt, createdAt: F.serverTimestamp(), pending,
+        ...(room !== GENERAL ? { room } : {}),
+        text: `${CH_PREFIX}${m.id}|${i}|${parts.length}|${i === 0 ? encodeURIComponent(m.text || '') : ''}`,
+        image: piece,
+      })));
+      await done('sent');
+    } catch (err) {
+      await done('failed', String(err?.code || err?.message || err));
+    }
+    return;
+  }
   try {
     await F.setDoc(F.doc(db, 'relay', m.id), {
       mid: m.id, from: me.uid, fromName: me.name, sentAt: m.sentAt, createdAt: F.serverTimestamp(), pending,
@@ -281,6 +344,7 @@ async function sendHistory(uid, old) {
   const { db, F } = await api();
   let batch = F.writeBatch(db), ops = 0, bytes = 0;
   for (const x of old) {
+    if (x.image && x.image.length > 890000) continue; // الملفات المقطّعة لا تُعاد عبر الأرشيف (تتجاوز حد الوثيقة)
     const size = (x.text?.length || 0) * 2 + (x.image?.length || 0) + 500;
     if (ops >= 400 || bytes + size > 8_000_000) { await batch.commit(); batch = F.writeBatch(db); ops = 0; bytes = 0; }
     batch.set(F.doc(db, 'relay', `h_${uid}_${x.id}`.slice(0, 1400)), {
