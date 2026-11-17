@@ -51,8 +51,9 @@ function loadDraft() {
 // أمر حفظ التقرير: كلمات الحفظ مع «تقرير» أو مع «بالتنزيلات»، ولا يُعدّ أمر تعديل
 const SAVE_VERB = /(احفظ|صدّر|صدر|نزّل|نزل|حمّل|شارك)/;
 const EDIT_WORDS = /(عدّل|عدل|غيّر|اجعل|أضف|احذف|اختصر|وسّع)/;
-const isSaveReportCommand = (t) => t.length <= 90 && SAVE_VERB.test(t) && !EDIT_WORDS.test(t)
-  && (/تقرير/.test(t) || /التنزيلات|جهازي/.test(t));
+const isSaveReportCommand = (t) => t.length <= 120 && !EDIT_WORDS.test(t)
+  && ((SAVE_VERB.test(t) && (/تقرير/.test(t) || /التنزيلات|جهازي/.test(t)))
+    || (/تقرير/.test(t) && /التنزيلات|جهازي/.test(t)));
 
 const escapeHtml = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
