@@ -99,6 +99,13 @@ export async function buildReport({ scopeName, rooms, names, days, withAi, withI
   return { blob, filename, count: msgs.length, images: imgCount, version: 1 };
 }
 
+// آخر تقرير محفوظ كملف (يُبنى من محتواه المحفوظ)، للحفظ أو المشاركة من المحادثة
+export async function lastReportFile() {
+  const doc = await getSetting('lastReportDoc', null);
+  if (!doc?.blocks?.length) throw new Error('لا يوجد تقرير محفوظ بعد. أنشئ تقريراً من نافذة التقارير أولاً.');
+  return { blob: await buildDocx(doc.blocks), filename: doc.filename || 'تقرير.docx', version: doc.version || 1 };
+}
+
 const REVISE_SYSTEM = `أنت تعدّل تقريراً عربياً في ملف Word. ستصلك مسودة التقرير الحالية كمصفوفة blocks، وتعليمات التعديل.
 أعد التقرير كاملاً بعد التعديل، بصيغة JSON فقط: مصفوفة، كل عنصر {"t":"title|h|h2|meta|p|img","text":"..."} أو {"t":"img","ref":رقم}.
 - الصور: {"t":"img","ref":رقم} كما وردت تماماً، ولا تخترع صوراً ولا أرقاماً جديدة.

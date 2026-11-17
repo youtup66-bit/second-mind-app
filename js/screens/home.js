@@ -584,6 +584,20 @@ export async function mount(root) {
     pendingImage = null;
     showPending();
 
+    // «احفظ التقرير»: آخر تقرير Word كبطاقة ملف في المحادثة، بلا رسالة إلى الذكاء
+    if (!image && /^(احفظ|صدّر|صدر|شارك)\s+(التقرير|آخر تقرير)$/.test(text0)) {
+      try {
+        append(await addMessage({ role: 'user', text }));
+        const { lastReportFile } = await import('../report-build.js');
+        const doc = await lastReportFile();
+        append(await addMessage({ role: 'model', text: `هذا آخر تقرير (النسخة ${doc.version}):` }));
+        appendFileCard(doc);
+      } catch (err) {
+        append(await addMessage({ role: 'model', text: `⚠️ ${err.message || err}` }));
+      } finally { busy = false; }
+      return;
+    }
+
     // «صدّر المحادثة»: ملف جاهز داخل المحادثة نفسها، بلا رسالة إلى الذكاء
     if (!image && /^(صدّر|صدر|احفظ)\s+المحادثة$/.test(text0)) {
       try {
