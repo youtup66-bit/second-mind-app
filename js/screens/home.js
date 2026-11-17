@@ -707,10 +707,12 @@ export async function mount(root) {
     card.addEventListener('click', async (e) => {
       const act = e.target.closest('[data-act]')?.dataset.act;
       if (!act) return;
+      // النتيجة تظهر داخل البطاقة نفسها (التنبيهات العامة لا تظهر في كل واجهات المحادثة)
+      const status = card.querySelector('small');
       try {
-        if (act === 'save') say(`حُفظ الملف في ${await saveFile(blob, filename)} ✓`);
+        if (act === 'save') status.textContent = `حُفظ في ${await saveFile(blob, filename)} ✓`;
         else await shareFile(blob, filename);
-      } catch (err) { say(escapeHtml(err.message || String(err))); }
+      } catch (err) { status.textContent = `تعذّر: ${err.message || String(err)}`; }
     });
     li.append(card);
     log.append(li);
