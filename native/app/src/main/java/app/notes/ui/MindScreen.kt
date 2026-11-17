@@ -159,7 +159,6 @@ fun MindScreen(state: AppState, onOpen: (Section, Long?) -> Unit) {
                 for (n in g.nodes) {
                     val p = pos(n)
                     val r = n.radius * k
-                    if (n.kind != GKind.NOTE) drawCircle(n.color.copy(alpha = 0.16f), r * 2.4f, p)
                     drawCircle(n.color, r, p)
                     if (n.kind == GKind.NOTE && !showNoteLabels) continue
                     val layout = n.label0 ?: measurer.measure(
