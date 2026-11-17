@@ -9,7 +9,7 @@ android {
 
     defaultConfig {
         applicationId = "app.aqli"
-        minSdk = 24
+        minSdk = 30
         targetSdk = 35
         versionCode = 2
         versionName = "1.1"
