@@ -1,12 +1,21 @@
 package app.notes.ui
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -41,15 +50,24 @@ fun App(repo: Repo) {
         Scaffold(
             containerColor = Bg,
             bottomBar = {
-                NavigationBar(containerColor = Panel) {
-                    listOf("💬" to "المحادثة", "🧠" to "العقل", "🤖" to "النماذج").forEachIndexed { i, (icon, label) ->
-                        NavigationBarItem(
-                            selected = tab == i,
-                            onClick = { tab = i },
-                            icon = { Text(icon, fontSize = 20.sp) },
-                            label = { Text(label) },
-                            colors = NavigationBarItemDefaults.colors(indicatorColor = Panel2),
-                        )
+                // شريط سفلي صغير: كتابة فقط
+                Row(Modifier.fillMaxWidth().height(48.dp).background(Panel)) {
+                    listOf("المحادثة", "العقل", "النماذج").forEachIndexed { i, label ->
+                        val on = tab == i
+                        Box(
+                            Modifier.weight(1f).fillMaxHeight().clickable { tab = i },
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(
+                                label, fontSize = 14.sp,
+                                color = if (on) TextMain else TextDim,
+                                fontWeight = if (on) FontWeight.Bold else FontWeight.Normal,
+                            )
+                            if (on) Box(
+                                Modifier.align(Alignment.BottomCenter).padding(bottom = 6.dp)
+                                    .width(22.dp).height(3.dp).clip(RoundedCornerShape(2.dp)).background(Accent),
+                            )
+                        }
                     }
                 }
             },

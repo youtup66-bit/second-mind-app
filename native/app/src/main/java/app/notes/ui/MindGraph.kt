@@ -68,7 +68,7 @@ class MindGraph(
             val a = (2 * PI * i / sections.size.coerceAtLeast(1) - PI / 2).toFloat()
             val (x, y) = place("s:${s.id}", 130 * cos(a), 130 * sin(a))
             secIndex[s.id] = nodes.size
-            nodes += GNode("s:${s.id}", GKind.SECTION, "${s.icon} ${s.name}", sectionColor(i), 7f + minOf(s.count, 30) * 0.25f, s, null, x, y)
+            nodes += GNode("s:${s.id}", GKind.SECTION, s.name, sectionColor(i), 7f + minOf(s.count, 30) * 0.25f, s, null, x, y)
             edges += GEdge(0, nodes.size - 1, 125f, 0.5f, GEdge.Kind.STRUCTURE)
         }
 

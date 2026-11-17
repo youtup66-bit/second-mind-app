@@ -178,11 +178,7 @@ fun MindScreen(state: AppState, onOpen: (Section, Long?) -> Unit) {
                 }
             }
 
-            // دليل صغير وزر توسيط
-            Column(Modifier.align(Alignment.BottomStart).padding(12.dp)) {
-                if (state.allNotes.isEmpty()) Text("اكتب في المحادثة لتظهر ملاحظاتك هنا", color = TextDim, fontSize = 12.sp)
-                Text("● قسم   • ملاحظة   ━ كلمات مشتركة (اقتراح آلي)", color = TextDim, fontSize = 11.sp)
-            }
+            // زر التوسيط
             Box(
                 Modifier.align(Alignment.TopEnd).padding(12.dp).clip(CircleShape).background(Panel2)
                     .clickable { scale = 1f; pan = Offset.Zero; graph?.reheat() }
