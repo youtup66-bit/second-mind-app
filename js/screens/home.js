@@ -6,6 +6,7 @@ import {
 import { transcribe } from '../gemini.js';
 import { smartChat } from '../ai.js';
 import { exportChatFile } from '../backup.js';
+import { editLastReport } from '../report-build.js';
 import { saveFile, shareFile } from '../native-files.js';
 import { executeActions } from '../actions.js';
 import { setActionContext } from '../actions-spec.js';
@@ -617,6 +618,17 @@ export async function mount(root) {
       applyClassification(entry.id, result);
       const modelMsg = await addMessage({ role: 'model', text: reply, used: used.map((e) => e.id), engine: result.engine === 'local' ? 'local' : undefined });
       markEngine(pending, result.engine);
+      // تعديل تقرير Word: ينفّذه التطبيق ويعرض النسخة الجديدة كبطاقة ملف
+      const editReq = result.actions?.find((a) => a?.action === 'edit_report');
+      if (editReq) {
+        result.actions = result.actions.filter((a) => a !== editReq);
+        try {
+          const doc = await editLastReport(editReq.name || '');
+          appendFileCard(doc);
+        } catch (err) {
+          append(await addMessage({ role: 'model', text: `⚠️ ${err.message || err}` }));
+        }
+      }
       // أوامر طلبتها المساعد (إنشاء قسم، تغيير إعداد...): ننفذها ونعرض نتيجتها تحت الرد
       if (result.actions?.length) {
         const done = await executeActions(result.actions, {

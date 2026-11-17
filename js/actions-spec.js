@@ -11,7 +11,7 @@ export const ACTION_IDS = [
   'org_place_employee', 'org_remove_employee', 'org_set_assistant',
   'work_add', 'work_update', 'work_delete', 'points_add', 'points_review', 'points_auto',
   'post_to_group', 'invite_employee', 'make_org_report', 'assign_task', 'complete_org_task',
-  'set_reminder',
+  'set_reminder', 'edit_report',
 ];
 
 // ملخص المؤسسة الحالي (يضعه التطبيق قبل كل طلب، للمدير فقط)
@@ -38,6 +38,7 @@ export function actionsPrompt() {
   أو structure (عقل المؤسسة) أو staff (الموظفين) أو points (النقاط) أو group (منشورات المجموعة).
 - delete_note: حذف ملاحظة. target: كلمات من نصها. (سيُطلب منه التأكيد)
 - set_reminder: تذكير في موعد. value: الموعد بصيغة ISO 8601 بتوقيت الجهاز (احسبيه من الوقت الحالي المذكور)، name: نص التذكير.
+- edit_report: تعديل آخر تقرير Word أنشأه المستخدم. name: تعليمات التعديل كما طلبها (مثل: اجعل الملخص أقصر). لا تستعمليه إلا إن طلب المستخدم تعديل تقرير.
 - make_summary: value: day أو week أو month.
 - complete_task: تعليم مهمة بأنها أُنجزت. target: كلمات من نص المهمة.
 - set_voice: value: on أو off (نطق الردود بصوت).

@@ -1,10 +1,10 @@
 // تقرير Word من رسائل كروبات التطبيق: نطاق (قسم أو شعبة أو وحدة أو كرات محددة) وفترة.
 // النص فقط يُرسل إلى Gemini للتلخيص (إن فعّله المدير)؛ الصور لا تُرسل إلى أي خدمة، تُضمّن في الملف فقط.
-import { getGroupMessages } from './storage.js';
+import { getGroupMessages, getSetting, setSetting } from './storage.js';
 import { loadStructure, childrenOf } from './org-structure.js';
 import { excludedNodes } from './org-insights.js';
 import { GENERAL, roomIdOf, roomOf, roomNameOf } from './group.js';
-import { reportSummary } from './gemini.js';
+import { reportSummary, reviseDocument } from './gemini.js';
 import { buildDocx } from './docx.js';
 
 const DAY = 86_400_000;
@@ -93,7 +93,53 @@ export async function buildReport({ scopeName, rooms, names, days, withAi, withI
 
   const blob = await buildDocx(blocks);
   const iso = new Date().toISOString().slice(0, 10);
-  return { blob, filename: `تقرير-${scopeName}-${iso}.docx`.replace(/[\\/:*?"<>|]/g, '_'), count: msgs.length, images: imgCount };
+  const filename = `تقرير-${scopeName}-${iso}.docx`.replace(/[\\/:*?"<>|]/g, '_');
+  // نحفظ محتوى آخر تقرير ليعدّله المساعد لاحقاً
+  await setSetting('lastReportDoc', { title, filename, version: 1, blocks });
+  return { blob, filename, count: msgs.length, images: imgCount, version: 1 };
+}
+
+const REVISE_SYSTEM = `أنت تعدّل تقريراً عربياً في ملف Word. ستصلك مسودة التقرير الحالية كمصفوفة blocks، وتعليمات التعديل.
+أعد التقرير كاملاً بعد التعديل، بصيغة JSON فقط: مصفوفة، كل عنصر {"t":"title|h|h2|meta|p|img","text":"..."} أو {"t":"img","ref":رقم}.
+- الصور: {"t":"img","ref":رقم} كما وردت تماماً، ولا تخترع صوراً ولا أرقاماً جديدة.
+- لا تضف عناوين أو فقرات لم يطلبها المستخدم، ولا تخترع وقائع غير موجودة في المسودة.
+- بلا أي نص خارج JSON ولا رموز تنسيق.`;
+
+// يعدّل آخر تقرير حسب التعليمات، ويعيد ملفاً جديداً (نسخة أحدث)
+export async function editLastReport(instruction) {
+  const doc = await getSetting('lastReportDoc', null);
+  if (!doc?.blocks?.length) throw new Error('لا يوجد تقرير سابق للتعديل. أنشئ تقريراً من نافذة التقارير أولاً.');
+  const images = [];
+  const outline = doc.blocks.map((b) => {
+    if (b.t === 'img') { images.push(b.dataUrl); return { t: 'img', ref: images.length - 1 }; }
+    return { t: b.t, text: b.text };
+  });
+  const current = JSON.stringify(outline);
+  if (current.length > 60_000) throw new Error('التقرير طويل جداً للتعديل من المساعد. أنشئ تقريراً بفترة أقصر.');
+
+  const raw = await reviseDocument(REVISE_SYSTEM, `التعليمات: ${instruction || 'حسّن التقرير'}\n\nالمسودة:\n${current}`);
+  const start = raw.indexOf('['), end = raw.lastIndexOf(']');
+  let parsed = null;
+  try { parsed = JSON.parse(raw.slice(start, end + 1)); } catch { /* يُعالج أدناه */ }
+  if (!Array.isArray(parsed) || !parsed.length) throw new Error('لم أستطع قراءة التعديل. جرّب صياغة أوضح.');
+
+  const allowed = new Set(['title', 'h', 'h2', 'meta', 'p', 'img']);
+  const blocks = [];
+  for (const b of parsed) {
+    if (!b || !allowed.has(b.t)) continue;
+    if (b.t === 'img') {
+      const src = images[Number(b.ref)];
+      if (src) blocks.push({ t: 'img', dataUrl: src });
+    } else if (typeof b.text === 'string' && b.text.trim()) {
+      blocks.push({ t: b.t, text: b.text.slice(0, 4000) });
+    }
+  }
+  const version = (doc.version || 1) + 1;
+  const base = (doc.filename || 'تقرير.docx').replace(/\.docx$/, '').replace(/-v\d+$/, '');
+  const filename = `${base}-v${version}.docx`;
+  const blob = await buildDocx(blocks);
+  await setSetting('lastReportDoc', { title: doc.title, filename, version, blocks });
+  return { blob, filename, version };
 }
 
 // الهيكل الحالي للنطاقات (تُستعمل في النافذة)

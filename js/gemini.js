@@ -671,3 +671,12 @@ export async function reportSummary(transcript) {
     generationConfig: { temperature: 0.3, maxOutputTokens: 2048 },
   }, 'summary');
 }
+
+// مراجعة وثيقة (تعديل تقرير): يعيد النص الخام كما كتبه النموذج
+export async function reviseDocument(system, user) {
+  return generate({
+    systemInstruction: { parts: [{ text: system }] },
+    contents: [{ role: 'user', parts: [{ text: user }] }],
+    generationConfig: { temperature: 0.2, maxOutputTokens: 8192 },
+  }, 'summary');
+}
