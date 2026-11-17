@@ -1,3 +1,4 @@
+import { hasNativeFiles, saveFile, shareFile } from './native-files.js';
 // النسخ الاحتياطي: ملف ZIP يحوي بياناتك كاملة (data.json) ونسخة مقروءة بأقسامها (Markdown).
 // كل شيء يُبنى على الجهاز؛ لا يُرفع إلى أي خادم.
 import { CATEGORIES, NONE, categoryById } from './categories.js';
@@ -68,6 +69,7 @@ export async function buildBackupZip() {
 const markExported = () => setSetting('lastExportAt', Date.now());
 
 export function canShareFiles() {
+  if (hasNativeFiles()) return true; // داخل التطبيق: مشاركة أندرويد متاحة دائماً
   try {
     return !!navigator.canShare?.({ files: [new File([''], 'x.zip', { type: 'application/zip' })] });
   } catch { return false; }
@@ -75,12 +77,7 @@ export function canShareFiles() {
 
 export async function downloadBackup() {
   const { blob, filename, count } = await buildBackupZip();
-  const url = URL.createObjectURL(blob);
-  const a = Object.assign(document.createElement('a'), { href: url, download: filename });
-  document.body.append(a);
-  a.click();
-  a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 10_000);
+  await saveFile(blob, filename);
   await markExported();
   return { filename, count };
 }
@@ -88,8 +85,7 @@ export async function downloadBackup() {
 // مشاركة الملف (مثلاً إلى Google Drive أو البريد) على الجوال
 export async function shareBackup() {
   const { blob, filename, count } = await buildBackupZip();
-  const file = new File([blob], filename, { type: 'application/zip' });
-  await navigator.share({ files: [file], title: 'نسخة عقلي الثاني' });
+  await shareFile(blob, filename);
   await markExported();
   return { filename, count };
 }

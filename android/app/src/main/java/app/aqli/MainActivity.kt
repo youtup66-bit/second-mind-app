@@ -105,6 +105,8 @@ class MainActivity : ComponentActivity() {
         web.addJavascriptInterface(ShareBridge(), "Android")
         // الذكاء على الجهاز بالمحرك الأصلي (تنزيل النموذج والمحادثة)
         web.addJavascriptInterface(NativeAI(applicationContext, web), "AqliNative")
+        // حفظ الملفات ومشاركتها (النسخ الاحتياطية والتقارير)
+        web.addJavascriptInterface(FileBridge(this), "AqliFiles")
 
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
