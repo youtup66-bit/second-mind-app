@@ -52,7 +52,10 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Icon
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.platform.LocalContext
+import android.content.Intent
+import android.net.Uri
 import app.notes.ai.DownloadState
+import app.notes.ai.GeminiEngine
 import app.notes.data.AppVersion
 import app.notes.data.Updater
 import kotlinx.coroutines.CoroutineScope
@@ -73,6 +76,8 @@ fun ModelsScreen(state: AppState) {
     var message by remember { mutableStateOf("") }
     // القوائم المنسدلة: كلها مغلقة في البداية
     val open = remember { mutableStateMapOf<String, Boolean>() }
+    var gKey by remember { mutableStateOf(mm.geminiKey) }
+    var gModel by remember { mutableStateOf(mm.geminiModel) }
     val ctx = LocalContext.current
     val update = remember { UpdateUi(Updater(ctx.applicationContext), scope) }
 
@@ -135,6 +140,54 @@ fun ModelsScreen(state: AppState) {
                 onClick = { state.useModel(m) },
                 trailing = { TextButton(onClick = { state.deleteModel(m.file) }) { Text("حذف", color = TextDim) } },
             )
+        }
+
+        item { SectionTitle("على الإنترنت (Gemini)", open["online"] == true) { open["online"] = open["online"] != true } }
+        if (open["online"] == true) item {
+            Choice(
+                title = "Gemini 🌐", sub = if (gKey.isBlank()) "أدخل المفتاح بالأسفل أولاً" else "ذكاء Google على الإنترنت",
+                selected = state.usingGemini,
+                onClick = { if (!state.useGemini()) message = "أدخل مفتاح Gemini أولاً." },
+            )
+            Spacer(Modifier.height(12.dp))
+            Card {
+                Text("مفتاح Gemini", color = TextMain)
+                Text("مجاني من Google AI Studio. يُحفظ على هاتفك فقط ويُرسل إلى Google وحدها.", color = TextDim, fontSize = 13.sp)
+                OutlinedTextField(
+                    gKey, { gKey = it; mm.geminiKey = it; if (state.usingGemini) state.useGemini() }, singleLine = true,
+                    visualTransformation = PasswordVisualTransformation(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                TextButton(onClick = {
+                    ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://aistudio.google.com/apikey")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                }) { Text("احصل على مفتاح مجاني ↗") }
+
+                Spacer(Modifier.height(8.dp))
+                Text("النموذج", color = TextMain)
+                listOf(
+                    GeminiEngine.MODEL_FLASH to "Flash — الأذكى",
+                    GeminiEngine.MODEL_LITE to "Flash-Lite — أسرع وحصته المجانية أكبر",
+                ).forEach { (id, label) ->
+                    Row(
+                        Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp))
+                            .clickable { gModel = id; mm.geminiModel = id; if (state.usingGemini) state.useGemini() }
+                            .padding(vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(if (gModel == id) "◉" else "○", color = if (gModel == id) Accent else TextDim)
+                        Spacer(Modifier.size(10.dp))
+                        Text(label, color = TextMain, fontSize = 14.sp)
+                    }
+                }
+
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    "🔒 الخصوصية: مع Gemini تُرسل إلى Google رسائل المحادثة الأخيرة، وأقرب ملاحظاتك صلة بها، وما تطلب تصنيفه أو تلخيصه. " +
+                        "في المستوى المجاني قد تستخدم Google البيانات لتحسين خدماتها. للخصوصية الكاملة اختر نموذجاً على الهاتف.",
+                    color = TextDim, fontSize = 12.sp,
+                )
+            }
         }
 
         item { SectionTitle("الفهم بالمعنى", open["embed"] == true) { open["embed"] = open["embed"] != true } }

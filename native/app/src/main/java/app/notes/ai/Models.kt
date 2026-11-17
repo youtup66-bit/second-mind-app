@@ -55,7 +55,16 @@ class ModelManager(val ctx: Context) {
         get() = prefs.getString("hf_token", "") ?: ""
         set(v) = prefs.edit().putString("hf_token", v.trim()).apply()
 
-    /** مسار النموذج المختار، أو فارغ للمحرك الأساسي. */
+    /** مفتاح Gemini: يُحفظ على الهاتف فقط ويُرسل إلى Google وحدها. */
+    var geminiKey: String
+        get() = prefs.getString("gemini_key", "") ?: ""
+        set(v) = prefs.edit().putString("gemini_key", v.trim()).apply()
+
+    var geminiModel: String
+        get() = prefs.getString("gemini_model", GeminiEngine.MODEL_FLASH) ?: GeminiEngine.MODEL_FLASH
+        set(v) = prefs.edit().putString("gemini_model", v).apply()
+
+    /** مسار النموذج المختار، أو "gemini"، أو فارغ للمحرك الأساسي. */
     var activePath: String
         get() = prefs.getString("active", "") ?: ""
         set(v) = prefs.edit().putString("active", v).apply()

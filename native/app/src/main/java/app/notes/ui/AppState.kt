@@ -12,6 +12,7 @@ import app.notes.ai.SectionLink
 import app.notes.ai.SuggestedLink
 import app.notes.ai.InstalledModel
 import app.notes.ai.LocalEngine
+import app.notes.ai.GeminiEngine
 import app.notes.ai.ModelManager
 import app.notes.ai.Recall
 import app.notes.ai.Embedder
@@ -56,7 +57,8 @@ class AppState(private val repo: Repo, val models: ModelManager, private val sco
     init {
         refresh()
         refreshModels()
-        installed.firstOrNull { it.file.absolutePath == models.activePath }?.let { useModel(it) }
+        if (models.activePath == GEMINI) useGemini()
+        else installed.firstOrNull { it.file.absolutePath == models.activePath }?.let { useModel(it) }
         initEmbedder()
     }
 
@@ -95,6 +97,17 @@ class AppState(private val repo: Repo, val models: ModelManager, private val sco
     fun refreshModels() { installed = models.installed() }
 
     /** اختيار نموذج محلي، أو null للمحرك الأساسي بلا نموذج. */
+    /** الذكاء على الإنترنت (Gemini)؛ يحتاج مفتاحاً. */
+    fun useGemini(): Boolean {
+        if (models.geminiKey.isBlank()) return false
+        (engine as? LocalEngine)?.close()
+        engine = GeminiEngine(models.geminiKey, models.geminiModel)
+        models.activePath = GEMINI
+        return true
+    }
+
+    val usingGemini get() = engine is GeminiEngine
+
     fun useModel(m: InstalledModel?) {
         (engine as? LocalEngine)?.close()
         engine = if (m == null) BasicEngine() else LocalEngine(models.ctx, m.file, m.label, m.template)
@@ -134,8 +147,10 @@ class AppState(private val repo: Repo, val models: ModelManager, private val sco
                 if (convId == 0L) convId = io { repo.newConversation(text.take(40)) }
                 val id = convId
                 messages += io { repo.addMessage(id, "user", text) }
-                val local = engine is LocalEngine
-                if (local) status = "يصنّف ملاحظتك…"
+                // أي ذكاء صناعي (على الهاتف أو الإنترنت) يصنّف ويرد؛ الأساسي بالكلمات فقط
+                val local = engine !is BasicEngine
+                val where = if (engine is GeminiEngine) "عبر الإنترنت" else "على هاتفك"
+                if (local) status = "يصنّف ملاحظتك $where…"
                 val section = (if (local) runCatching { engine.classify(text, sections) }.getOrNull() else null)
                     ?: Classifier.classify(text, sections)
                 // الذاكرة تُبحث قبل حفظ الملاحظة الجديدة حتى لا تتذكر نفسها
@@ -149,7 +164,7 @@ class AppState(private val repo: Repo, val models: ModelManager, private val sco
                 }
                 val noteId = io { repo.addNote(text, section.id, id) }
                 if (qv != null) io { repo.saveVector(noteId, qv) }
-                if (local) status = "يفكر على هاتفك…"
+                if (local) status = "يفكر $where…"
                 val reply = try {
                     engine.reply(messages.toList(), memory, text, section)
                 } catch (e: Throwable) {
@@ -169,7 +184,7 @@ class AppState(private val repo: Repo, val models: ModelManager, private val sco
 
     /** تلخيص كتاب بالنموذج المحلي وحفظ الملخص. يعيد رسالة خطأ أو null. */
     suspend fun summarize(section: Section): String? {
-        if (engine !is LocalEngine) return "اختر نموذجاً من «النماذج» ليلخّص لك الكتاب."
+        if (engine is BasicEngine) return "اختر نموذجاً من «النماذج» ليلخّص لك الكتاب."
         val notes = notesOf(section.id)
         if (notes.isEmpty()) return "الكتاب فارغ."
         return try {
@@ -191,4 +206,6 @@ class AppState(private val repo: Repo, val models: ModelManager, private val sco
     fun deleteNote(noteId: Long) = scope.launch { io { repo.deleteNote(noteId) }; refresh() }
 
     private suspend fun <T> io(block: () -> T): T = withContext(Dispatchers.IO) { block() }
+
+    companion object { const val GEMINI = "gemini" }
 }
