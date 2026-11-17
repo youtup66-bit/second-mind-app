@@ -1,8 +1,10 @@
 // الصوت: تحويل الكلام إلى نص، ونطق ردود الرفيقة بصوت يناسب شخصيتها.
 // محرّكان للنطق: صوت الجهاز (فوري ومجاني) أو صوت Gemini الطبيعي (اختياري).
 import { getSetting } from './storage.js';
-import { skinVoice } from './skins.js';
 import { tts, ttsCooldownUntil } from './gemini.js';
+
+// صوت واحد للرد: صوت Gemini الافتراضي، أو صوت الجهاز بحدّته وسرعته اللتين يضبطهما المستخدم
+const VOICE_PROFILE = { gender: 'female', pitch: 1, rate: 1, piperRate: 1, gemini: 'Kore', style: 'Speak in Arabic, naturally and clearly.' };
 import { synthesize } from './piper.js';
 
 const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -253,7 +255,8 @@ const MAX_TTS_CHARS = 600;
 
 async function voiceSettings() {
   return {
-    engine: await getSetting('voiceEngine', 'device'),
+    // لم يبقَ إلا صوت Gemini وصوت الجهاز؛ أي قيمة قديمة (مثل Piper) تعني صوت الجهاز
+    engine: (await getSetting('voiceEngine', 'device')) === 'gemini' ? 'gemini' : 'device',
     voiceURI: await getSetting('deviceVoice', ''),
     pitchShift: Number(await getSetting('voicePitchShift', 0)),
     rateScale: Number(await getSetting('voiceRateScale', 1)),
@@ -266,20 +269,9 @@ async function voiceSettings() {
 export async function speak(text, { skin, onStart, onEnd, onFallback, onWaiting, onSilent, force = false } = {}) {
   stopSpeaking();
   const my = ++token;
-  const profile = skinVoice(skin);
+  const profile = VOICE_PROFILE;
   const opts = await voiceSettings();
   if (my !== token) return;
-
-  if (opts.engine === 'piper') {
-    try {
-      onWaiting?.();
-      await speakPiper(text, profile, opts, { onStart, onEnd }, my);
-      return;
-    } catch (err) {
-      if (my !== token) return;
-      onFallback?.(err);
-    }
-  }
 
   if (opts.engine === 'gemini' && (force || !(await ttsCooldownUntil()))) {
     try {

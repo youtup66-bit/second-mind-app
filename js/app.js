@@ -248,13 +248,6 @@ window.addEventListener('unhandledrejection', (e) => {
   toast(msg);
 });
 
-// إن كان صوت Piper مختاراً نحمّله في الذاكرة بهدوء، فلا يتأخر أول رد
-setTimeout(async () => {
-  if (role === 'employee' || await getSetting('voiceEngine', 'device') !== 'piper') return;
-  const { warmUpPiper, isPiperReady } = await import('./piper.js');
-  if (await isPiperReady()) warmUpPiper();
-}, 4000);
-
 // الذكاء على الجهاز: نحفظ مكتبته مسبقاً وأنت متصل (ليعمل دون إنترنت)، ونجهّزه إن كان هو المستخدم دائماً
 setTimeout(async () => {
   if (role === 'employee' || !(await getSetting('localModel', ''))) return;
