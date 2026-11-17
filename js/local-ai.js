@@ -14,15 +14,22 @@ const WLLAMA_WASM = 'https://cdn.jsdelivr.net/npm/@wllama/wllama@3.8.1/esm/wasm/
 // داخل تطبيق أندرويد يوجد جسر AqliNative: المحرك الأصلي (llama.cpp) يعمل على المعالج بثبات،
 // فيُستعمل وحده بدل متصفح الـ WebView الذي يتعطل مع wllama
 const NATIVE = (typeof window !== 'undefined' && window.AqliNative) || null;
-const NATIVE_MODEL = {
-  id: 'native-qwen25-05b', engine: 'native',
-  url: 'https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF/resolve/main/qwen2.5-0.5b-instruct-q4_k_m.gguf',
-  file: 'qwen2.5-0.5b-instruct-q4_k_m.gguf',
-  label: 'Qwen 2.5 (0.5B) على المحرك الأصلي', note: 'يعمل على معالج الجوال داخل التطبيق، ولا يحتاج متصفحاً.', sizeMB: 400, gpuMB: 0, minBytes: 300e6, recommended: true,
-};
+// نماذج المحرك الأصلي (داخل التطبيق): أصغر وأسرع، أو أكبر وأذكى وتحتاج ذاكرة أكثر
+const nativeModel = (id, repo, file, label, note, sizeMB, minBytes) => ({
+  id, engine: 'native', url: `https://huggingface.co/Qwen/${repo}/resolve/main/${file}`, file,
+  label, note, sizeMB, gpuMB: 0, minBytes,
+});
+const NATIVE_MODELS = [
+  nativeModel('native-qwen25-05b', 'Qwen2.5-0.5B-Instruct-GGUF', 'qwen2.5-0.5b-instruct-q4_k_m.gguf',
+    'Qwen 2.5 (0.5B) — الأصغر', 'يعمل على أي جوال حديث، لكن ردوده أبسط.', 400, 300e6),
+  nativeModel('native-qwen25-15b', 'Qwen2.5-1.5B-Instruct-GGUF', 'qwen2.5-1.5b-instruct-q4_k_m.gguf',
+    'Qwen 2.5 (1.5B) — متوسط', 'ردود أفضل بالعربية. يحتاج نحو 2 جيجا من ذاكرة الجوال.', 1100, 900e6),
+  nativeModel('native-qwen25-3b', 'Qwen2.5-3B-Instruct-GGUF', 'qwen2.5-3b-instruct-q4_k_m.gguf',
+    'Qwen 2.5 (3B) — الأكبر', 'الأذكى بينها. يحتاج نحو 3.5 جيجا من ذاكرة الجوال، والتنزيل ~2 جيجا.', 2000, 1.8e9),
+];
 
 // sizeMB تقريبي للتنزيل، gpuMB ذاكرة كرت الشاشة المطلوبة تقريباً
-export const LOCAL_MODELS = NATIVE ? [NATIVE_MODEL] : [
+export const LOCAL_MODELS = NATIVE ? NATIVE_MODELS : [
   {
     id: 'gemma3-1b', engine: 'webllm', modelId: 'gemma3-1b-it-q4f16_1-MLC',
     label: 'Gemma 3 (1B)', note: 'خفيف ومتوازن، وعربيته جيدة. البداية الموصى بها.', sizeMB: 750, gpuMB: 711, recommended: true,
@@ -154,7 +161,8 @@ export async function isModelReady(model) {
 }
 
 export async function selectedModel() {
-  if (NATIVE) return NATIVE_MODEL; // في التطبيق لا يوجد خيار آخر
+  // في التطبيق: النموذج المختار من الإعدادات، والافتراضي الأصغر
+  if (NATIVE) return modelById(await getSetting('localModel', '')) || NATIVE_MODELS[0];
   return modelById(await getSetting('localModel', '')) || null;
 }
 
