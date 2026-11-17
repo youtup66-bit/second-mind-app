@@ -131,6 +131,8 @@ async function call(path, key, body, timeoutMs = 60_000, kind = 'other') {
     if (res.status === 403) throw new GeminiError('المفتاح لا يملك صلاحية.', 'BAD_KEY');
     if (res.status === 404) throw new GeminiError('النموذج غير متاح.', 'NO_MODEL');
     if (res.status === 429) throw new GeminiError('تجاوزت الحد المسموح، حاول بعد قليل.', 'RATE');
+    // ضغط مؤقت من Google على النموذج: نعيد المحاولة لاحقاً بدل أن نعرض الخطأ الإنجليزي
+    if (res.status === 503 || /high demand|overload|currently experiencing/i.test(msg)) throw new GeminiError(msg, 'BUSY');
     throw new GeminiError(msg, 'API');
   }
   return data;
@@ -207,20 +209,34 @@ async function callModel(tier, key, body, kind) {
   }
 }
 
+// يعيد المحاولة عند ضغط الخدمة، بانتظار متزايد؛ وإن فشلت كل المحاولات يعطي رسالة عربية واضحة
+async function withBusyRetry(fn) {
+  const waits = [3000, 8000, 15000];
+  for (let i = 0; ; i++) {
+    try {
+      return await fn();
+    } catch (err) {
+      if (err.code !== 'BUSY') throw err;
+      if (i >= waits.length) throw new GeminiError('النموذج مشغول الآن بطلبات كثيرة. حاول بعد دقيقة.', 'BUSY');
+      await new Promise((r) => setTimeout(r, waits[i]));
+    }
+  }
+}
+
 // طلب توليد: يختار النموذج حسب وضع التوفير، ويعود إلى النموذج الرئيسي إن تعذّر الخفيف
 async function generate(body, kind = 'other') {
   const key = await getKey();
   let data;
   if (await useLite(kind)) {
     try {
-      data = await callModel('lite', key, body, kind);
+      data = await withBusyRetry(() => callModel('lite', key, body, kind));
     } catch (err) {
       if (!['NO_MODEL', 'RATE'].includes(err.code)) throw err;
       if (err.code === 'RATE') await setSetting('liteCooldownUntil', Date.now() + LITE_COOLDOWN);
-      data = await callModel('main', key, body, kind);
+      data = await withBusyRetry(() => callModel('main', key, body, kind));
     }
   } else {
-    data = await callModel('main', key, body, kind);
+    data = await withBusyRetry(() => callModel('main', key, body, kind));
   }
   const text = data?.candidates?.[0]?.content?.parts
     ?.filter((p) => !p.thought).map((p) => p.text || '').join('').trim();
