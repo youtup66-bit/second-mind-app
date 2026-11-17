@@ -25,6 +25,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -46,6 +47,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Icon
 import androidx.compose.ui.draw.rotate
@@ -69,6 +71,8 @@ fun ModelsScreen(state: AppState) {
     var tick by remember { mutableIntStateOf(0) }
     var token by remember { mutableStateOf(mm.hfToken) }
     var message by remember { mutableStateOf("") }
+    // القوائم المنسدلة: كلها مغلقة في البداية
+    val open = remember { mutableStateMapOf<String, Boolean>() }
     val ctx = LocalContext.current
     val update = remember { UpdateUi(Updater(ctx.applicationContext), scope) }
 
@@ -117,14 +121,14 @@ fun ModelsScreen(state: AppState) {
         }
 
         // النماذج الموجودة على الهاتف: اختر أحدها
-        item { SectionTitle("المثبّتة على الهاتف") }
-        item {
+        item { SectionTitle("المثبّتة على الهاتف", open["installed"] == true) { open["installed"] = open["installed"] != true } }
+        if (open["installed"] == true) item {
             Choice(
                 title = "أساسي (بلا نموذج)", sub = "يحفظ ويصنّف ويتذكّر دون ذكاء صناعي",
                 selected = state.engine.name == "أساسي (بلا نموذج)", onClick = { state.useModel(null) },
             )
         }
-        items(state.installed, key = { it.file.absolutePath }) { m: InstalledModel ->
+        if (open["installed"] == true) items(state.installed, key = { it.file.absolutePath }) { m: InstalledModel ->
             Choice(
                 title = m.label, sub = "${m.file.length() / 1_000_000} ميجا",
                 selected = mm.activePath == m.file.absolutePath && state.engine.name == m.label,
@@ -133,8 +137,8 @@ fun ModelsScreen(state: AppState) {
             )
         }
 
-        item {
-            SectionTitle("الفهم بالمعنى")
+        item { SectionTitle("الفهم بالمعنى", open["embed"] == true) { open["embed"] = open["embed"] != true } }
+        if (open["embed"] == true) item {
             Card {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
@@ -163,15 +167,15 @@ fun ModelsScreen(state: AppState) {
             }
         }
 
-        item { SectionTitle("تنزيل نموذج") }
-        items(MODEL_CATALOG, key = { it.id }) { m -> CatalogCard(state, m, downloads[m.id], onStart = {
+        item { SectionTitle("تنزيل نموذج", open["catalog"] == true) { open["catalog"] = open["catalog"] != true } }
+        if (open["catalog"] == true) items(MODEL_CATALOG, key = { it.id }) { m -> CatalogCard(state, m, downloads[m.id], onStart = {
             message = if (m.gated && token.isBlank()) "هذا النموذج يحتاج رمز HuggingFace (بالأسفل)." else {
                 mm.startDownload(m); tick++; "بدأ التنزيل، ويمكنك متابعته في الإشعارات."
             }
         }, onCancel = { mm.cancelDownload(m); tick++ }) }
 
-        item {
-            SectionTitle("خيارات أخرى")
+        item { SectionTitle("خيارات أخرى", open["other"] == true) { open["other"] = open["other"] != true } }
+        if (open["other"] == true) item {
             Card {
                 Text("استيراد ملف نموذج (‎.task) من الهاتف", color = TextMain)
                 Text("إن نزّلته من المتصفح أو من تطبيق آخر.", color = TextDim, fontSize = 13.sp)
@@ -220,9 +224,22 @@ private fun CatalogCard(state: AppState, m: ModelInfo, dl: DownloadState?, onSta
     }
 }
 
+/** عنوان قائمة منسدلة: تنفتح وتنغلق بالضغط على السهم. */
 @Composable
-private fun SectionTitle(t: String) {
-    Text(t, color = TextDim, fontSize = 13.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 8.dp, bottom = 4.dp))
+private fun SectionTitle(t: String, expanded: Boolean, onToggle: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).clickable(onClick = onToggle)
+            .padding(top = 8.dp, bottom = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(t, color = TextMain, fontSize = 15.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+        Icon(
+            Icons.Filled.KeyboardArrowDown,
+            contentDescription = if (expanded) "إغلاق" else "فتح",
+            tint = TextDim,
+            modifier = Modifier.size(26.dp).rotate(if (expanded) 180f else 0f),
+        )
+    }
 }
 
 @Composable
