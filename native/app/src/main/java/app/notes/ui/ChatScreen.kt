@@ -72,9 +72,7 @@ fun ChatScreen(state: AppState, onModels: () -> Unit) {
         }
 
         Box(Modifier.weight(1f).fillMaxWidth()) {
-            if (state.messages.isEmpty()) {
-                Welcome(onPick = { input = it })
-            } else {
+            if (state.messages.isNotEmpty()) {
                 LazyColumn(
                     state = list,
                     modifier = Modifier.fillMaxSize(),
@@ -148,30 +146,6 @@ private fun TopIcon(glyph: String, onClick: () -> Unit) {
         Modifier.size(40.dp).clip(CircleShape).clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) { Text(glyph, color = TextMain, fontSize = 20.sp) }
-}
-
-@Composable
-private fun Welcome(onPick: (String) -> Unit) {
-    Column(
-        Modifier.fillMaxSize().padding(24.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
-    ) {
-        Box(
-            Modifier.size(72.dp).clip(CircleShape).background(Brush.radialGradient(listOf(Accent2, Accent, Bg))),
-        )
-        Spacer(Modifier.height(18.dp))
-        Text("بماذا تفكر اليوم؟", color = TextMain, fontSize = 24.sp, fontWeight = FontWeight.Bold)
-        Spacer(Modifier.height(6.dp))
-        Text("اكتب أي شيء، وسأحفظه وأضعه في الكتاب المناسب", color = TextDim, fontSize = 14.sp)
-        Spacer(Modifier.height(24.dp))
-        listOf("لازم أتصل بأحمد غداً", "خطرت لي فكرة تطبيق جديد", "الحمد لله على يوم جميل").forEach {
-            Surface(
-                shape = RoundedCornerShape(16.dp), color = Panel,
-                modifier = Modifier.padding(vertical = 4.dp).widthIn(max = 320.dp).fillMaxWidth().clickable { onPick(it) },
-            ) { Text(it, color = TextMain, modifier = Modifier.padding(14.dp)) }
-        }
-    }
 }
 
 @Composable
