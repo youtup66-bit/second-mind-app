@@ -4,6 +4,7 @@ import android.content.Context
 import android.webkit.JavascriptInterface
 import android.webkit.WebView
 import com.arm.aichat.AiChat
+import com.arm.aichat.AqliReset
 import com.arm.aichat.InferenceEngine
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -30,6 +31,8 @@ class NativeAI(private val context: Context, private val web: WebView) {
     // عملية ثقيلة واحدة في كل مرة (تنزيل أو محادثة): محرك llama.cpp يخدم طلباً واحداً
     private val lock = Mutex()
     private val dir = File(context.filesDir, "models").apply { mkdirs() }
+    // المسار الذي حُمّل فيه النموذج الآن (لإعادة الضبط بدل إعادة التحميل)
+    private var loadedPath: String? = null
 
     // اسم الملف فقط داخل مجلد النماذج، بلا مسارات
     private fun fileOf(name: String): File? {
@@ -132,14 +135,23 @@ class NativeAI(private val context: Context, private val web: WebView) {
             try {
                 lock.withLock {
                     val engine = AiChat.getInferenceEngine(context)
-                    // cleanUp لا يقبل إلا النموذج المحمّل أو حالة الخطأ (فيعيدها للتهيئة)؛ في غيرهما يُرمى استثناء
-                    val state = engine.state.value
-                    if (state is InferenceEngine.State.ModelReady || state is InferenceEngine.State.Error) {
-                        withContext(Dispatchers.IO) { engine.cleanUp() }
+                    val path = file.absolutePath
+                    if (loadedPath == path && engine.state.value is InferenceEngine.State.ModelReady) {
+                        // النموذج محمّل: نمسح السياق داخل المحرك فقط (A25) دون إعادة تحميل
+                        AqliReset.reset()
+                    } else {
+                        // cleanUp يقبل النموذج المحمّل أو حالة الخطأ فقط
+                        val state = engine.state.value
+                        if (state is InferenceEngine.State.ModelReady || state is InferenceEngine.State.Error) {
+                            withContext(Dispatchers.IO) { engine.cleanUp() }
+                        }
+                        loadedPath = null
+                        engine.loadModel(path)
+                        loadedPath = path
                     }
-                    engine.loadModel(file.absolutePath)
-                    if (system.isNotBlank()) engine.setSystemPrompt(system)
-                    engine.sendUserPrompt(user, maxTokens).collect { piece ->
+                    // المحرك لا يضبط تعليمات النظام إلا بعد التحميل مباشرة، فنضعها مع الرسالة نفسها
+                    val prompt = if (system.isBlank()) user else "$system\n\n$user"
+                    engine.sendUserPrompt(prompt, maxTokens).collect { piece ->
                         emit(JSONObject().put("type", "token").put("id", id).put("text", piece))
                     }
                 }
