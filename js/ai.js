@@ -44,14 +44,23 @@ function orgNote() {
     'ولا تضيفيه إن لم يطلب ذلك صراحة.';
 }
 
-// يستخرج أمر الإضافة من رد النموذج، ويطلب تأكيد المدير قبل تنفيذه
-function extractOrgAction(text) {
+// أمر بسيط في رسالة المدير ("أضف كرة الصيانة تحت شعبة الشبكات") نفهمه مباشرة إن لم يُخرج النموذج سطر ACTION
+const SIMPLE_ADD = /[أا]ض(?:ف|يف)\S*\s+(?:كرة|فرع|قسم|وحدة|شعبة)?\s*(?:جديدة\s+)?(?:اسمها\s+|اسمه\s+|باسم\s+)?(.+?)\s+تحت\s+(.+?)\s*[.؟!]?$/;
+
+// يستخرج أمر الإضافة من رد النموذج (أو من رسالة المدير)، ويطلب تأكيده قبل التنفيذ
+function extractOrgAction(text, userText = '') {
   if (!actionContext()) return { reply: text, actions: [] };
   const m = text.match(/ACTION\s*(\{[^\n]*\})/) || text.match(/(\{[^{}\n]*"action"[^{}\n]*\})/);
-  if (!m) return { reply: text, actions: [] };
-  const reply = text.replace(m[0], '').trim();
+  let reply = text;
   let a = null;
-  try { a = JSON.parse(m[1]); } catch { /* صيغة غير صالحة: نتجاهلها */ }
+  if (m) {
+    reply = text.replace(m[0], '').trim();
+    try { a = JSON.parse(m[1]); } catch { /* صيغة غير صالحة */ }
+  }
+  if (!a) {
+    const s = userText.trim().match(SIMPLE_ADD);
+    if (s) a = { action: 'org_add_branch', name: s[1], target: s[2] };
+  }
   if (a?.action !== 'org_add_branch' || !a.target || !a.name) return { reply, actions: [] };
   const target = String(a.target).trim();
   const name = String(a.name).trim().slice(0, 60);
@@ -90,10 +99,10 @@ export async function localClassify(text) {
 export async function smartChat(history, { memories = [], classify = true, onToken } = {}) {
   const mode = await aiMode();
   const runLocal = async () => {
-    const { reply, actions } = extractOrgAction(await localChat(toLocalMessages(history, memories), { onToken }));
+    const lastUser = [...history].reverse().find((m) => m.role === 'user')?.text || '';
+    const { reply, actions } = extractOrgAction(await localChat(toLocalMessages(history, memories), { onToken }), lastUser);
     let category = null;
     if (classify) {
-      const lastUser = [...history].reverse().find((m) => m.role === 'user')?.text || '';
       try { category = await localClassify(lastUser); } catch { /* يُصنّف لاحقاً */ }
     }
     return { reply, category, title: '', engine: 'local', actions };

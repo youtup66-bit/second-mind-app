@@ -76,6 +76,17 @@ class MainActivity : ComponentActivity() {
             }
         }
         web.webChromeClient = object : WebChromeClient() {
+            // نوافذ التأكيد (confirm) في الصفحة: نعرضها بنافذة أندرويد حتى لا يُعدّ الرد "لا" تلقائياً
+            override fun onJsConfirm(view: WebView, url: String?, message: String?, result: android.webkit.JsResult): Boolean {
+                android.app.AlertDialog.Builder(this@MainActivity)
+                    .setMessage(message ?: "")
+                    .setPositiveButton("موافق") { _, _ -> result.confirm() }
+                    .setNegativeButton("إلغاء") { _, _ -> result.cancel() }
+                    .setOnCancelListener { result.cancel() }
+                    .show()
+                return true
+            }
+
             override fun onShowFileChooser(
                 view: WebView,
                 callback: ValueCallback<Array<Uri>>,
