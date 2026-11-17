@@ -15,24 +15,25 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.io.File
-import java.io.FileOutputStream
-import java.io.IOException
-import java.net.HttpURLConnection
-import java.net.URL
 
 // جسر الذكاء الأصلي: يُعرض للصفحة باسم "AqliNative".
-// - التنزيل يتم هنا (مع استئناف إن انقطع)، والنموذج يُحفظ في مجلد التطبيق الخاص.
+// - التنزيل يجري في خدمة في المقدمة (DownloadService) فيستمر حتى لو خرج المستخدم من الشاشة أو التطبيق.
 // - المحادثة تعمل بمحرك llama.cpp المدمج (مكتبة com.arm.aichat) دون أي خادم.
 // كل النتائج تعود إلى الصفحة عبر window.__aqliNative({ type, id, ... }).
 // الأنواع: progress و token و done و error.
 class NativeAI(private val context: Context, private val web: WebView) {
 
     private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
-    // عملية ثقيلة واحدة في كل مرة (تنزيل أو محادثة): محرك llama.cpp يخدم طلباً واحداً
+    // المحادثة تخدم طلباً واحداً في كل مرة: محرك llama.cpp لا يتحمل طلبين معاً
     private val lock = Mutex()
     private val dir = File(context.filesDir, "models").apply { mkdirs() }
     // المسار الذي حُمّل فيه النموذج الآن (لإعادة الضبط بدل إعادة التحميل)
     private var loadedPath: String? = null
+
+    init {
+        // أحداث التنزيل تأتي من الخدمة؛ نرسلها إلى الصفحة إن كانت حيّة
+        DownloadService.sink = { ev -> emit(ev) }
+    }
 
     // اسم الملف فقط داخل مجلد النماذج، بلا مسارات
     private fun fileOf(name: String): File? {
@@ -58,75 +59,18 @@ class NativeAI(private val context: Context, private val web: WebView) {
     @JavascriptInterface
     fun removeModel(name: String): Boolean = fileOf(name)?.delete() == true
 
-    // ينزّل النموذج إلى مجلد التطبيق. إن انقطع يُكمَل من حيث توقف (ملف .part)
+    // ينزّل النموذج في خدمة المقدمة. إن انقطع يُكمَل من حيث توقف (ملف .part)
     @JavascriptInterface
     fun download(url: String, name: String, id: String) {
         val target = fileOf(name) ?: return fail(id, "اسم ملف النموذج غير صالح")
-        scope.launch {
-            try {
-                lock.withLock { fetchTo(url, target, id) }
-                emit(JSONObject().put("type", "done").put("id", id))
-            } catch (e: Throwable) {
-                fail(id, if (e is IOException) "تعذّر التنزيل؛ تأكد من الاتصال بالإنترنت ثم أعد المحاولة." else (e.message ?: "فشل التنزيل"))
-            }
+        if (target.isFile && target.length() > 0) {
+            emit(JSONObject().put("type", "done").put("id", id))
+            return
         }
+        DownloadService.start(context, url, target.absolutePath, id)
     }
 
-    private fun fetchTo(url: String, target: File, id: String) {
-        if (target.isFile && target.length() > 0) return
-        val part = File(target.path + ".part")
-        val have = if (part.exists()) part.length() else 0L
-
-        val conn = (URL(url).openConnection() as HttpURLConnection).apply {
-            connectTimeout = 30_000
-            readTimeout = 60_000
-            instanceFollowRedirects = true
-            if (have > 0) setRequestProperty("Range", "bytes=$have-")
-        }
-        try {
-            conn.connect()
-            val code = conn.responseCode
-            if (code !in 200..299) throw IllegalStateException("خطأ من خادم التنزيل: $code")
-            val resumed = code == HttpURLConnection.HTTP_PARTIAL
-            val start = if (resumed) have else 0L
-            val remaining = conn.contentLengthLong
-            val total = if (remaining >= 0) start + remaining else -1L
-
-            var done = start
-            var lastReport = 0L
-            conn.inputStream.use { input ->
-                FileOutputStream(part, resumed).use { out ->
-                    val buf = ByteArray(64 * 1024)
-                    while (true) {
-                        val n = input.read(buf)
-                        if (n < 0) break
-                        out.write(buf, 0, n)
-                        done += n
-                        val now = System.currentTimeMillis()
-                        if (now - lastReport > 400) {
-                            lastReport = now
-                            emit(JSONObject().put("type", "progress").put("id", id)
-                                .put("loaded", done).put("total", total))
-                        }
-                    }
-                }
-            }
-            if (total > 0 && part.length() != total) throw IOException("انقطع التنزيل؛ أعد المحاولة ليكمل من حيث توقف.")
-            // ملفات GGUF تبدأ بالنص GGUF؛ غير ذلك يعني رداً خاطئاً من الخادم
-            val magic = ByteArray(4)
-            part.inputStream().use { it.read(magic) }
-            if (String(magic, Charsets.US_ASCII) != "GGUF") {
-                part.delete()
-                throw IllegalStateException("الملف المنزّل ليس نموذجاً صالحاً.")
-            }
-            if (!part.renameTo(target)) throw IllegalStateException("تعذّر حفظ النموذج على الجهاز.")
-        } finally {
-            conn.disconnect()
-        }
-    }
-
-    // يحمّل النموذج ويجيب على الرسالة. يبدأ كل طلب بسياق نظيف: المحرك يحتفظ بالمحادثة
-    // بين الطلبات، ولا يسمح بضبط تعليمات النظام إلا مباشرة بعد التحميل، فنعيد التحميل لكل طلب.
+    // يحمّل النموذج ويجيب على الرسالة. يبدأ كل طلب بسياق نظيف (A25) دون إعادة تحميل إن كان محمّلاً
     @JavascriptInterface
     fun chat(id: String, name: String, system: String, user: String, maxTokens: Int) {
         val file = fileOf(name)
@@ -137,7 +81,7 @@ class NativeAI(private val context: Context, private val web: WebView) {
                     val engine = AiChat.getInferenceEngine(context)
                     val path = file.absolutePath
                     if (loadedPath == path && engine.state.value is InferenceEngine.State.ModelReady) {
-                        // النموذج محمّل: نمسح السياق داخل المحرك فقط (A25) دون إعادة تحميل
+                        // النموذج محمّل: نمسح السياق داخل المحرك فقط دون إعادة تحميل
                         AqliReset.reset()
                     } else {
                         // cleanUp يقبل النموذج المحمّل أو حالة الخطأ فقط

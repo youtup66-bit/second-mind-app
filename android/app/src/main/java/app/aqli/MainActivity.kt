@@ -1,8 +1,11 @@
 package app.aqli
 
+import android.Manifest
 import android.annotation.SuppressLint
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.util.Base64
 import android.webkit.JavascriptInterface
@@ -33,6 +36,9 @@ class MainActivity : ComponentActivity() {
         filePathCallback = null
     }
 
+    // إشعار تقدم تنزيل النموذج يحتاج إذناً من أندرويد 13 فما بعد؛ التنزيل نفسه يعمل دونه
+    private val askNotifications = registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
+
     // جسر بسيط يقرأه التطبيق: هل توجد صورة مشاركة؟ ويأخذها مرة واحدة
     inner class ShareBridge {
         @JavascriptInterface
@@ -51,6 +57,9 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         web = WebView(this)
         setContentView(web)
+        if (Build.VERSION.SDK_INT >= 33 &&
+            checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) askNotifications.launch(Manifest.permission.POST_NOTIFICATIONS)
 
         web.settings.apply {
             javaScriptEnabled = true
