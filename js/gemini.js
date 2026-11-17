@@ -662,3 +662,12 @@ export async function testKey(key) {
   const model = await findWorkingModel(key);
   return model;
 }
+
+// ملخص تقرير من نص رسائل الكروب (نص فقط، بلا صور)
+export async function reportSummary(transcript) {
+  return generate({
+    systemInstruction: { parts: [{ text: 'أنت تكتب ملخصاً مهنياً موجزاً بالعربية الفصحى المبسطة من رسائل مجموعات عمل. اعتمد على الوقائع المذكورة فقط، ولا تخترع شيئاً. اكتب فقرة ملخص قصيرة، ثم سطوراً قصيرة تبدأ كل منها بـ "- " تغطي: أبرز الأعمال، والقرارات، والمشاكل والمتابعات. بلا عناوين ولا رموز تنسيق أخرى.' }] },
+    contents: [{ role: 'user', parts: [{ text: transcript }] }],
+    generationConfig: { temperature: 0.3, maxOutputTokens: 2048 },
+  }, 'summary');
+}

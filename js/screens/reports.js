@@ -48,6 +48,7 @@ export async function mount(root) {
         </div>
         <p class="status" id="rep-msg" role="status"></p>
         <div id="reports"></div>
+        <section class="rep-sec" id="docx"></section>
       </section>
       <section class="rep-sec">
         <h3>المهام المكلّفة</h3>
@@ -163,6 +164,7 @@ export async function mount(root) {
   off = () => insightsEvents.removeEventListener('change', render);
   insightsEvents.addEventListener('change', render);
   await render();
+  import('../report-ui.js').then(({ mountDocxReport }) => mountDocxReport(root.querySelector('#docx'))).catch((err) => console.warn('docx', err));
 }
 
 export function unmount() {
