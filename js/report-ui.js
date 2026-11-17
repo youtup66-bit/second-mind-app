@@ -81,19 +81,26 @@ export async function mountDocxReport(box) {
     try {
       const { blob, filename, count, images } = await buildReport({ ...o, onStatus: (t) => { msg.textContent = t; } });
       msg.textContent = `جاهز: ${count} رسالة${images ? `، ${o.withImages ? images : 0} صورة مضمّنة` : ''}.`;
-      result.innerHTML = `<div class="file-card"><b></b><small>${Math.max(1, Math.round(blob.size / 1024))} ك.ب</small>
+      result.innerHTML = `<div class="file-card"><b></b><small>جارٍ الحفظ في التنزيلات…</small>
         <div class="file-card__actions">
-          <button type="button" class="btn btn--ghost" data-act="save">حفظ</button>
+          <button type="button" class="btn btn--ghost" data-act="save">حفظ مرة أخرى</button>
           <button type="button" class="btn btn--ghost" data-act="share">مشاركة</button>
         </div></div>`;
       result.querySelector('b').textContent = filename;
+      const status = result.querySelector('small');
+      // الحفظ تلقائي عند الإنشاء؛ المشاركة بخيار المدير
+      try {
+        status.textContent = `حُفظ في ${await saveFile(blob, filename)} ✓`;
+      } catch (err) {
+        status.textContent = `تعذّر الحفظ التلقائي: ${err.message || err}. استخدم «حفظ مرة أخرى».`;
+      }
       result.querySelector('.file-card').addEventListener('click', async (ev) => {
         const act = ev.target.closest('[data-act]')?.dataset.act;
         if (!act) return;
         try {
-          if (act === 'save') msg.textContent = `حُفظ الملف في ${await saveFile(blob, filename)} ✓`;
+          if (act === 'save') status.textContent = `حُفظ في ${await saveFile(blob, filename)} ✓`;
           else await shareFile(blob, filename);
-        } catch (err) { msg.textContent = err.message || String(err); msg.className = 'status status--err'; }
+        } catch (err) { status.textContent = `تعذّر: ${err.message || err}`; }
       });
     } catch (err) {
       msg.textContent = err.message || String(err);

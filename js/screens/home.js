@@ -653,7 +653,7 @@ export async function mount(root) {
         result.actions = result.actions.filter((a) => a !== editReq);
         try {
           const doc = await editLastReport(editReq.name || '', editReq.target || '');
-          appendFileCard(doc);
+          appendFileCard(doc, { autoSave: true });
         } catch (err) {
           append(await addMessage({ role: 'model', text: `⚠️ ${err.message || err}` }));
         }
@@ -693,12 +693,12 @@ export async function mount(root) {
   }
 
   // بطاقة ملف في المحادثة: حفظ في التنزيلات، أو مشاركة
-  function appendFileCard({ blob, filename }) {
+  function appendFileCard({ blob, filename }, { autoSave = false } = {}) {
     const li = document.createElement('li');
     li.className = 'msg msg--model';
     const card = document.createElement('div');
     card.className = 'file-card';
-    card.innerHTML = `<b></b><small>${Math.max(1, Math.round(blob.size / 1024))} ك.ب</small>
+    card.innerHTML = `<b></b><small>${autoSave ? 'جارٍ الحفظ في التنزيلات…' : `${Math.max(1, Math.round(blob.size / 1024))} ك.ب`}</small>
       <div class="file-card__actions">
         <button type="button" class="btn btn--ghost" data-act="save">حفظ</button>
         <button type="button" class="btn btn--ghost" data-act="share">مشاركة</button>
@@ -717,6 +717,12 @@ export async function mount(root) {
     li.append(card);
     log.append(li);
     log.scrollTop = log.scrollHeight;
+    if (autoSave) {
+      const status = card.querySelector('small');
+      saveFile(blob, filename)
+        .then((where) => { status.textContent = `حُفظ في ${where} ✓`; })
+        .catch((err) => { status.textContent = `تعذّر الحفظ التلقائي: ${err.message || err}. استخدم حفظ.`; });
+    }
   }
 
   // يعرض رد النموذج المحلي وهو يُكتب
