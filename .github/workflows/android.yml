@@ -29,7 +29,7 @@ jobs:
         run: |
           git clone --depth 1 https://github.com/ggerganov/llama.cpp llama-src
           SRC=llama-src/examples/llama.android/lib/src/main
-          cp $SRC/cpp/ai_chat.cpp android/app/src/main/cpp/
+          cp $SRC/cpp/ai_chat.cpp $SRC/cpp/logging.h android/app/src/main/cpp/
           mkdir -p android/app/src/main/java/com/arm
           cp -r $SRC/java/com/arm/aichat android/app/src/main/java/com/arm/
 
