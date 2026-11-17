@@ -34,12 +34,16 @@ class BubblePrefs(ctx: Context) {
         set(v) = p.edit().putBoolean("enabled", v).apply()
     /** قطر الكرة بوحدة dp. */
     var size: Float
-        get() = p.getFloat("size", 52f)
+        get() = p.getFloat("size", 40f)
         set(v) = p.edit().putFloat("size", v).apply()
     /** قوة الهالة المضيئة من 0 (بلا) إلى 1. */
     var glow: Float
         get() = p.getFloat("glow", 0.6f)
         set(v) = p.edit().putFloat("glow", v).apply()
+    /** لون الكرة (ARGB). */
+    var color: Int
+        get() = p.getInt("color", 0xFF8B6CFF.toInt())
+        set(v) = p.edit().putInt("color", v).apply()
     var x: Int
         get() = p.getInt("x", 0)
         set(v) = p.edit().putInt("x", v).apply()
@@ -52,6 +56,8 @@ class BubblePrefs(ctx: Context) {
 class BubbleView(ctx: Context) : View(ctx) {
     var glow = 0.6f
         set(v) { field = v; invalidate() }
+    var color = 0xFF8B6CFF.toInt()
+        set(v) { field = v; invalidate() }
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
 
     override fun onDraw(canvas: Canvas) {
@@ -62,14 +68,14 @@ class BubbleView(ctx: Context) : View(ctx) {
             val a = (glow * 170).toInt().coerceIn(0, 255)
             paint.shader = RadialGradient(
                 cx, cy, width / 2f,
-                intArrayOf(Color.argb(a, 139, 108, 255), Color.argb(a / 2, 79, 163, 255), Color.TRANSPARENT),
+                intArrayOf(withAlpha(color, a), withAlpha(color, a / 3), Color.TRANSPARENT),
                 floatArrayOf(core / (width / 2f), 0.7f, 1f), Shader.TileMode.CLAMP,
             )
             canvas.drawCircle(cx, cy, width / 2f, paint)
         }
         paint.shader = RadialGradient(
             cx - core * 0.3f, cy - core * 0.3f, core * 1.3f,
-            intArrayOf(Color.rgb(196, 182, 255), Color.rgb(139, 108, 255), Color.rgb(79, 120, 230)),
+            intArrayOf(mix(color, Color.WHITE, 0.55f), color, mix(color, Color.BLACK, 0.3f)),
             floatArrayOf(0f, 0.55f, 1f), Shader.TileMode.CLAMP,
         )
         canvas.drawCircle(cx, cy, core, paint)
@@ -77,6 +83,14 @@ class BubbleView(ctx: Context) : View(ctx) {
         paint.color = Color.argb(200, 255, 255, 255)
         canvas.drawCircle(cx - core * 0.35f, cy - core * 0.35f, core * 0.16f, paint)
     }
+
+    private fun withAlpha(c: Int, a: Int) = Color.argb(a, Color.red(c), Color.green(c), Color.blue(c))
+
+    private fun mix(a: Int, b: Int, t: Float) = Color.rgb(
+        (Color.red(a) + (Color.red(b) - Color.red(a)) * t).toInt(),
+        (Color.green(a) + (Color.green(b) - Color.green(a)) * t).toInt(),
+        (Color.blue(a) + (Color.blue(b) - Color.blue(a)) * t).toInt(),
+    )
 
     companion object {
         /** مساحة الهالة: عرض المنظر = قطر الكرة × هذا الرقم. */
@@ -125,7 +139,7 @@ class FloatingService : Service() {
 
     @SuppressLint("ClickableViewAccessibility")
     private fun addBubble() {
-        val v = BubbleView(this).apply { glow = prefs.glow }
+        val v = BubbleView(this).apply { glow = prefs.glow; color = prefs.color }
         val side = sidePx()
         val lp = WindowManager.LayoutParams(
             side, side,
@@ -164,6 +178,7 @@ class FloatingService : Service() {
         val v = view ?: return
         val lp = params ?: return
         v.glow = prefs.glow
+        v.color = prefs.color
         lp.width = sidePx(); lp.height = sidePx()
         wm.updateViewLayout(v, lp)
     }

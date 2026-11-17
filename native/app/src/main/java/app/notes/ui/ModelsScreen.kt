@@ -60,7 +60,16 @@ import android.Manifest
 import android.os.Build
 import android.provider.Settings
 import androidx.compose.foundation.layout.Box
-import androidx.compose.material3.Slider
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.drag
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import app.notes.BubblePrefs
@@ -97,6 +106,7 @@ fun ModelsScreen(state: AppState) {
     var bubbleOn by remember { mutableStateOf(bubble.enabled && Settings.canDrawOverlays(ctxApp(state))) }
     var bubbleSize by remember { mutableStateOf(bubble.size) }
     var bubbleGlow by remember { mutableStateOf(bubble.glow) }
+    var bubbleColor by remember { mutableStateOf(bubble.color) }
     var bubbleMsg by remember { mutableStateOf("") }
     val notifPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
 
@@ -288,44 +298,61 @@ fun ModelsScreen(state: AppState) {
         if (open["bubble"] == true) item {
             Card {
                 Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("كرة فوق التطبيقات", color = TextMain, fontSize = 14.sp, modifier = Modifier.weight(1f))
+                    Switch(
+                        checked = bubbleOn,
+                        modifier = Modifier.scale(0.8f),
+                        onCheckedChange = { on ->
+                            if (on && !Settings.canDrawOverlays(ctx)) {
+                                bubbleMsg = "اسمح للتطبيق بـ«الظهور فوق التطبيقات»، ثم ارجع وفعّل الكرة."
+                                ctx.startActivity(
+                                    Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:${ctx.packageName}"))
+                                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                                )
+                            } else {
+                                bubble.enabled = on; bubbleOn = on; bubbleMsg = ""
+                                if (on) {
+                                    if (Build.VERSION.SDK_INT >= 33) notifPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+                                    FloatingService.start(ctx)
+                                } else FloatingService.stop(ctx)
+                            }
+                        },
+                    )
+                }
+                if (bubbleMsg.isNotEmpty()) Text(bubbleMsg, color = Accent2, fontSize = 12.sp)
+
+                // معاينة صغيرة بالحجم الحقيقي واللون والهالة
+                Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
-                        Text("كرة فوق التطبيقات", color = TextMain)
-                        Text("تطفو فوق أي تطبيق؛ اسحبها لتحريكها، واضغطها لتفتح ملاحظاتك.", color = TextDim, fontSize = 12.sp)
-                    }
-                    Switch(checked = bubbleOn, onCheckedChange = { on ->
-                        if (on && !Settings.canDrawOverlays(ctx)) {
-                            bubbleMsg = "اسمح للتطبيق بـ«الظهور فوق التطبيقات»، ثم ارجع وفعّل الكرة."
-                            ctx.startActivity(
-                                Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:${ctx.packageName}"))
-                                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
-                            )
-                        } else {
-                            bubble.enabled = on; bubbleOn = on; bubbleMsg = ""
-                            if (on) {
-                                if (Build.VERSION.SDK_INT >= 33) notifPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
-                                FloatingService.start(ctx)
-                            } else FloatingService.stop(ctx)
+                        Text("الحجم", color = TextDim, fontSize = 12.sp)
+                        CompactSlider(bubbleSize, 20f..80f, { bubbleSize = it }) {
+                            bubble.size = bubbleSize; if (bubble.enabled) FloatingService.start(ctx)
                         }
-                    })
+                        Text("الهالة المضيئة ${if (bubbleGlow < 0.02f) "(بلا)" else "${(bubbleGlow * 100).toInt()}٪"}", color = TextDim, fontSize = 12.sp)
+                        CompactSlider(bubbleGlow, 0f..1f, { bubbleGlow = it }) {
+                            bubble.glow = bubbleGlow; if (bubble.enabled) FloatingService.start(ctx)
+                        }
+                    }
+                    Box(Modifier.size(64.dp), contentAlignment = Alignment.Center) {
+                        BubblePreview(minOf(bubbleSize, 64f / 1.8f), bubbleGlow, Color(bubbleColor))
+                    }
                 }
-                if (bubbleMsg.isNotEmpty()) Text(bubbleMsg, color = Accent2, fontSize = 13.sp)
 
-                // معاينة الكرة بالحجم والهالة المختارين
-                Box(Modifier.fillMaxWidth().height(110.dp), contentAlignment = Alignment.Center) {
-                    BubblePreview(bubbleSize, bubbleGlow)
+                Text("اللون", color = TextDim, fontSize = 12.sp)
+                Spacer(Modifier.height(6.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    BUBBLE_COLORS.forEach { c ->
+                        val on = c == bubbleColor
+                        Box(
+                            Modifier.size(24.dp).clip(CircleShape).background(Color(c))
+                                .border(if (on) 2.dp else 0.dp, if (on) TextMain else Color.Transparent, CircleShape)
+                                .clickable {
+                                    bubbleColor = c; bubble.color = c
+                                    if (bubble.enabled) FloatingService.start(ctx)
+                                },
+                        )
+                    }
                 }
-
-                Text("الحجم", color = TextMain, fontSize = 14.sp)
-                Slider(
-                    value = bubbleSize, onValueChange = { bubbleSize = it }, valueRange = 36f..96f,
-                    onValueChangeFinished = { bubble.size = bubbleSize; if (bubble.enabled) FloatingService.start(ctx) },
-                )
-                Text("الهالة المضيئة", color = TextMain, fontSize = 14.sp)
-                Slider(
-                    value = bubbleGlow, onValueChange = { bubbleGlow = it }, valueRange = 0f..1f,
-                    onValueChangeFinished = { bubble.glow = bubbleGlow; if (bubble.enabled) FloatingService.start(ctx) },
-                )
-                Text(if (bubbleGlow < 0.02f) "بلا هالة" else "${(bubbleGlow * 100).toInt()}٪", color = TextDim, fontSize = 12.sp)
             }
         }
 
@@ -538,22 +565,60 @@ private val backupFmt = SimpleDateFormat("d MMMM yyyy · HH:mm", Locale("ar"))
 private fun ctxApp(state: AppState) = state.models.ctx
 
 @Composable
-private fun BubblePreview(size: Float, glow: Float) {
-    val glowColor = Accent
+private fun BubblePreview(size: Float, glow: Float, color: Color) {
     androidx.compose.foundation.Canvas(Modifier.size((size * 1.8f).dp)) {
         val c = center
-        val core = this.size.minDimension / 2f / 1.8f
+        val r = this.size.minDimension / 2f
+        val core = r / 1.8f
         if (glow > 0.01f) drawCircle(
             Brush.radialGradient(
-                0f to glowColor.copy(alpha = glow * 0.67f), 0.7f to Color(0xFF4FA3FF).copy(alpha = glow * 0.33f), 1f to Color.Transparent,
-                center = c, radius = this.size.minDimension / 2f,
+                0f to color.copy(alpha = glow * 0.67f), 0.7f to color.copy(alpha = glow * 0.25f), 1f to Color.Transparent,
+                center = c, radius = r,
             ),
-            radius = this.size.minDimension / 2f, center = c,
+            radius = r, center = c,
         )
+        val hl = androidx.compose.ui.geometry.Offset(core * 0.3f, core * 0.3f)
         drawCircle(
-            Brush.radialGradient(listOf(Color(0xFFC4B6FF), Color(0xFF8B6CFF), Color(0xFF4F78E6)), center = c - androidx.compose.ui.geometry.Offset(core * 0.3f, core * 0.3f), radius = core * 1.3f),
+            Brush.radialGradient(listOf(lerp(color, Color.White, 0.55f), color, lerp(color, Color.Black, 0.3f)), center = c - hl, radius = core * 1.3f),
             radius = core, center = c,
         )
-        drawCircle(Color.White.copy(alpha = 0.8f), radius = core * 0.16f, center = c - androidx.compose.ui.geometry.Offset(core * 0.35f, core * 0.35f))
+        drawCircle(Color.White.copy(alpha = 0.8f), radius = core * 0.16f, center = c - hl * 1.15f)
     }
 }
+
+/** منزلق نحيف صغير (من اليمين لليسار في العربية). */
+@Composable
+private fun CompactSlider(value: Float, range: ClosedFloatingPointRange<Float>, onChange: (Float) -> Unit, onDone: () -> Unit) {
+    val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl
+    val change by rememberUpdatedState(onChange)
+    val done by rememberUpdatedState(onDone)
+    val active = Accent
+    val track = Panel2
+    val span = range.endInclusive - range.start
+    androidx.compose.foundation.Canvas(
+        Modifier.fillMaxWidth().height(26.dp).pointerInput(rtl) {
+            fun at(x: Float) = range.start + ((if (rtl) size.width - x else x) / size.width).coerceIn(0f, 1f) * span
+            awaitEachGesture {
+                val d = awaitFirstDown()
+                change(at(d.position.x))
+                drag(d.id) { ch -> change(at(ch.position.x)); ch.consume() }
+                done()
+            }
+        },
+    ) {
+        val cy = size.height / 2f
+        val w = size.width
+        val frac = ((value - range.start) / span).coerceIn(0f, 1f)
+        val fx = if (rtl) w - frac * w else frac * w
+        val stroke = 3.dp.toPx()
+        drawLine(track, androidx.compose.ui.geometry.Offset(0f, cy), androidx.compose.ui.geometry.Offset(w, cy), stroke, StrokeCap.Round)
+        drawLine(active, androidx.compose.ui.geometry.Offset(if (rtl) w else 0f, cy), androidx.compose.ui.geometry.Offset(fx, cy), stroke, StrokeCap.Round)
+        drawCircle(active, 7.dp.toPx(), androidx.compose.ui.geometry.Offset(fx, cy))
+    }
+}
+
+/** ألوان الكرة المتاحة. */
+private val BUBBLE_COLORS = listOf(
+    0xFF8B6CFF.toInt(), 0xFF4FA3FF.toInt(), 0xFF38A89A.toInt(), 0xFF4CD17F.toInt(), 0xFFFFB547.toInt(),
+    0xFFFF7A6B.toInt(), 0xFFFF7AB6.toInt(), 0xFFD7DCEB.toInt(), 0xFF5E6A85.toInt(),
+)
