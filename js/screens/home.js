@@ -48,6 +48,12 @@ function loadDraft() {
   try { return localStorage.getItem(DRAFT_KEY) || ''; } catch { return ''; }
 }
 
+// أمر حفظ التقرير: كلمات الحفظ مع «تقرير» أو مع «بالتنزيلات»، ولا يُعدّ أمر تعديل
+const SAVE_VERB = /(احفظ|صدّر|صدر|نزّل|نزل|حمّل|شارك)/;
+const EDIT_WORDS = /(عدّل|عدل|غيّر|اجعل|أضف|احذف|اختصر|وسّع)/;
+const isSaveReportCommand = (t) => t.length <= 90 && SAVE_VERB.test(t) && !EDIT_WORDS.test(t)
+  && (/تقرير/.test(t) || /التنزيلات|جهازي/.test(t));
+
 const escapeHtml = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
 let companion = null;
@@ -585,12 +591,13 @@ export async function mount(root) {
     showPending();
 
     // «احفظ التقرير»: آخر تقرير Word كبطاقة ملف في المحادثة، بلا رسالة إلى الذكاء
-    if (!image && /^(احفظ|صدّر|صدر|شارك)\s+(التقرير|آخر تقرير)$/.test(text0)) {
+    if (!image && isSaveReportCommand(text0)) {
       try {
         append(await addMessage({ role: 'user', text }));
         const { lastReportFile } = await import('../report-build.js');
         const doc = await lastReportFile();
-        append(await addMessage({ role: 'model', text: `هذا آخر تقرير (النسخة ${doc.version}):` }));
+        const note = /جديد/.test(text0) ? ' (لإنشاء تقرير جديد اختر النطاق من نافذة التقارير)' : '';
+        append(await addMessage({ role: 'model', text: `هذا آخر تقرير أنشأتُه (النسخة ${doc.version})${note}:` }));
         appendFileCard(doc);
       } catch (err) {
         append(await addMessage({ role: 'model', text: `⚠️ ${err.message || err}` }));
