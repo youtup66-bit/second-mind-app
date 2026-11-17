@@ -1253,3 +1253,10 @@ body.on-group .tasks .wa-head { padding-top: calc(env(safe-area-inset-top) + 8px
 
 /* نتيجة فحص الذكاء */
 .ai-check { white-space: pre-wrap; font-size: .85rem; line-height: 1.8; background: var(--surface-2, #1b2230); padding: 10px 12px; border-radius: 10px; margin: 8px 0; }
+
+/* ---- المرفق في المحادثة: زر 📎 ومعاينة الصورة قبل الإرسال ---- */
+.composer__attach { background: none; border: 0; font-size: 1.25rem; padding: 6px; cursor: pointer; color: inherit; }
+.composer__pending { display: flex; align-items: center; gap: 10px; padding: 6px 10px; margin: 0 8px 4px; border-radius: 12px; background: var(--surface-2, #2a3942); }
+.composer__pending[hidden] { display: none; }
+.composer__pending img { width: 56px; height: 56px; object-fit: cover; border-radius: 8px; }
+.msg__img { display: block; max-width: 100%; max-height: 240px; border-radius: 10px; margin-bottom: 4px; }

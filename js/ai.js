@@ -97,6 +97,10 @@ export async function localClassify(text) {
 // يعيد { reply, category?, title?, engine: 'gemini'|'local' }
 // onToken(نص حتى الآن): لعرض رد النموذج المحلي وهو يُكتب
 export async function smartChat(history, { memories = [], classify = true, onToken } = {}) {
+  // النموذج على الجهاز لا يقرأ الصور، فالرسالة التي فيها صورة تذهب إلى Gemini
+  if ([...history].reverse().find((m) => m.role === 'user')?.image) {
+    return { ...(await geminiChat(history, { memories, classify })), engine: 'gemini' };
+  }
   const mode = await aiMode();
   const runLocal = async () => {
     const lastUser = [...history].reverse().find((m) => m.role === 'user')?.text || '';

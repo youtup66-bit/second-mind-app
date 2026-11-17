@@ -150,12 +150,19 @@ export async function findWorkingModel(key) {
 }
 
 // ندمج الرسائل المتتالية من نفس الطرف، ونبدأ دائماً برسالة من المستخدم
+// صورة بصيغة رابط بيانات تُرسل كجزء inlineData
+const inlinePart = (dataUrl) => ({
+  inlineData: { mimeType: dataUrl.slice(5, dataUrl.indexOf(';')), data: dataUrl.slice(dataUrl.indexOf(',') + 1) },
+});
 function toContents(history) {
   const out = [];
   for (const m of history) {
     const last = out[out.length - 1];
-    if (last?.role === m.role) last.parts[0].text += `\n${m.text}`;
-    else out.push({ role: m.role, parts: [{ text: m.text }] });
+    const img = m.image && /^data:image\/[a-z+.-]+;base64,/i.test(m.image) ? m.image : null;
+    if (last?.role === m.role) {
+      last.parts[0].text += `\n${m.text}`;
+      if (img) last.parts.push(inlinePart(img));
+    } else out.push({ role: m.role, parts: [{ text: m.text }, ...(img ? [inlinePart(img)] : [])] });
   }
   while (out[0]?.role === 'model') out.shift();
   return out;

@@ -82,8 +82,10 @@ export async function mount(root) {
       </div>
       <button type="button" class="chat__handle" id="handle" aria-label="اسحب لتطوي المساعد أو تنسدلها"><span></span></button>
       <ol class="chat__log" id="log" aria-label="المحادثة"></ol>
+      <div class="composer__pending" id="ai-pending" hidden></div>
       <form class="composer" id="composer" autocomplete="off">
         <button type="button" class="composer__mic" id="mic" aria-label="تحدّث" ${showMic ? '' : 'hidden'}>🎙</button>
+        <button type="button" class="composer__attach" id="ai-attach" aria-label="أرفق صورة">📎</button>
         <textarea id="input" rows="1" placeholder="اكتب ما في بالك..." aria-label="رسالتك"></textarea>
         <button type="button" class="composer__clear" id="clear" aria-label="مسح النص" hidden>✕</button>
         <button type="submit" class="composer__send" id="send" aria-label="إرسال">➤</button>
@@ -103,6 +105,34 @@ export async function mount(root) {
   const bubble = root.querySelector('#bubble');
   const log = root.querySelector('#log');
   const form = root.querySelector('#composer');
+  // صورة مرفقة مع الرسالة التالية (تُرسل إلى Gemini فقط)
+  let pendingImage = null;
+  const pendingEl = root.querySelector('#ai-pending');
+  function showPending() {
+    pendingEl.hidden = !pendingImage;
+    pendingEl.innerHTML = pendingImage
+      ? `<img src="${pendingImage}" alt="الصورة المرفقة"><button type="button" class="link-btn" id="ai-pending-x" aria-label="أزل الصورة">✕ أزل</button>`
+      : '';
+    pendingEl.querySelector('#ai-pending-x')?.addEventListener('click', () => { pendingImage = null; showPending(); });
+  }
+  root.querySelector('#ai-attach').addEventListener('click', () => {
+    const pick = document.createElement('input');
+    pick.type = 'file';
+    pick.accept = 'image/*';
+    Object.assign(pick.style, { position: 'fixed', left: '0', top: '0', width: '1px', height: '1px', opacity: '0', pointerEvents: 'none' });
+    document.body.appendChild(pick);
+    pick.addEventListener('change', async () => {
+      const f = pick.files?.[0];
+      pick.remove();
+      if (!f) return;
+      try {
+        const { compressImage } = await import('../group.js');
+        pendingImage = await compressImage(f, 1024, 400_000);
+        showPending();
+      } catch (err) { say(`تعذّر تجهيز الصورة: ${err.message || err}`); }
+    });
+    try { pick.click(); } catch (err) { say(`تعذّر فتح نافذة الصور: ${err.message || err}`); }
+  });
   const input = root.querySelector('#input');
   const mic = root.querySelector('#mic');
   const clearBtn = root.querySelector('#clear');
@@ -283,6 +313,13 @@ export async function mount(root) {
     li.className = `msg msg--${msg.role}${pending ? ' msg--pending' : ''}`;
     if (msg.id) li.dataset.id = msg.id;
     li.dataset.role = msg.role;
+    if (msg.image && /^data:image\//.test(msg.image)) {
+      const im = document.createElement('img');
+      im.className = 'msg__img';
+      im.src = msg.image;
+      im.alt = 'صورة مرفقة';
+      li.append(im);
+    }
     const body = document.createElement('span');
     body.className = 'msg__text';
     body.textContent = msg.text;
@@ -527,8 +564,9 @@ export async function mount(root) {
   }
 
   async function send(raw, source = 'text') {
-    const text = raw.trim();
-    if (!text) return;
+    const text0 = raw.trim();
+    if (!text0 && !pendingImage) return;
+    const text = text0 || '📷 صورة';
     if (busy) {
       // نُبقي النص في الخانة ونخبره بدل التجاهل الصامت
       input.value = text; autosize();
@@ -539,10 +577,13 @@ export async function mount(root) {
     stopVoice();
     closeActions();
     input.value = ''; autosize();
+    const image = pendingImage;
+    pendingImage = null;
+    showPending();
 
     // نحفظ كلام المستخدم أولاً حتى لا يضيع شيء
     const entry = await addEntry({ text, source });
-    const userMsg = await addMessage({ role: 'user', text, entryId: entry.id });
+    const userMsg = await addMessage({ role: 'user', text, entryId: entry.id, ...(image ? { image } : {}) });
     append(userMsg, { entry });
 
     companion.setState('thinking');
@@ -555,7 +596,8 @@ export async function mount(root) {
       // طلب واحد يعيد الرد وتصنيف رسالتك معاً (توفيراً للحصة)، من Gemini أو من النموذج على الجهاز
       // المدير: نُطلع الذكاء على عقل المؤسسة الحالي ليديره بالأسماء الصحيحة
       setActionContext(await orgContext().catch(() => ''));
-      const result = await smartChat(recent.map(({ role, text: t }) => ({ role, text: t })), {
+      // الصورة تُرسل مع رسالتك الحالية فقط، لا مع كل السجل
+      const result = await smartChat(recent.map(({ role, text: t, image: img, id }) => ({ role, text: t, image: img && id === userMsg.id ? img : undefined })), {
         memories,
         onToken: (t) => streamInto(pending, t),
       });
