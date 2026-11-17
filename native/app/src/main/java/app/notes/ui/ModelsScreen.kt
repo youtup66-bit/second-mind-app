@@ -74,8 +74,12 @@ fun ModelsScreen(state: AppState) {
 
     // تحديث نسب التنزيل كل ثانية
     var downloads by remember { mutableStateOf(mapOf<String, DownloadState>()) }
+    var embedDl by remember { mutableStateOf<DownloadState?>(null) }
     LaunchedEffect(tick) {
         while (true) {
+            val e = withContext(Dispatchers.IO) { mm.embedState() }
+            if (embedDl != null && e == null) state.initEmbedder()
+            embedDl = e
             val map = withContext(Dispatchers.IO) {
                 MODEL_CATALOG.mapNotNull { m -> mm.downloadState(m)?.let { m.id to it } }.toMap()
             }
@@ -127,6 +131,36 @@ fun ModelsScreen(state: AppState) {
                 onClick = { state.useModel(m) },
                 trailing = { TextButton(onClick = { state.deleteModel(m.file) }) { Text("حذف", color = TextDim) } },
             )
+        }
+
+        item {
+            SectionTitle("الفهم بالمعنى")
+            Card {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("نموذج الفهم (MiniLM متعدد اللغات)", color = TextMain, fontWeight = FontWeight.Bold)
+                        Text(
+                            "يربط الملاحظات المتشابهة في المعنى حتى لو اختلفت كلماتها، ويحسّن تذكّر المساعد. يعمل على الهاتف دون إنترنت.\nالحجم ≈ ١٣٠ ميجا",
+                            color = TextDim, fontSize = 13.sp,
+                        )
+                    }
+                    val dl = embedDl
+                    when {
+                        dl?.running == true -> TextButton(onClick = { mm.deleteEmbed(); tick++ }) { Text("إلغاء") }
+                        state.embedReady || mm.embedReady() -> TextButton(onClick = { state.deleteEmbedder(); tick++ }) { Text("حذف", color = TextDim) }
+                        else -> TextButton(onClick = { mm.startEmbedDownload(); tick++ }) { Text(if (dl?.failed == true) "إعادة" else "تنزيل") }
+                    }
+                }
+                embedDl?.let { dl ->
+                    if (dl.running) {
+                        Spacer(Modifier.height(8.dp))
+                        LinearProgressIndicator(progress = { dl.percent / 100f }, modifier = Modifier.fillMaxWidth())
+                        Text("${dl.percent}٪", color = TextDim, fontSize = 12.sp)
+                    }
+                    if (dl.failed) Text("فشل التنزيل. تأكد من الإنترنت وأعد المحاولة.", color = TextDim, fontSize = 12.sp)
+                }
+                if (state.embedStatus.isNotEmpty()) Text(state.embedStatus, color = Accent2, fontSize = 13.sp)
+            }
         }
 
         item { SectionTitle("تنزيل نموذج") }

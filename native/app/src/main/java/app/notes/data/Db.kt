@@ -15,12 +15,13 @@ data class Msg(val id: Long, val convId: Long, val role: String, val text: Strin
 data class Conversation(val id: Long, val title: String, val time: Long)
 
 /** كل البيانات محفوظة على الهاتف فقط في قاعدة SQLite. */
-class Db(ctx: Context) : SQLiteOpenHelper(ctx, "notes.db", null, 2) {
+class Db(ctx: Context) : SQLiteOpenHelper(ctx, "notes.db", null, 3) {
 
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL("CREATE TABLE sections(id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, icon TEXT, keywords TEXT, summary TEXT DEFAULT '', summary_count INTEGER DEFAULT 0)")
         db.execSQL("CREATE TABLE notes(id INTEGER PRIMARY KEY AUTOINCREMENT, text TEXT, section_id INTEGER, conv_id INTEGER, time INTEGER)")
         db.execSQL("CREATE TABLE conversations(id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT, time INTEGER)")
+        db.execSQL(EMBED_TABLE)
         db.execSQL("CREATE TABLE messages(id INTEGER PRIMARY KEY AUTOINCREMENT, conv_id INTEGER, role TEXT, text TEXT, time INTEGER)")
         DEFAULT_SECTIONS.forEach { (name, icon, kw) ->
             db.insert("sections", null, ContentValues().apply {
@@ -34,9 +35,13 @@ class Db(ctx: Context) : SQLiteOpenHelper(ctx, "notes.db", null, 2) {
             db.execSQL("ALTER TABLE sections ADD COLUMN summary TEXT DEFAULT ''")
             db.execSQL("ALTER TABLE sections ADD COLUMN summary_count INTEGER DEFAULT 0")
         }
+        if (oldVersion < 3) db.execSQL(EMBED_TABLE)
     }
 
     companion object {
+        /** بصمة المعنى لكل ملاحظة (متجه أرقام). */
+        const val EMBED_TABLE = "CREATE TABLE embeddings(note_id INTEGER PRIMARY KEY, vec BLOB)"
+
         /** الأقسام الافتراضية: الاسم، الأيقونة، كلمات دالة (للتصنيف المبدئي قبل الذكاء الصناعي). */
         val DEFAULT_SECTIONS = listOf(
             Triple("مهام", "✅", "لازم يجب اعمل افعل انجز موعد اشتري ارسل اتصل غدا بكره مهمه واجب"),
@@ -82,7 +87,39 @@ class Repo(private val helper: Db) {
 
     fun deleteNote(noteId: Long) {
         db.delete("notes", "id = ?", arrayOf(noteId.toString()))
+        db.delete("embeddings", "note_id = ?", arrayOf(noteId.toString()))
     }
+
+    fun saveVector(noteId: Long, v: FloatArray) {
+        val buf = java.nio.ByteBuffer.allocate(v.size * 4).order(java.nio.ByteOrder.LITTLE_ENDIAN)
+        v.forEach { buf.putFloat(it) }
+        db.insertWithOnConflict("embeddings", null, ContentValues().apply {
+            put("note_id", noteId); put("vec", buf.array())
+        }, SQLiteDatabase.CONFLICT_REPLACE)
+    }
+
+    fun vectors(): Map<Long, FloatArray> {
+        val out = HashMap<Long, FloatArray>()
+        db.rawQuery("SELECT note_id, vec FROM embeddings", null).use { c ->
+            while (c.moveToNext()) {
+                val b = java.nio.ByteBuffer.wrap(c.getBlob(1)).order(java.nio.ByteOrder.LITTLE_ENDIAN).asFloatBuffer()
+                out[c.getLong(0)] = FloatArray(b.remaining()).also { b.get(it) }
+            }
+        }
+        return out
+    }
+
+    /** ملاحظات بلا بصمة معنى بعد (لفهرستها). */
+    fun notesWithoutVector(): List<Note> {
+        val out = mutableListOf<Note>()
+        db.rawQuery(
+            "SELECT id, text, section_id, conv_id, time FROM notes WHERE id NOT IN (SELECT note_id FROM embeddings) ORDER BY time DESC",
+            null,
+        ).use { c -> while (c.moveToNext()) out += Note(c.getLong(0), c.getString(1), c.getLong(2), c.getLong(3), c.getLong(4)) }
+        return out
+    }
+
+    fun clearVectors() { db.delete("embeddings", null, null) }
 
     fun notes(sectionId: Long? = null): List<Note> {
         val out = mutableListOf<Note>()

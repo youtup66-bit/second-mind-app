@@ -14,6 +14,8 @@ import app.notes.ai.InstalledModel
 import app.notes.ai.LocalEngine
 import app.notes.ai.ModelManager
 import app.notes.ai.Recall
+import app.notes.ai.Embedder
+import app.notes.ai.Semantic
 import app.notes.data.Conversation
 import app.notes.data.Msg
 import app.notes.data.Note
@@ -44,10 +46,50 @@ class AppState(private val repo: Repo, val models: ModelManager, private val sco
         private set
     var status by mutableStateOf("")
 
+    /** نموذج الفهم بالمعنى (إن نُزِّل)، وحالة فهرسة الملاحظات. */
+    private var embedder: Embedder? = null
+    var embedReady by mutableStateOf(false)
+        private set
+    var embedStatus by mutableStateOf("")
+        private set
+
     init {
         refresh()
         refreshModels()
         installed.firstOrNull { it.file.absolutePath == models.activePath }?.let { useModel(it) }
+        initEmbedder()
+    }
+
+    /** تحميل نموذج الفهم إن كان مثبّتاً، ثم إعطاء كل ملاحظة قديمة بصمة معنى. */
+    fun initEmbedder() {
+        if (embedder != null || !models.embedReady()) return
+        embedStatus = "يحمّل نموذج الفهم…"
+        scope.launch {
+            try {
+                embedder = withContext(Dispatchers.Default) { Embedder(models.embedModel, models.embedTokenizer) }
+                embedReady = true
+                indexMissing()
+            } catch (e: Throwable) {
+                embedStatus = "تعذّر تشغيل نموذج الفهم: ${e.message ?: e.javaClass.simpleName}"
+            }
+        }
+    }
+
+    private suspend fun indexMissing() {
+        val e = embedder ?: return
+        val todo = io { repo.notesWithoutVector() }
+        todo.forEachIndexed { i, n ->
+            embedStatus = "يفهم ملاحظاتك ${i + 1} من ${todo.size}…"
+            val v = withContext(Dispatchers.Default) { e.embed(n.text) }
+            io { repo.saveVector(n.id, v) }
+        }
+        embedStatus = "يعمل ✓ (كل الملاحظات مفهومة)"
+        if (todo.isNotEmpty()) refresh()
+    }
+
+    fun deleteEmbedder() {
+        embedder?.close(); embedder = null; embedReady = false; embedStatus = ""
+        models.deleteEmbed()
     }
 
     fun refreshModels() { installed = models.installed() }
@@ -69,7 +111,10 @@ class AppState(private val repo: Repo, val models: ModelManager, private val sco
         val (s, c) = io { repo.sections() to repo.conversations() }
         sections = s; conversations = c
         val notes = io { repo.notes() }
-        val (l, sl) = withContext(Dispatchers.Default) { Links.suggest(notes).let { it to Links.bySection(it, notes) } }
+        val vectors = io { repo.vectors() }
+        val (l, sl) = withContext(Dispatchers.Default) {
+            Semantic.merge(Links.suggest(notes), Semantic.links(vectors, notes)).let { it to Links.bySection(it, notes) }
+        }
         allNotes = notes; links = l; sectionLinks = sl
     }
 
@@ -94,8 +139,16 @@ class AppState(private val repo: Repo, val models: ModelManager, private val sco
                 val section = (if (local) runCatching { engine.classify(text, sections) }.getOrNull() else null)
                     ?: Classifier.classify(text, sections)
                 // الذاكرة تُبحث قبل حفظ الملاحظة الجديدة حتى لا تتذكر نفسها
-                val memory = io { Recall.find(repo.notes(), text) }
-                io { repo.addNote(text, section.id, id) }
+                val e = embedder
+                val qv = if (e != null) runCatching { withContext(Dispatchers.Default) { e.embed(text) } }.getOrNull() else null
+                val memory = io {
+                    val all = repo.notes()
+                    // بالمعنى إن توفر نموذج الفهم، وإلا بالكلمات المشتركة
+                    if (qv != null) Semantic.recall(repo.vectors(), all, qv).ifEmpty { Recall.find(all, text) }
+                    else Recall.find(all, text)
+                }
+                val noteId = io { repo.addNote(text, section.id, id) }
+                if (qv != null) io { repo.saveVector(noteId, qv) }
                 if (local) status = "يفكر على هاتفك…"
                 val reply = try {
                     engine.reply(messages.toList(), memory, text, section)

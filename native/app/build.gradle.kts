@@ -57,4 +57,6 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
     // تشغيل النماذج اللغوية على الهاتف
     implementation("com.google.mediapipe:tasks-genai:0.10.24")
+    // نموذج الفهم بالمعنى (بصمات المعنى) على الهاتف
+    implementation("com.microsoft.onnxruntime:onnxruntime-android:1.20.0")
 }

@@ -62,7 +62,7 @@ class ModelManager(val ctx: Context) {
 
     fun installed(): List<InstalledModel> =
         (dir.listFiles() ?: emptyArray())
-            .filter { it.isFile && (it.name.endsWith(".task") || it.name.endsWith(".bin")) && it.length() > 1_000_000 }
+            .filter { it.isFile && it.parentFile == dir && (it.name.endsWith(".task") || it.name.endsWith(".bin")) && it.length() > 1_000_000 }
             .sortedBy { it.name }
             .map { f ->
                 val known = MODEL_CATALOG.firstOrNull { it.fileName == f.name }
@@ -130,7 +130,61 @@ class ModelManager(val ctx: Context) {
         file.delete()
     }
 
+    // ---- نموذج الفهم بالمعنى (بصمات المعنى) ----
+    val embedDir: File get() = File(dir, "embed").apply { mkdirs() }
+    val embedModel: File get() = File(embedDir, EMBED_MODEL)
+    val embedTokenizer: File get() = File(embedDir, EMBED_TOKENIZER)
+
+    fun embedReady() = embedModel.length() > 10_000_000 && embedTokenizer.length() > 1_000_000 && embedState() == null
+
+    fun startEmbedDownload() {
+        deleteEmbed()
+        val ids = listOf(EMBED_URL_MODEL to EMBED_MODEL, EMBED_URL_TOKENIZER to EMBED_TOKENIZER).map { (url, name) ->
+            dm.enqueue(
+                DownloadManager.Request(Uri.parse(url))
+                    .setTitle("تنزيل نموذج الفهم")
+                    .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE)
+                    .setDestinationInExternalFilesDir(ctx, "models/embed", name)
+                    .setAllowedOverMetered(true),
+            )
+        }
+        prefs.edit().putString("dl_embed", ids.joinToString(",")).apply()
+    }
+
+    /** حالة تنزيل نموذج الفهم (مجموع الملفين)، أو null إن لم يكن هناك تنزيل جارٍ. */
+    fun embedState(): DownloadState? {
+        val ids = prefs.getString("dl_embed", "")!!.split(",").mapNotNull { it.toLongOrNull() }
+        if (ids.isEmpty()) return null
+        var done = 0L; var total = 0L; var running = false; var failed = false
+        dm.query(DownloadManager.Query().setFilterById(*ids.toLongArray())).use { c ->
+            while (c.moveToNext()) {
+                done += c.getLong(c.getColumnIndexOrThrow(DownloadManager.COLUMN_BYTES_DOWNLOADED_SO_FAR))
+                total += c.getLong(c.getColumnIndexOrThrow(DownloadManager.COLUMN_TOTAL_SIZE_BYTES)).coerceAtLeast(0)
+                when (c.getInt(c.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS))) {
+                    DownloadManager.STATUS_FAILED -> failed = true
+                    DownloadManager.STATUS_SUCCESSFUL -> {}
+                    else -> running = true
+                }
+            }
+        }
+        if (!running && !failed) { prefs.edit().remove("dl_embed").apply(); return null }
+        val pct = if (total > 0) (done * 100 / total).toInt() else 0
+        return DownloadState(pct, running && !failed, failed)
+    }
+
+    fun deleteEmbed() {
+        prefs.getString("dl_embed", "")!!.split(",").mapNotNull { it.toLongOrNull() }.forEach { dm.remove(it) }
+        prefs.edit().remove("dl_embed").apply()
+        embedModel.delete(); embedTokenizer.delete()
+    }
+
     companion object {
+        const val EMBED_MODEL = "model_quantized.onnx"
+        const val EMBED_TOKENIZER = "tokenizer.json"
+        private const val EMBED_REPO = "https://huggingface.co/Xenova/paraphrase-multilingual-MiniLM-L12-v2/resolve/main"
+        const val EMBED_URL_MODEL = "$EMBED_REPO/onnx/model_quantized.onnx"
+        const val EMBED_URL_TOKENIZER = "$EMBED_REPO/tokenizer.json"
+
         fun guessTemplate(name: String) = if (name.lowercase().contains("gemma")) Template.GEMMA else Template.CHATML
     }
 }
