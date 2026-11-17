@@ -17,6 +17,7 @@ export const ACTION_IDS = [
 // ملخص المؤسسة الحالي (يضعه التطبيق قبل كل طلب، للمدير فقط)
 let orgCtx = '';
 export const setActionContext = (text) => { orgCtx = text || ''; };
+export const actionContext = () => orgCtx;
 
 // وصف الأوامر للنموذج (يُبنى في كل مرة ليحوي الأقسام والشخصيات الحالية)
 export function actionsPrompt() {
