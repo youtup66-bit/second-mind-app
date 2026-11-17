@@ -19,9 +19,8 @@ import java.util.concurrent.TimeUnit
 class Backup(private val ctx: Context) {
     private val prefs = ctx.getSharedPreferences("backup", Context.MODE_PRIVATE)
 
-    var folder: Uri?
+    val folder: Uri?
         get() = prefs.getString("folder", null)?.let(Uri::parse)
-        private set(v) = prefs.edit().putString("folder", v?.toString()).apply()
 
     val auto: Boolean get() = prefs.getBoolean("auto", false)
     val lastTime: Long get() = prefs.getLong("last", 0L)
@@ -35,7 +34,7 @@ class Backup(private val ctx: Context) {
             runCatching { ctx.contentResolver.releasePersistableUriPermission(old, RW) }
         }
         ctx.contentResolver.takePersistableUriPermission(uri, RW)
-        folder = uri
+        prefs.edit().putString("folder", uri.toString()).apply()
     }
 
     fun setAuto(on: Boolean) {
