@@ -44,6 +44,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.notes.data.Note
+import app.notes.data.Pdf
+import app.notes.data.ReportBlock
 import app.notes.data.Section
 import app.notes.data.path
 import java.text.SimpleDateFormat
@@ -61,6 +63,7 @@ fun BookScreen(state: AppState, book: Section, startNoteId: Long? = null, onBack
     var notes by remember { mutableStateOf<List<Note>?>(null) }
     var reload by remember { mutableIntStateOf(0) }
     var moving by remember { mutableStateOf<Note?>(null) }
+    val savePdf = rememberPdfSaver()
     LaunchedEffect(section.id, reload) { notes = state.notesOf(section.id) }
 
     Column(Modifier.fillMaxSize().background(Bg)) {
@@ -69,7 +72,20 @@ fun BookScreen(state: AppState, book: Section, startNoteId: Long? = null, onBack
                 Modifier.size(40.dp).clip(CircleShape).clickable(onClick = onBack),
                 contentAlignment = Alignment.Center,
             ) { Text("→", color = TextMain, fontSize = 22.sp) }
-            Text(section.path(state.sections), color = TextMain, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+            Text(section.path(state.sections), color = TextMain, fontSize = 20.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+            // تقرير الكتاب: الملخص (إن وُجد) ثم كل الصفحات
+            notes?.let { list ->
+                PdfChip {
+                    savePdf(Report(
+                        fileName = "تقرير ${safeFileName(section.name)}.pdf",
+                        title = "تقرير: ${section.path(state.sections)}",
+                        subtitle = "${Pdf.now()} · ${list.size} ملاحظة",
+                        blocks = listOfNotNull(
+                            section.summary.takeIf { it.isNotEmpty() }?.let { ReportBlock("الملخص (كتبه الذكاء الصناعي)", it) },
+                        ) + list.map { ReportBlock(dateFmt.format(Date(it.time)), it.text) },
+                    ))
+                }
+            }
         }
 
         val list = notes ?: return@Column

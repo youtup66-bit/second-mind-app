@@ -15,6 +15,8 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val repo = Repo(Db.get(applicationContext))
+        // إعادة الكرة العائمة إن كانت مفعّلة
+        if (BubblePrefs(this).enabled && android.provider.Settings.canDrawOverlays(this)) runCatching { FloatingService.start(this) }
         setContent {
             NotesTheme {
                 CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {

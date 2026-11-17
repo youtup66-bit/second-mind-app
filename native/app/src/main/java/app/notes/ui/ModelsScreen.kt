@@ -56,6 +56,15 @@ import android.content.Intent
 import android.net.Uri
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Switch
+import android.Manifest
+import android.os.Build
+import android.provider.Settings
+import androidx.compose.foundation.layout.Box
+import androidx.compose.material3.Slider
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import app.notes.BubblePrefs
+import app.notes.FloatingService
 import app.notes.ai.DownloadState
 import app.notes.data.Backup
 import java.text.SimpleDateFormat
@@ -82,6 +91,14 @@ fun ModelsScreen(state: AppState) {
     // القوائم المنسدلة: كلها مغلقة في البداية
     val open = remember { mutableStateMapOf<String, Boolean>() }
     var gKey by remember { mutableStateOf(mm.geminiKey) }
+
+    // الكرة العائمة
+    val bubble = remember { BubblePrefs(ctxApp(state)) }
+    var bubbleOn by remember { mutableStateOf(bubble.enabled && Settings.canDrawOverlays(ctxApp(state))) }
+    var bubbleSize by remember { mutableStateOf(bubble.size) }
+    var bubbleGlow by remember { mutableStateOf(bubble.glow) }
+    var bubbleMsg by remember { mutableStateOf("") }
+    val notifPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
 
     // النسخ الاحتياطي
     val backup = remember { Backup(ctxApp(state)) }
@@ -267,6 +284,51 @@ fun ModelsScreen(state: AppState) {
                 )
             }
         }
+        item { SectionTitle("الكرة العائمة", open["bubble"] == true) { open["bubble"] = open["bubble"] != true } }
+        if (open["bubble"] == true) item {
+            Card {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("كرة فوق التطبيقات", color = TextMain)
+                        Text("تطفو فوق أي تطبيق؛ اسحبها لتحريكها، واضغطها لتفتح ملاحظاتك.", color = TextDim, fontSize = 12.sp)
+                    }
+                    Switch(checked = bubbleOn, onCheckedChange = { on ->
+                        if (on && !Settings.canDrawOverlays(ctx)) {
+                            bubbleMsg = "اسمح للتطبيق بـ«الظهور فوق التطبيقات»، ثم ارجع وفعّل الكرة."
+                            ctx.startActivity(
+                                Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:${ctx.packageName}"))
+                                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                            )
+                        } else {
+                            bubble.enabled = on; bubbleOn = on; bubbleMsg = ""
+                            if (on) {
+                                if (Build.VERSION.SDK_INT >= 33) notifPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+                                FloatingService.start(ctx)
+                            } else FloatingService.stop(ctx)
+                        }
+                    })
+                }
+                if (bubbleMsg.isNotEmpty()) Text(bubbleMsg, color = Accent2, fontSize = 13.sp)
+
+                // معاينة الكرة بالحجم والهالة المختارين
+                Box(Modifier.fillMaxWidth().height(110.dp), contentAlignment = Alignment.Center) {
+                    BubblePreview(bubbleSize, bubbleGlow)
+                }
+
+                Text("الحجم", color = TextMain, fontSize = 14.sp)
+                Slider(
+                    value = bubbleSize, onValueChange = { bubbleSize = it }, valueRange = 36f..96f,
+                    onValueChangeFinished = { bubble.size = bubbleSize; if (bubble.enabled) FloatingService.start(ctx) },
+                )
+                Text("الهالة المضيئة", color = TextMain, fontSize = 14.sp)
+                Slider(
+                    value = bubbleGlow, onValueChange = { bubbleGlow = it }, valueRange = 0f..1f,
+                    onValueChangeFinished = { bubble.glow = bubbleGlow; if (bubble.enabled) FloatingService.start(ctx) },
+                )
+                Text(if (bubbleGlow < 0.02f) "بلا هالة" else "${(bubbleGlow * 100).toInt()}٪", color = TextDim, fontSize = 12.sp)
+            }
+        }
+
         item { SectionTitle("النسخ الاحتياطي", open["backup"] == true) { open["backup"] = open["backup"] != true } }
         if (open["backup"] == true) item {
             Card {
@@ -474,3 +536,24 @@ private fun UpdateCard(u: UpdateUi) {
 private val backupFmt = SimpleDateFormat("d MMMM yyyy · HH:mm", Locale("ar"))
 
 private fun ctxApp(state: AppState) = state.models.ctx
+
+@Composable
+private fun BubblePreview(size: Float, glow: Float) {
+    val glowColor = Accent
+    androidx.compose.foundation.Canvas(Modifier.size((size * 1.8f).dp)) {
+        val c = center
+        val core = this.size.minDimension / 2f / 1.8f
+        if (glow > 0.01f) drawCircle(
+            Brush.radialGradient(
+                0f to glowColor.copy(alpha = glow * 0.67f), 0.7f to Color(0xFF4FA3FF).copy(alpha = glow * 0.33f), 1f to Color.Transparent,
+                center = c, radius = this.size.minDimension / 2f,
+            ),
+            radius = this.size.minDimension / 2f, center = c,
+        )
+        drawCircle(
+            Brush.radialGradient(listOf(Color(0xFFC4B6FF), Color(0xFF8B6CFF), Color(0xFF4F78E6)), center = c - androidx.compose.ui.geometry.Offset(core * 0.3f, core * 0.3f), radius = core * 1.3f),
+            radius = core, center = c,
+        )
+        drawCircle(Color.White.copy(alpha = 0.8f), radius = core * 0.16f, center = c - androidx.compose.ui.geometry.Offset(core * 0.35f, core * 0.35f))
+    }
+}

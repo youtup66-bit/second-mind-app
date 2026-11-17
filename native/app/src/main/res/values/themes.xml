@@ -5,4 +5,10 @@
         <item name="android:statusBarColor">#0E0B1F</item>
         <item name="android:navigationBarColor">#0E0B1F</item>
     </style>
+    <style name="QuickTheme" parent="android:Theme.Translucent.NoTitleBar">
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowIsTranslucent">true</item>
+        <item name="android:backgroundDimEnabled">true</item>
+        <item name="android:windowAnimationStyle">@android:style/Animation.Dialog</item>
+    </style>
 </resources>

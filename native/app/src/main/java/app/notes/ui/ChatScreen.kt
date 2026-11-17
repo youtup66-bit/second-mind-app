@@ -41,12 +41,15 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.notes.data.Msg
+import app.notes.data.Pdf
+import app.notes.data.ReportBlock
 
 @Composable
 fun ChatScreen(state: AppState, onModels: () -> Unit) {
     var input by remember { mutableStateOf("") }
     var showHistory by remember { mutableStateOf(false) }
     val list = rememberLazyListState()
+    val savePdf = rememberPdfSaver()
 
     LaunchedEffect(state.messages.size) {
         if (state.messages.isNotEmpty()) list.animateScrollToItem(state.messages.size - 1)
@@ -79,7 +82,22 @@ fun ChatScreen(state: AppState, onModels: () -> Unit) {
                     verticalArrangement = Arrangement.spacedBy(14.dp),
                     contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
                 ) {
-                    items(state.messages, key = { it.id }) { MessageRow(it) }
+                    items(state.messages, key = { it.id }) { m ->
+                        MessageRow(m, onPdf = {
+                            // التقرير: سؤالك (الرسالة السابقة) ثم رد الذكاء
+                            val i = state.messages.indexOf(m)
+                            val q = state.messages.subList(0, i.coerceAtLeast(0)).lastOrNull { it.role == "user" }
+                            savePdf(Report(
+                                fileName = "تقرير ${safeFileName(q?.text ?: "عقلي")}.pdf",
+                                title = q?.text?.take(80) ?: "تقرير",
+                                subtitle = "${Pdf.now()} · ${state.engine.name}",
+                                blocks = listOfNotNull(
+                                    q?.let { ReportBlock("السؤال", it.text) },
+                                    ReportBlock("الرد (كتبه الذكاء الصناعي)", m.text),
+                                ),
+                            ))
+                        })
+                    }
                     if (state.busy) item { Text("✦ ${state.status.ifEmpty { "يفكر…" }}", color = TextDim) }
                 }
             }
@@ -149,7 +167,7 @@ private fun TopIcon(glyph: String, onClick: () -> Unit) {
 }
 
 @Composable
-private fun MessageRow(m: Msg) {
+private fun MessageRow(m: Msg, onPdf: () -> Unit) {
     if (m.role == "user") {
         // رسالة المستخدم: فقاعة في جهة البداية
         Row(Modifier.fillMaxWidth()) {
@@ -166,7 +184,11 @@ private fun MessageRow(m: Msg) {
                 contentAlignment = Alignment.Center,
             ) { Text("✦", color = Color.White, fontSize = 13.sp) }
             Spacer(Modifier.width(10.dp))
-            Text(m.text, color = TextMain, fontSize = 16.sp, lineHeight = 24.sp, modifier = Modifier.weight(1f))
+            Column(Modifier.weight(1f)) {
+                Text(m.text, color = TextMain, fontSize = 16.sp, lineHeight = 24.sp)
+                Spacer(Modifier.height(6.dp))
+                PdfChip(onPdf)
+            }
         }
     }
 }
