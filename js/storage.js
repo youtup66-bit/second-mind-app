@@ -142,15 +142,74 @@ export const deleteEntry = (id) =>
 // role: 'user' | 'model'
 // used: معرّفات الملاحظات التي استعانت بها المساعد في ردها
 // engine: 'local' إن جاء الرد من النموذج على الجهاز
+// ---- محادثات المساعد المتعددة ----
+// كل رسالة تنتمي إلى محادثة (conv)؛ الرسائل القديمة بلا معرّف تُعد من المحادثة الأولى
+export const DEFAULT_CONV = 'main';
+// كل الرسائل من كل المحادثات (للتصدير والنسخ الاحتياطي)
+export const getAllMessages = async () => (await run('messages', 'readonly', (s) => s.getAll())).sort((a, b) => a.createdAt - b.createdAt);
+let activeConv = DEFAULT_CONV;
+export const activeConvId = () => activeConv;
+export function setActiveConv(id) { activeConv = id || DEFAULT_CONV; }
+
 export async function addMessage({ role, text, entryId = null, used = [], engine }) {
-  const msg = { id: crypto.randomUUID(), role, text, entryId, used, createdAt: Date.now(), ...(engine && { engine }) };
+  const msg = { id: crypto.randomUUID(), role, text, entryId, used, conv: activeConv, createdAt: Date.now(), ...(engine && { engine }) };
   await run('messages', 'readwrite', (s) => s.add(msg));
   return msg;
 }
 
 export async function getMessages(limit = 100) {
   const all = await run('messages', 'readonly', (s) => s.getAll());
-  return all.sort((a, b) => a.createdAt - b.createdAt).slice(-limit);
+  return all.filter((m) => (m.conv || DEFAULT_CONV) === activeConv).sort((a, b) => a.createdAt - b.createdAt).slice(-limit);
+}
+
+const freshConv = (id = DEFAULT_CONV) => ({ id, title: 'محادثة جديدة', createdAt: Date.now(), updatedAt: Date.now() });
+
+// قائمة المحادثات (الأحدث أولاً)
+export async function listConvs() {
+  const list = await getSetting('convs', null);
+  if (Array.isArray(list) && list.length) return list;
+  return [freshConv()];
+}
+const saveConvs = (list) => setSetting('convs', list);
+
+// يستعيد المحادثة المفتوحة عند فتح التطبيق
+export async function initConvs() {
+  setActiveConv(await getSetting('activeConv', DEFAULT_CONV));
+}
+
+export async function openConv(id) {
+  setActiveConv(id);
+  await setSetting('activeConv', activeConv);
+}
+
+export async function createConv() {
+  const c = freshConv(crypto.randomUUID());
+  await saveConvs([c, ...(await listConvs())]);
+  await openConv(c.id);
+  return c;
+}
+
+export async function renameConv(id, title) {
+  const clean = String(title || '').trim().slice(0, 60);
+  if (!clean) return;
+  const list = (await listConvs()).map((c) => (c.id === id ? { ...c, title: clean, updatedAt: Date.now() } : c));
+  await saveConvs(list);
+}
+
+// يحذف المحادثة ورسائلها؛ إن كانت المفتوحة ينتقل إلى الأحدث المتبقي
+export async function deleteConv(id) {
+  let list = (await listConvs()).filter((c) => c.id !== id);
+  const all = await run('messages', 'readonly', (s) => s.getAll());
+  for (const m of all) if ((m.conv || DEFAULT_CONV) === id) await deleteMessage(m.id);
+  if (!list.length) list = [freshConv()];
+  await saveConvs(list);
+  if (activeConv === id) await openConv(list[0].id);
+  return list;
+}
+
+export async function touchConv(id) {
+  const list = (await listConvs()).map((c) => (c.id === id ? { ...c, updatedAt: Date.now() } : c));
+  await saveConvs(list);
 }
 
 export const getMessage = (id) => run('messages', 'readonly', (s) => s.get(id));

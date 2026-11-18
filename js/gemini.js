@@ -680,3 +680,12 @@ export async function reviseDocument(system, user) {
     generationConfig: { temperature: 0.2, maxOutputTokens: 8192 },
   }, 'summary');
 }
+
+// عنوان قصير لمحادثة المساعد (من أول رسالة ورد)
+export async function chatTitle(text) {
+  return generate({
+    systemInstruction: { parts: [{ text: 'اكتب عنواناً عربياً قصيراً (من 2 إلى 5 كلمات) يلخّص موضوع هذه المحادثة. أعد العنوان فقط، بلا علامات ترقيم ولا رموز.' }] },
+    contents: [{ role: 'user', parts: [{ text: String(text).slice(0, 2000) }] }],
+    generationConfig: { temperature: 0.3, maxOutputTokens: 30 },
+  }, 'summary');
+}

@@ -1271,3 +1271,21 @@ body.on-group .tasks .wa-head { padding-top: calc(env(safe-area-inset-top) + 8px
 .file-card b { word-break: break-all; }
 .file-card small { color: var(--muted, #8696a0); }
 .file-card__actions { display: flex; gap: 8px; }
+
+/* ---- المحادثات المتعددة للمساعد ---- */
+.conv-bar { display: flex; align-items: center; justify-content: space-between; direction: ltr; padding: 6px 10px; border-bottom: 1px solid var(--border, #2a3942); background: var(--bg-2, #202c33); }
+.conv-bar__btn { background: none; border: 0; color: var(--text, #e9edef); padding: 6px; border-radius: 10px; cursor: pointer; display: grid; place-items: center; }
+.conv-bar__btn:active { background: var(--surface-2, #2a3942); }
+.conv-bar__title { flex: 1; text-align: center; font-weight: 700; color: var(--text, #e9edef); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; direction: rtl; padding: 0 8px; }
+.conv-sheet { max-height: 45vh; overflow-y: auto; border-bottom: 1px solid var(--border, #2a3942); background: var(--bg, #0b141a); }
+.conv-sheet[hidden] { display: none; }
+.conv-list { list-style: none; margin: 0; padding: 0; }
+.conv-item { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 12px 14px; border-bottom: 1px solid rgba(255,255,255,.06); cursor: pointer; user-select: none; }
+.conv-item.is-active .conv-item__title { color: var(--wa-green, #00a884); }
+.conv-item__title { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.conv-item__actions { display: flex; gap: 6px; }
+.conv-item__actions[hidden] { display: none; }
+.conv-item__btn { background: var(--surface-2, #2a3942); border: 0; border-radius: 10px; padding: 6px 10px; cursor: pointer; font-size: 1rem; }
+.conv-item__input { flex: 1; font: inherit; padding: 6px 8px; border-radius: 8px; border: 1px solid var(--accent, #00a884); background: var(--surface-2, #2a3942); color: var(--text, #e9edef); }
+.conv-empty { padding: 14px; cursor: default; }
+.chats-groups-open { display: block; margin: 24px auto; width: max-content; padding: 12px 22px; border-radius: 16px; background: var(--wa-green, #00a884); color: #111b21; font-weight: 700; text-decoration: none; }

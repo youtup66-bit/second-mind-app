@@ -7,6 +7,8 @@ import { transcribe } from '../gemini.js';
 import { smartChat } from '../ai.js';
 import { exportChatFile } from '../backup.js';
 import { editLastReport, reportFile, textReportFile, reportsContext } from '../report-build.js';
+import { initConvs, activeConvId, listConvs, createConv, openConv, renameConv, deleteConv, touchConv } from '../storage.js';
+import { chatTitle } from '../gemini.js';
 import { saveFile, shareFile } from '../native-files.js';
 import { executeActions } from '../actions.js';
 import { setActionContext, setReportsContext } from '../actions-spec.js';
@@ -70,8 +72,15 @@ export async function mount(root) {
   // تطبيق مؤسسة: محادثة عادية مثل واتساب دائماً، بلا شخصية مرسومة (الذكاء كما هو)
   const plain = true;
 
+  await initConvs();
   root.innerHTML = `
     <section class="chat${plain ? ' chat--wa chat--plain' : ''}">
+      <div class="conv-bar" id="conv-bar">
+        <button type="button" class="conv-bar__btn" id="conv-new" aria-label="محادثة جديدة"><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>
+        <span class="conv-bar__title" id="conv-title"></span>
+        <button type="button" class="conv-bar__btn" id="conv-menu" aria-label="المحادثات السابقة"><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>
+      </div>
+      <div class="conv-sheet" id="conv-sheet" hidden><ul class="conv-list" id="conv-list"></ul></div>
       <header class="wa-head" id="wa-head" hidden>
         <button type="button" class="wa-head__who" id="wa-who" aria-label="أظهر المساعد">
           <span class="wa-avatar" id="wa-avatar" aria-hidden="true"></span>
@@ -390,15 +399,140 @@ export async function mount(root) {
     if (chip) renderChip(chip, entry);
   }
 
-  const entriesById = Object.fromEntries((await getEntries()).map((e) => [e.id, e]));
-  (await getMessages(50)).forEach((m) => {
-    const li = append(m, {
-      entry: m.role === 'user' && m.entryId ? entriesById[m.entryId] || null : null,
-      used: (m.used || []).map((id) => entriesById[id]).filter(Boolean),
+  // رسائل المحادثة المفتوحة (تُعاد كتابتها عند فتح محادثة أخرى)
+  async function renderHistory() {
+    const entriesById = Object.fromEntries((await getEntries()).map((e) => [e.id, e]));
+    (await getMessages(50)).forEach((m) => {
+      const li = append(m, {
+        entry: m.role === 'user' && m.entryId ? entriesById[m.entryId] || null : null,
+        used: (m.used || []).map((id) => entriesById[id]).filter(Boolean),
+      });
+      markEngine(li, m.engine);
+      if (m.actions) renderActions(li, m.actions);
     });
-    markEngine(li, m.engine);
-    if (m.actions) renderActions(li, m.actions);
+  }
+  await renderHistory();
+
+  // ---- المحادثات المتعددة: شريط بعلامة + وقائمة ----
+  const convBar = root.querySelector('#conv-bar');
+  const convTitle = root.querySelector('#conv-title');
+  const convSheet = root.querySelector('#conv-sheet');
+  const convList = root.querySelector('#conv-list');
+  const DEFAULT_TITLE = 'محادثة جديدة';
+  async function updateBarTitle() {
+    const cur = (await listConvs()).find((c) => c.id === activeConvId());
+    convTitle.textContent = cur?.title || DEFAULT_TITLE;
+  }
+  async function reloadConversation() {
+    log.innerHTML = '';
+    await renderHistory();
+    await updateBarTitle();
+    if (!convSheet.hidden) await renderConvList();
+  }
+  async function renderConvList() {
+    const list = (await listConvs()).slice().sort((a, b) => b.updatedAt - a.updatedAt);
+    const active = activeConvId();
+    convList.innerHTML = list.map((c) => `<li class="conv-item${c.id === active ? ' is-active' : ''}" data-id="${escapeHtml(c.id)}">
+        <span class="conv-item__title">${escapeHtml(c.title)}</span>
+        <span class="conv-item__actions" hidden>
+          <button type="button" class="conv-item__btn" data-act="edit" aria-label="تعديل الاسم">✏️</button>
+          <button type="button" class="conv-item__btn" data-act="del" aria-label="حذف">🗑</button>
+        </span>
+      </li>`).join('') || '<li class="muted conv-empty">لا محادثات بعد.</li>';
+  }
+  async function toggleConvList(force) {
+    const show = typeof force === 'boolean' ? force : convSheet.hidden;
+    convSheet.hidden = !show;
+    if (show) await renderConvList();
+  }
+  root.querySelector('#conv-menu').addEventListener('click', () => toggleConvList());
+  root.querySelector('#conv-new').addEventListener('click', async () => {
+    if (busy) { say('لحظة، ما زلت أفكر في رسالتك السابقة…'); return; }
+    await createConv();
+    await reloadConversation();
+    await toggleConvList(false);
   });
+
+  // ضغطة واحدة: تظهر أيقونتا التعديل والحذف. ضغطتان سريعتان: تُفتح المحادثة
+  let tap = { id: '', at: 0 };
+  let tapTimer = null;
+  function selectConvItem(li) {
+    convList.querySelectorAll('.conv-item.is-selected').forEach((x) => {
+      if (x !== li) { x.classList.remove('is-selected'); x.querySelector('.conv-item__actions').hidden = true; }
+    });
+    const on = li.classList.toggle('is-selected');
+    li.querySelector('.conv-item__actions').hidden = !on;
+  }
+  async function openFromList(id) {
+    await openConv(id);
+    await reloadConversation();
+    await toggleConvList(false);
+  }
+  async function renameFromList(li) {
+    const id = li.dataset.id;
+    const title = li.querySelector('.conv-item__title');
+    const input = Object.assign(document.createElement('input'), { className: 'conv-item__input', value: title.textContent, maxLength: 60 });
+    title.replaceWith(input);
+    input.focus();
+    let done = false;
+    const save = async (keep) => {
+      if (done) return;
+      done = true;
+      if (keep && input.value.trim()) await renameConv(id, input.value.trim());
+      await renderConvList();
+      await updateBarTitle();
+    };
+    input.addEventListener('keydown', (e) => { if (e.key === 'Enter') save(true); if (e.key === 'Escape') save(false); });
+    input.addEventListener('blur', () => save(true));
+  }
+  async function removeFromList(id) {
+    const list = await listConvs();
+    const name = list.find((c) => c.id === id)?.title || DEFAULT_TITLE;
+    if (!confirm(`حذف «${name}» مع كل رسائلها نهائياً؟`)) return;
+    const wasActive = id === activeConvId();
+    await deleteConv(id);
+    if (wasActive) await reloadConversation();
+    else { await updateBarTitle(); await renderConvList(); }
+  }
+  convList.addEventListener('click', async (e) => {
+    const li = e.target.closest('.conv-item');
+    if (!li) return;
+    const act = e.target.closest('[data-act]')?.dataset.act;
+    if (act === 'edit') return renameFromList(li);
+    if (act === 'del') return removeFromList(li.dataset.id);
+    if (e.target.closest('.conv-item__input')) return;
+    const id = li.dataset.id;
+    const now = Date.now();
+    if (tap.id === id && now - tap.at < 350) {
+      clearTimeout(tapTimer);
+      tap = { id: '', at: 0 };
+      return openFromList(id);
+    }
+    tap = { id, at: now };
+    clearTimeout(tapTimer);
+    tapTimer = setTimeout(() => selectConvItem(li), 350);
+  });
+
+  // بعد أول رد في المحادثة: عنوان قصير يكتبه الذكاء
+  async function autoTitle() {
+    const id = activeConvId();
+    await touchConv(id);
+    const cur = (await listConvs()).find((c) => c.id === id);
+    if (!cur || cur.title !== DEFAULT_TITLE) { await updateBarTitle(); return; }
+    const msgs = await getMessages(4);
+    const firstUser = msgs.find((m) => m.role === 'user');
+    const lastModel = [...msgs].reverse().find((m) => m.role === 'model' && m.text && !m.text.startsWith('⚠️'));
+    if (!firstUser || !lastModel) return;
+    let title = '';
+    try {
+      title = String(await chatTitle(`${firstUser.text}\n${lastModel.text}`)).replace(/["'«»؟?!.:،]/g, '').trim();
+    } catch { /* يُستعمل الاحتياطي أدناه */ }
+    if (!title) title = firstUser.text.split(/\s+/).slice(0, 4).join(' ');
+    await renameConv(id, title.slice(0, 60));
+    await updateBarTitle();
+    if (!convSheet.hidden) await renderConvList();
+  }
+  await updateBarTitle();
 
   // ما فات تصنيفه سابقاً (بلا مفتاح أو اتصال) نصنّفه الآن بهدوء
   classifyPending(refreshChip).then(() => {
@@ -674,6 +808,7 @@ export async function mount(root) {
       pending.querySelector('.msg__text').textContent = reply;
       pending.classList.remove('msg--pending');
       renderUsed(pending, used);
+      autoTitle().catch(() => {});
       lastReplyBubble = escapeHtml(bubbleText(reply));
       say(lastReplyBubble);
       log.scrollTop = log.scrollHeight;

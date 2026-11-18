@@ -439,7 +439,16 @@ async function mountList(root, s, syncErr, mode, tab = 'chats') {
   const shareReady = await pendingShare().catch(() => false);
   // نافذة المجموعات: القائمة نفسها بلا كرة المساعد (المساعد يبقى في نافذته)
   const groupsView = new URLSearchParams(location.hash.split('?')[1] || '').get('view') === 'groups';
-  const showOrb = !groupsView && (s.member.role === 'manager' || !!groupBranch()?.perms?.assistant);
+  const showOrb = s.member.role === 'manager' || !!groupBranch()?.perms?.assistant;
+  // الشاشة الرئيسية للمحادثات: الكرة فقط، وكلمة «مجموعات» تفتح نافذة الكروبات بتبويباتها
+  if (!groupsView) {
+    root.innerHTML = `
+      <section class="chat chat--wa chat--plain chat--group g-list chats-main">
+        ${showOrb ? `<a class="chats-orb" href="#/home" aria-label="المساعد"><span class="chats-orb__ball" aria-hidden="true"></span></a>` : ''}
+        <a class="chats-groups-open" href="#/chats?tab=chats&view=groups">مجموعات</a>
+      </section>`;
+    return;
+  }
   root.innerHTML = `
     <section class="chat chat--wa chat--plain chat--group g-list">
       ${showOrb ? `<a class="chats-orb" href="#/home" aria-label="المساعد"><span class="chats-orb__ball" aria-hidden="true"></span></a>` : ''}
@@ -546,7 +555,7 @@ async function mountList(root, s, syncErr, mode, tab = 'chats') {
     if (tab === 'chats' && groupOnline()) {
       // كلمة جانبية بدل عدد المجموعات: «مجموعات» تفتح نافذتها، وفيها «المساعد» للعودة
       statusEl.innerHTML = groupsView
-        ? '<a class="chats-groups-link" href="#/home">← المساعد</a>'
+        ? '<a class="chats-groups-link" href="#/chats">← المساعد</a>'
         : '<a class="chats-groups-link" href="#/chats?tab=chats&view=groups">مجموعات</a>';
     } else {
       statusEl.textContent = !groupOnline() ? 'بلا إنترنت' : !n ? '' : `${n} ${n === 1 ? 'مجموعة' : n === 2 ? 'مجموعتان' : n <= 10 ? 'مجموعات' : 'مجموعة'}`;
