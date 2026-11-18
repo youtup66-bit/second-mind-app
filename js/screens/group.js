@@ -439,7 +439,8 @@ async function mountList(root, s, syncErr, mode, tab = 'chats') {
   const shareReady = await pendingShare().catch(() => false);
   // نافذة المجموعات: القائمة نفسها بلا كرة المساعد (المساعد يبقى في نافذته)
   const groupsView = new URLSearchParams(location.hash.split('?')[1] || '').get('view') === 'groups';
-  const showOrb = s.member.role === 'manager' || !!groupBranch()?.perms?.assistant;
+  // الكرة تظهر في الشاشة الرئيسية للمحادثات فقط، لا في نافذة المجموعات
+  const showOrb = !groupsView && (s.member.role === 'manager' || !!groupBranch()?.perms?.assistant);
   // الشاشة الرئيسية للمحادثات: الكرة فقط، وكلمة «مجموعات» تفتح نافذة الكروبات بتبويباتها
   if (!groupsView) {
     root.innerHTML = `
@@ -559,9 +560,8 @@ async function mountList(root, s, syncErr, mode, tab = 'chats') {
     const n = shown.length;
     if (tab === 'chats' && groupOnline()) {
       // كلمة جانبية بدل عدد المجموعات: «مجموعات» تفتح نافذتها، وفيها «المساعد» للعودة
-      statusEl.innerHTML = groupsView
-        ? '<a class="chats-groups-link" href="#/chats">← المساعد</a>'
-        : '<a class="chats-groups-link" href="#/chats?tab=chats&view=groups">مجموعات</a>';
+      // نافذة المجموعات بلا روابط للمساعد: هو خارجها
+      statusEl.innerHTML = groupsView ? '' : '<a class="chats-groups-link" href="#/chats?tab=chats&view=groups">مجموعات</a>';
     } else {
       statusEl.textContent = !groupOnline() ? 'بلا إنترنت' : !n ? '' : `${n} ${n === 1 ? 'مجموعة' : n === 2 ? 'مجموعتان' : n <= 10 ? 'مجموعات' : 'مجموعة'}`;
     }
