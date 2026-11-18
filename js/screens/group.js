@@ -469,20 +469,20 @@ async function mountList(root, s, syncErr, mode, tab = 'chats') {
       root.querySelector('#chats-side')?.classList.toggle('is-open');
       root.querySelector('#daily-side')?.classList.toggle('is-open');
     });
-    // سحب إصبع للأعلى من وسط الشاشة يفتح نافذة المساعد
+    // سحب إصبع من أسفل الشاشة للأعلى يفتح نافذة المساعد
     {
       let sx = 0, sy = 0, startMid = false;
       const main = root.querySelector('.chats-main');
       main?.addEventListener('touchstart', (e) => {
         const t = e.touches[0];
         sx = t.clientX; sy = t.clientY;
-        startMid = t.clientY > window.innerHeight * 0.3 && t.clientY < window.innerHeight * 0.7;
+        startMid = t.clientY > window.innerHeight * 0.6; // نصف الشاشة السفلي
       }, { passive: true });
       main?.addEventListener('touchend', (e) => {
         if (!startMid) return;
         const t = e.changedTouches[0];
         const dx = t.clientX - sx, dy = t.clientY - sy;
-        if (dy < -90 && Math.abs(dx) < 70) location.hash = '#/home';
+        if (dy < -90 && Math.abs(dx) < 90) location.hash = '#/home';
       }, { passive: true });
     }
     return;
