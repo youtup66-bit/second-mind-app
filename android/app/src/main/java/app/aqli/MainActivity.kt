@@ -139,9 +139,18 @@ class MainActivity : ComponentActivity() {
         // تحديث الصفحة من داخل التطبيق
         web.addJavascriptInterface(AppBridge(), "AqliApp")
 
+        // الرجوع: من الشاشات الرئيسية (المحادثات والمساعد) يخرج من التطبيق مباشرة،
+        // ومن أي شاشة فرعية (مثل نافذة المجموعات) يعود إلى المحادثات دون المرور بخطوات السجل
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
-                if (web.canGoBack()) web.goBack() else finish()
+                web.evaluateJavascript(
+                    "(function(){var h=location.hash||'';var p=h.split('?')[0];var q=h.split('?')[1]||'';" +
+                        "var root=(p===''||p==='#'||p==='#/home'||(p==='#/chats'&&!/view=groups/.test(q)&&!/tab=(sections|people)/.test(q)));" +
+                        "return root?'root':'sub';})()"
+                ) { r ->
+                    if (r?.contains("root") == true) finish()
+                    else web.evaluateJavascript("location.replace('#/chats')", null)
+                }
             }
         })
 
