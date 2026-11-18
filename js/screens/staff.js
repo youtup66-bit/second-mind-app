@@ -12,6 +12,8 @@ const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<
 const initial = (name) => esc(String(name || '؟').trim().charAt(0));
 
 let alive = false;
+// المنتسبون الذين ليسوا في الهيكل في آخر عرض للقائمة
+let looseNow = [];
 
 export async function mount(root) {
   alive = true;
@@ -37,6 +39,8 @@ export async function mount(root) {
       ${staffTabs('staff')}
       <p class="muted staff__org">${esc(s.org?.name)}</p>
       <ul class="staff-list" id="list" aria-label="المنتسبين"></ul>
+      <button type="button" class="text-row text-row--danger" id="remove-loose" hidden></button>
+      <p class="status" id="loose-msg" role="status"></p>
       <details class="removed-staff" id="removed" hidden>
         <summary>المنتسبون المحذوفون</summary>
         <ul class="removed-list" id="removed-list"></ul>
@@ -83,6 +87,13 @@ export async function mount(root) {
     }
     if (!alive) return;
     const staff = members.filter((m) => m.role === 'employee');
+    // المنتسبون الذين ليسوا في الهيكل (بلا مكان موزَّعين فيه): يُعرض زر لإزالتهم دفعة واحدة
+    const { loadStructure: loadSt, placesOf } = await import('../org-structure.js');
+    const structure = await loadSt().catch(() => null);
+    looseNow = structure ? staff.filter((m) => !placesOf(structure, m.user_id).length) : [];
+    const looseBtn = root.querySelector('#remove-loose');
+    looseBtn.hidden = !looseNow.length;
+    looseBtn.textContent = `إزالة كل من ليس في الهيكل (${looseNow.length})`;
     // النقاط أمام الأسماء (حسب الفترة المختارة في شاشة النقاط)
     const period = await getSetting('pointsPeriod', 'month');
     const t = await totals(period).catch(() => new Map());
@@ -175,6 +186,28 @@ export async function mount(root) {
       return render();
     }
   };
+  // إزالة كل من ليس في الهيكل دفعة واحدة (بعد تأكيد يعرض الأسماء)
+  root.querySelector('#remove-loose').addEventListener('click', async () => {
+    const people = looseNow.slice();
+    if (!people.length) return;
+    const names = people.map((m) => m.display_name).join('، ');
+    if (!confirm(`إزالة ${people.length} من المنتسبين غير الموجودين في الهيكل؟\n${names}\nلن يستطيعوا الدخول بعد ذلك.`)) return;
+    const msg = root.querySelector('#loose-msg');
+    const btn = root.querySelector('#remove-loose');
+    btn.disabled = true;
+    let done = 0;
+    const failed = [];
+    for (const m of people) {
+      msg.textContent = `جارٍ الإزالة… ${done + failed.length + 1} من ${people.length}`;
+      try { await removeMember(m.user_id); done++; } catch (e) { failed.push(`${m.display_name} (${e.message})`); }
+    }
+    btn.disabled = false;
+    msg.className = failed.length ? 'status status--err' : 'status status--ok';
+    msg.textContent = failed.length
+      ? `أُزيل ${done}، وتعذّر إزالة: ${failed.join('، ')}`
+      : `أُزيل ${done} من المنتسبين ✓`;
+    if (alive) render();
+  });
   root.querySelector('#removed').addEventListener('click', onRemovedClick);
   root.querySelector('#archived').addEventListener('click', onRemovedClick);
   list.addEventListener('click', (e) => {
