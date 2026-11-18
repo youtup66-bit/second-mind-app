@@ -50,5 +50,6 @@ android {
 dependencies {
     implementation("androidx.activity:activity-ktx:1.9.0")
     implementation("androidx.core:core-ktx:1.13.1")
+    implementation("androidx.webkit:webkit:1.12.1")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
 }

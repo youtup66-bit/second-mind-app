@@ -33,6 +33,11 @@ jobs:
           # إضافة عقلي الثاني: دالة إعادة ضبط السياق (A25) تُلحق بآخر الملف لتصل إلى دوال المحرك الساكنة
           cat android/app/src/main/cpp/aqli_reset.inc >> android/app/src/main/cpp/ai_chat.cpp
 
+      - name: تجهيز صفحة التطبيق داخل الـ APK
+        run: |
+          mkdir -p android/app/src/main/assets/app
+          cp -r index.html manifest.webmanifest sw.js css js icons android/app/src/main/assets/app/
+
       - name: مفتاح التوقيع
         env:
           KS: ${{ secrets.APK_KEYSTORE_B64 }}

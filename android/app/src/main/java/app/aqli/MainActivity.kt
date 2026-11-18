@@ -17,19 +17,26 @@ import android.webkit.WebViewClient
 import androidx.activity.ComponentActivity
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.webkit.WebViewAssetLoader
 
 // الغلاف: يفتح التطبيق (الموقع) داخل متصفح مدمج يملك أذوناته، ويتولى نافذة اختيار الصور والمشاركة
 class MainActivity : ComponentActivity() {
 
     companion object {
         // رابط نسخة التجربة؛ يُغيَّر إلى الرابط الرسمي عند الحاجة
-        const val START_URL = "https://youtup66-bit.github.io/second-mind-app/dev/"
-        const val HOST = "youtup66-bit.github.io"
+        // الصفحة مضمّنة في الـ APK نفسه (مجلد assets/app)، فتعمل دون إنترنت
+        const val START_URL = "https://appassets.androidplatform.net/assets/app/index.html"
+        const val HOST = "appassets.androidplatform.net"
+        // الروابط العامة (الدعوات) تُفتح داخل التطبيق أيضاً
+        const val PUBLIC_HOST = "youtup66-bit.github.io"
     }
 
     private lateinit var web: WebView
     private var filePathCallback: ValueCallback<Array<Uri>>? = null
     private var pendingShare: String? = null
+    private val assets by lazy {
+        WebViewAssetLoader.Builder().addPathHandler("/assets/", WebViewAssetLoader.AssetsPathHandler(this)).build()
+    }
 
     private val pickFiles = registerForActivityResult(ActivityResultContracts.GetMultipleContents()) { uris ->
         filePathCallback?.onReceiveValue(uris.toTypedArray())
@@ -68,9 +75,13 @@ class MainActivity : ComponentActivity() {
             allowFileAccess = false
         }
         web.webViewClient = object : WebViewClient() {
+            // ملفات الصفحة من أصول الـ APK
+            override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): android.webkit.WebResourceResponse? =
+                assets.shouldInterceptRequest(request.url)
+
             // الروابط الخارجية تُفتح في المتصفح الافتراضي، ويبقى التطبيق على موقعه
             override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
-                if (request.url.host == HOST) return false
+                if (request.url.host == HOST || request.url.host == PUBLIC_HOST) return false
                 startActivity(Intent(Intent.ACTION_VIEW, request.url))
                 return true
             }

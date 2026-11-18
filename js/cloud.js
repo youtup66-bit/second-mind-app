@@ -280,7 +280,8 @@ const unb64 = (s) => decodeURIComponent(escape(atob(s.replace(/-/g, '+').replace
 export async function inviteLink(code) {
   const cfg = await cloudConfig();
   const p = new URLSearchParams({ c: code, f: b64(JSON.stringify(cfg)) });
-  return `${location.origin}${location.pathname}#/join?${p}`;
+  const { PUBLIC_BASE } = await import('./env.js');
+  return `${PUBLIC_BASE}#/join?${p}`;
 }
 
 // يقرأ رابط الدعوة: يحفظ إعداد المؤسسة منه ثم يجلب الاسم واسم المستخدم

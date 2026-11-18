@@ -19,7 +19,7 @@ import { setOrbVisible } from './orb-float.js';
 import { startGroupSync, groupEvents, unreadCount, groupBranch, waitBranch } from './group.js';
 import { autoSnapshot } from './backup.js';
 import { getSetting } from './storage.js';
-import { IS_DEV } from './env.js';
+import { IS_DEV, IS_BUNDLED } from './env.js';
 import { loadCategories } from './categories.js';
 
 const routes = { home, mind, folder, settings, org, join: org, staff, group, chats, branch, tasks, structure, points, reports };
@@ -286,6 +286,7 @@ if ('serviceWorker' in navigator) {
     location.reload();
   });
   window.addEventListener('load', async () => {
+    if (IS_BUNDLED) return; // داخل الـ APK الملفات محلية، ولا تحتاج عامل خدمة
     try {
       const reg = await navigator.serviceWorker.register('./sw.js');
       const watch = (w) => w?.addEventListener('statechange', () => {
