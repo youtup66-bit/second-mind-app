@@ -124,6 +124,10 @@ export async function mount(root) {
       <label class="look-row"><span>اللون</span><input type="color" id="ic-color" value="#4ade80"></label>
       <label class="look-row"><span>الشفافية <b id="ic-alpha-out">100%</b></span><input type="range" id="ic-alpha" min="10" max="100" step="5" value="100"></label>
       <div class="text-btns"><button class="text-btn text-btn--muted" type="button" id="ic-reset">إعادة الافتراضي</button></div>
+      <h3 class="subhead">الكرة الرئيسية</h3>
+      <label class="look-row"><span>اللون</span><input type="color" id="orb-color" value="#4ade80"></label>
+      <label class="look-row"><span>التوهج <b id="orb-glow-out">100%</b></span><input type="range" id="orb-glow" min="0" max="100" step="5" value="100"></label>
+      <div class="text-btns"><button class="text-btn text-btn--muted" type="button" id="orb-reset">إعادة الافتراضي</button></div>
     </section>
 
     <section class="card" id="voice">
@@ -395,6 +399,7 @@ export async function mount(root) {
 
   bindAppUpdate(root);
   bindIconStyle(root);
+  bindOrbStyle(root);
   root.querySelector('#ai-check-btn').addEventListener('click', async () => {
     const { aiCheck } = await import('../ai-check.js');
     const out = root.querySelector('#ai-check');
@@ -902,6 +907,31 @@ async function bindIconStyle(root) {
     await deleteSetting('iconAlpha');
     c.value = '#4ade80';
     a.value = 100;
+    out.textContent = '100%';
+  });
+}
+
+// لون الكرة الرئيسية وتوهجها (تُقرأ في شاشة المحادثات)
+async function bindOrbStyle(root) {
+  const c = root.querySelector('#orb-color');
+  const g = root.querySelector('#orb-glow');
+  const out = root.querySelector('#orb-glow-out');
+  if (!c || !g) return;
+  const color = await getSetting('orbColor', '#4ade80');
+  const glow = Number(await getSetting('orbGlow', 100));
+  c.value = /^#[0-9a-f]{6}$/i.test(color) ? color : '#4ade80';
+  g.value = Number.isFinite(glow) ? glow : 100;
+  out.textContent = `${g.value}%`;
+  c.addEventListener('input', () => setSetting('orbColor', c.value));
+  g.addEventListener('input', () => {
+    out.textContent = `${g.value}%`;
+    setSetting('orbGlow', Number(g.value));
+  });
+  root.querySelector('#orb-reset')?.addEventListener('click', async () => {
+    await deleteSetting('orbColor');
+    await deleteSetting('orbGlow');
+    c.value = '#4ade80';
+    g.value = 100;
     out.textContent = '100%';
   });
 }

@@ -1,6 +1,6 @@
 :root {
-  --bg: #0b141a;
-  --bg-2: #202c33;
+  --bg: #071a14;
+  --bg-2: #0f2e24;
   --surface: #111b21;
   --surface-2: #2a3942;
   --border: #2a3942;
@@ -21,7 +21,7 @@
 html, body { margin: 0; height: 100%; }
 
 body {
-  background: var(--bg);
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 900 1800' preserveAspectRatio='none'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' x2='1' y1='0' y2='0'%3E%3Cstop offset='0' stop-color='%234ade80' stop-opacity='0'/%3E%3Cstop offset='.5' stop-color='%234ade80' stop-opacity='.28'/%3E%3Cstop offset='1' stop-color='%2386efac' stop-opacity='0'/%3E%3C/linearGradient%3E%3C/defs%3E%3Cpath d='M-50 150C250 20 520 300 950 90V0H-50Z' fill='url(%23g)'/%3E%3Cpath d='M-50 1450C300 1250 560 1650 950 1380V1800H-50Z' fill='url(%23g)'/%3E%3Cpath d='M-50 820C260 700 520 960 950 760' stroke='%234ade80' stroke-opacity='.18' stroke-width='3' fill='none'/%3E%3Cpath d='M-50 1600C300 1440 600 1700 950 1500' stroke='%2386efac' stroke-opacity='.16' stroke-width='3' fill='none'/%3E%3C/svg%3E") center / 100% 100% no-repeat, radial-gradient(120% 60% at 50% 0%, #0f3d2c 0%, #071a14 45%, #04100c 100%);
   background-color: var(--bg);
   color: var(--text);
   font-size: 16px;
@@ -588,7 +588,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); margin: 4px 0 12
 .msg__time, .wa-day { display: none; }
 
 .chat--wa {
-  --wa-bg: #0b141a; --wa-head: #202c33; --wa-out: #005c4b; --wa-in: #202c33; --wa-green: #00a884;
+  --wa-bg: transparent; --wa-head: rgba(7,26,20,.72); --wa-out: #0b5a3f; --wa-in: #0f2e24; --wa-green: #22c55e;
   --wa-text: #e9edef; --wa-meta: #8696a0;
   margin: -16px -16px 0; padding: 0; gap: 0;
   height: calc(100dvh - var(--tabbar-h) - env(safe-area-inset-bottom) - 58px);
@@ -1294,13 +1294,15 @@ body.on-group .tasks .wa-head { padding-top: calc(env(safe-area-inset-top) + 8px
 .chats-groups-side, .chats-mind-side, .chats-nav-side { color: var(--text, #e9edef); font-size: 1.05rem; font-weight: 700; text-decoration: none; display: flex; align-items: center; gap: 10px; min-width: 190px; height: 52px; box-sizing: border-box; padding: 0 12px; border-radius: 14px; border: 1px solid rgba(255,255,255,.12); }
 .side-ico { color: var(--icon-color, #4ade80); opacity: var(--icon-alpha, 1); flex-shrink: 0; }
 .look-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 8px 0; }
+/* الخلفية الموحدة للتطبيق (الموجات الخضراء من body) تظهر في المحادثات أيضاً */
+.chat--wa { background-image: none; }
 /* الشاشة الرئيسية: كرة خضراء كبيرة في الوسط تتنفس، والقوائم الجانبية شفافة تنسدل عند اللمس */
 .chats-main--home { position: relative; min-height: 100dvh; overflow: hidden; }
 .chats-main--home .chats-orb { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); padding: 0; margin: 0; }
-.chats-main--home .chats-orb__ball { width: 260px; height: 260px; background: radial-gradient(circle at 34% 28%, #e6fff3 0%, #4ade80 20%, #16a34a 58%, #063b28 100%); animation: home-breathe 4s ease-in-out infinite; }
+.chats-main--home .chats-orb__ball { width: 260px; height: 260px; background: radial-gradient(circle at 34% 28%, color-mix(in srgb, var(--orb, #4ade80) 25%, white) 0%, var(--orb, #4ade80) 22%, color-mix(in srgb, var(--orb, #4ade80) 70%, black) 60%, color-mix(in srgb, var(--orb, #4ade80) 25%, black) 100%); animation: home-breathe 4s ease-in-out infinite; }
 @keyframes home-breathe {
-  0%, 100% { transform: scale(1); box-shadow: 0 0 60px 14px rgba(74,222,128,.42); }
-  50% { transform: scale(1.06); box-shadow: 0 0 90px 26px rgba(74,222,128,.6); }
+  0%, 100% { transform: scale(1); box-shadow: 0 0 60px 14px color-mix(in srgb, var(--orb, #4ade80) calc(42% * var(--orb-glow, 1)), transparent); }
+  50% { transform: scale(1.06); box-shadow: 0 0 90px 26px color-mix(in srgb, var(--orb, #4ade80) calc(60% * var(--orb-glow, 1)), transparent); }
 }
 .chats-main--home .chats-side, .chats-main--home .daily-side { background: transparent; }
 .chats-main--home .chats-side a, .chats-main--home .chats-side a:hover { background: transparent; }

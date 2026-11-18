@@ -447,6 +447,11 @@ async function mountList(root, s, syncErr, mode, tab = 'chats') {
     const hex = await getSetting('iconColor', '#4ade80');
     const alpha = Math.min(100, Math.max(10, Number(await getSetting('iconAlpha', 100)) || 100));
     const iconStyle = `--icon-color:${/^#[0-9a-f]{6}$/i.test(hex) ? hex : '#4ade80'};--icon-alpha:${alpha / 100}`;
+    // لون الكرة الرئيسية وتوهجها (من الإعدادات)
+    const orbHex = await getSetting('orbColor', '#4ade80');
+    const glowRaw = Number(await getSetting('orbGlow', 100));
+    const glow = Number.isFinite(glowRaw) ? Math.min(100, Math.max(0, glowRaw)) : 100;
+    const orbStyle = `--orb:${/^#[0-9a-f]{6}$/i.test(orbHex) ? orbHex : '#4ade80'};--orb-glow:${glow / 100}`;
     const IC = {
       groups: '<circle cx="9" cy="8" r="3.2"/><circle cx="16.5" cy="9" r="2.6"/><path d="M3.5 19c.6-3.2 2.7-5 5.5-5s4.9 1.8 5.5 5"/><path d="M14.5 14.2c2.4-.3 4.3 1.2 4.9 4.3"/>',
       data: '<path d="M7 18h10a4 4 0 0 0 .6-7.95A6 6 0 0 0 6.2 9.3 3.6 3.6 0 0 0 7 18z"/><path d="M12 15v-5"/><path d="M9.8 12.2L12 10l2.2 2.2"/>',
@@ -457,7 +462,7 @@ async function mountList(root, s, syncErr, mode, tab = 'chats') {
     };
     const ico = (k) => `<svg class="side-ico" width="24" height="24" viewBox="0 0 24 24" ${k === 'daily' ? 'fill="currentColor" stroke="none"' : 'fill="none" stroke="currentColor" stroke-width="1.8"'} aria-hidden="true">${IC[k]}</svg>`;
     root.innerHTML = `
-      <section class="chat chat--wa chat--plain chat--group g-list chats-main chats-main--home" style="${iconStyle}">
+      <section class="chat chat--wa chat--plain chat--group g-list chats-main chats-main--home" style="${iconStyle};${orbStyle}">
         ${showOrb ? `<a class="chats-orb" href="#/home" aria-label="المساعد"><span class="chats-orb__ball" aria-hidden="true"></span></a>` : ''}
         <div class="chats-side" id="chats-side">
           <a class="chats-groups-side" href="#/chats?tab=chats&view=groups">${ico('groups')}<span>مجموعات</span></a>
