@@ -50,6 +50,20 @@ jobs:
           print('update.json version', ver, 'files', len(files))
           PYEOF
           fi
+          # ملف التحديث للموقع الرئيسي (main): ملفات الواجهة فقط
+          python3 - <<'PYEOF'
+          import json, hashlib, os, re
+          root = 'site'
+          ver = re.search(r'const VERSION = (\d+)', open(f'{root}/sw.js', encoding='utf-8').read()).group(1)
+          rels = ['index.html', 'sw.js', 'manifest.webmanifest']
+          for folder in ['css', 'js', 'icons']:
+              for d, _, names in os.walk(os.path.join(root, folder)):
+                  for name in names:
+                      rels.append(os.path.relpath(os.path.join(d, name), root).replace(os.sep, '/'))
+          out = [{'path': rel, 'sha256': hashlib.sha256(open(os.path.join(root, rel), 'rb').read()).hexdigest()} for rel in rels]
+          json.dump({'version': ver, 'files': out}, open(f'{root}/update.json', 'w', encoding='utf-8'), ensure_ascii=False)
+          print('root update.json version', ver, 'files', len(out))
+          PYEOF
           touch site/.nojekyll
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3

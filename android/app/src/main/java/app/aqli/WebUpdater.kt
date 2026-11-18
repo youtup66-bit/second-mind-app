@@ -19,7 +19,7 @@ import java.security.MessageDigest
 // لا يحتاج git ولا إعادة بناء APK لتغييرات الواجهة. تغييرات الكود الأصلي تحتاج APK جديداً.
 object WebUpdate {
     // موقع الملفات التي يُحدَّث منها التطبيق
-    const val BASE = "https://youtup66-bit.github.io/second-mind-app/dev/"
+    const val BASE = "https://youtup66-bit.github.io/second-mind-app/"
     const val MANIFEST = "update.json"
     const val VERSION_FILE = "version.txt"
     const val FOLDER = "web"
