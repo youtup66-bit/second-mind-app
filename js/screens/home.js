@@ -200,10 +200,8 @@ export async function mount(root) {
   const orgRole = await getSetting('orgRole', null);
   const orgHead = orgRole === 'manager' || orgRole === 'employee'; // المسؤول المسموح له بالمساعد يرجع إلى المحادثات أيضاً
   if (plain) {
-    root.querySelector('#wa-name').textContent = 'المساعد';
-    root.querySelector('#wa-avatar').textContent = 'م';
-    root.querySelector('#wa-who').setAttribute('aria-label', 'المساعد');
-    if (orgHead) root.querySelector('#wa-who').insertAdjacentHTML('beforebegin', '<a class="wa-head__back" href="#/chats" aria-label="رجوع إلى المحادثات">→</a>');
+    // أعلى المحادثة: أيقونة الصوت فقط (المساعد وكرته تظهران خارج هذه الشاشة)
+    root.querySelector('#wa-who').style.display = 'none';
     root.querySelector('#wa-tools').append(root.querySelector('#stop-voice'), root.querySelector('#voice-toggle'));
   }
   function setWaMode(on) {
