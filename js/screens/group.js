@@ -462,7 +462,7 @@ async function mountList(root, s, syncErr, mode, tab = 'chats') {
         ${TABS.map(([id, label]) => (id === tab ? `<b aria-current="page">${label}</b>` : `<a href="#/chats?tab=${id}${groupsView ? '&view=groups' : ''}">${label}</a>`)).join('')}
       </nav>
       <small class="chats-status" id="g-status"></small>
-      ${tab === 'sections' ? '<input type="search" class="g-search" id="g-search" placeholder="ابحث عن كرة بالاسم" aria-label="ابحث عن كرة">' : ''}
+      ${groupsView ? `<input type="search" class="g-search" id="g-search" placeholder="${tab === 'people' ? 'ابحث عن موظف بالاسم' : tab === 'sections' ? 'ابحث عن كرة بالاسم' : 'ابحث في المحادثات'}" aria-label="بحث">` : ''}
       <p class="wa-note" id="g-note" ${syncErr ? '' : 'hidden'} role="status">${esc(syncErr)}</p>
       <div id="g-decisions"></div>
       <ul class="g-rooms" id="g-rooms" aria-label="${TABS.find((x) => x[0] === tab)?.[1] || ''}"></ul>
@@ -534,7 +534,11 @@ async function mountList(root, s, syncErr, mode, tab = 'chats') {
         const sent = new Set(Object.values(await ballInvites()).map((x) => x.card).filter(Boolean));
         pending = st.nodes.filter((n) => n.person && !sent.has(n.id)).map((n) => ({ name: n.name, role: ({ member: 'موظف', assistant: 'معاون', personnel: 'ذاتية' })[n.person.title] || 'موظف' }));
       }
-      list.innerHTML = people.map((p) => `<li><button type="button" class="g-room g-person" data-uid="${esc(p.uid)}">
+      // البحث بالاسم (من حقل البحث أعلى الشاشة)
+      const qPeople = normQ(q);
+      const peopleShown = people.filter((p) => !qPeople || normQ(p.name).includes(qPeople));
+      pending = pending.filter((b) => !qPeople || normQ(b.name).includes(qPeople));
+      list.innerHTML = peopleShown.map((p) => `<li><button type="button" class="g-room g-person" data-uid="${esc(p.uid)}">
         <span class="wa-avatar wa-avatar--group" aria-hidden="true">${esc(initial(p.name))}</span>
         <span class="g-room__body"><span class="g-room__top"><b>${esc(p.name)}</b></span><span class="g-room__bottom"><span class="g-room__last"><i>راسِل مباشرة</i></span></span></span></button></li>`).join('')
         + pending.map((b) => `<li class="g-room is-past"><span class="wa-avatar wa-avatar--group" aria-hidden="true">${esc(initial(b.name))}</span>
