@@ -449,6 +449,10 @@ async function mountList(root, s, syncErr, mode, tab = 'chats') {
         <div class="chats-side" id="chats-side">
           <a class="chats-groups-side" href="#/chats?tab=chats&view=groups">مجموعات</a>
           ${s.member.role === 'manager' ? '<a class="chats-mind-side" href="#/mind">البيانات المركزية</a>' : ''}
+          <a class="chats-nav-side" href="#/chats">المحادثات</a>
+          <a class="chats-nav-side" href="#/tasks">المهام</a>
+          ${s.member.role === 'manager' ? '<a class="chats-nav-side" href="#/staff">الموظفين</a>' : ''}
+          <a class="chats-nav-side" href="#/settings">الإعدادات</a>
         </div>
       </section>`;
     // الضغط في وسط الشاشة يُخرج كلمة «مجموعات» من الجانب ويُعيدها
