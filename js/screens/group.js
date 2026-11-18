@@ -437,12 +437,12 @@ async function mountList(root, s, syncErr, mode, tab = 'chats') {
   const chat = true;
   const base = '#/chats';
   const shareReady = await pendingShare().catch(() => false);
-  const showOrb = s.member.role === 'manager' || !!groupBranch()?.perms?.assistant;
+  // نافذة المجموعات: القائمة نفسها بلا كرة المساعد (المساعد يبقى في نافذته)
+  const groupsView = new URLSearchParams(location.hash.split('?')[1] || '').get('view') === 'groups';
+  const showOrb = !groupsView && (s.member.role === 'manager' || !!groupBranch()?.perms?.assistant);
   root.innerHTML = `
     <section class="chat chat--wa chat--plain chat--group g-list">
-      ${showOrb ? `<a class="chats-orb" href="#/home" aria-label="المساعد">
-          <span class="chats-orb__ball" aria-hidden="true">م</span>
-          <b>المساعد</b><small>مرتبط بعقل المؤسسة</small></a>` : ''}
+      ${showOrb ? `<a class="chats-orb" href="#/home" aria-label="المساعد"><span class="chats-orb__ball" aria-hidden="true"></span></a>` : ''}
       <nav class="chats-words" aria-label="أقسام المحادثات">
         ${TABS.map(([id, label]) => (id === tab ? `<b aria-current="page">${label}</b>` : `<a href="#/chats?tab=${id}">${label}</a>`)).join('')}
       </nav>
@@ -543,7 +543,14 @@ async function mountList(root, s, syncErr, mode, tab = 'chats') {
         </span></a></li>`;
     }).join('');
     const n = shown.length;
-    statusEl.textContent = !groupOnline() ? 'بلا إنترنت' : !n ? '' : `${n} ${n === 1 ? 'مجموعة' : n === 2 ? 'مجموعتان' : n <= 10 ? 'مجموعات' : 'مجموعة'}`;
+    if (tab === 'chats' && groupOnline()) {
+      // كلمة جانبية بدل عدد المجموعات: «مجموعات» تفتح نافذتها، وفيها «المساعد» للعودة
+      statusEl.innerHTML = groupsView
+        ? '<a class="chats-groups-link" href="#/home">← المساعد</a>'
+        : '<a class="chats-groups-link" href="#/chats?tab=chats&view=groups">مجموعات</a>';
+    } else {
+      statusEl.textContent = !groupOnline() ? 'بلا إنترنت' : !n ? '' : `${n} ${n === 1 ? 'مجموعة' : n === 2 ? 'مجموعتان' : n <= 10 ? 'مجموعات' : 'مجموعة'}`;
+    }
   }
   list.addEventListener('click', async (e) => {
     const person = e.target.closest('[data-uid]');

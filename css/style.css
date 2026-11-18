@@ -1216,7 +1216,12 @@ body.on-group .tasks .wa-head { padding-top: calc(env(safe-area-inset-top) + 8px
 
 /* المحادثات: كرة المساعد في الوسط، وتحتها الكلمات الثلاث (المحادثات · الأقسام · الموظفون) */
 .chats-orb { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 16px 0 6px; text-decoration: none; color: var(--wa-text, #e9edef); }
-.chats-orb__ball { width: 46px; height: 46px; border-radius: 50%; display: grid; place-items: center; background: #2a3942; color: #e9edef; font-weight: 700; }
+.chats-orb__ball { width: 46px; height: 46px; border-radius: 50%; display: block; background: radial-gradient(circle at 38% 35%, #ffffff 0%, #bfe3ff 35%, #5aa7ff 75%, #2b5fb8 100%); animation: orb-breathe 3s ease-in-out infinite; }
+@keyframes orb-breathe {
+  0%, 100% { transform: scale(.9); opacity: .7; box-shadow: 0 0 8px 2px rgba(90,167,255,.35), 0 0 16px 4px rgba(90,167,255,.1); }
+  50% { transform: scale(1.06); opacity: 1; box-shadow: 0 0 18px 6px rgba(90,167,255,.7), 0 0 36px 12px rgba(90,167,255,.25); }
+}
+.chats-groups-link { color: var(--wa-green, #00a884); text-decoration: none; font-weight: 700; }
 .chats-orb b { font-size: 1rem; }
 .chats-orb small { color: var(--wa-meta, #8696a0); font-size: .78rem; }
 .chats-words { display: flex; justify-content: center; gap: 22px; padding: 10px 12px 8px; border-bottom: 1px solid rgba(255,255,255,.06); }
