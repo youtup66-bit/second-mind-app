@@ -446,12 +446,15 @@ async function mountList(root, s, syncErr, mode, tab = 'chats') {
     root.innerHTML = `
       <section class="chat chat--wa chat--plain chat--group g-list chats-main">
         ${showOrb ? `<a class="chats-orb" href="#/home" aria-label="المساعد"><span class="chats-orb__ball" aria-hidden="true"></span></a>` : ''}
-        <a class="chats-groups-side" href="#/chats?tab=chats&view=groups">مجموعات</a>
+        <div class="chats-side" id="chats-side">
+          <a class="chats-groups-side" href="#/chats?tab=chats&view=groups">مجموعات</a>
+          ${s.member.role === 'manager' ? '<a class="chats-mind-side" href="#/mind">البيانات المركزية</a>' : ''}
+        </div>
       </section>`;
     // الضغط في وسط الشاشة يُخرج كلمة «مجموعات» من الجانب ويُعيدها
     root.querySelector('.chats-main')?.addEventListener('click', (e) => {
       if (e.target.closest('a')) return;
-      root.querySelector('.chats-groups-side')?.classList.toggle('is-open');
+      root.querySelector('#chats-side')?.classList.toggle('is-open');
     });
     return;
   }
