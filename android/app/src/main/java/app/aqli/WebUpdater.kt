@@ -2,7 +2,7 @@ package app.aqli
 
 import android.content.Context
 import android.webkit.WebResourceResponse
-import android.webkit.WebViewAssetLoader
+import androidx.webkit.WebViewAssetLoader
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
