@@ -34,6 +34,21 @@ jobs:
             cp -r devsrc/. site/dev/
             # اسم مختلف لنسخة التجربة عند تثبيتها على الهاتف
             sed -i 's/"name": *"[^"]*"/"name": "عقلي الثاني (تجربة)"/; s/"short_name": *"[^"]*"/"short_name": "تجربة"/' site/dev/manifest.webmanifest
+            # ملف التحديث داخل تطبيق الأندرويد: الإصدار وكل ملف مع بصمته (SHA-256)
+            python3 - <<'PYEOF'
+          import json, hashlib, os, re
+          root = 'site/dev'
+          ver = re.search(r'const VERSION = (\d+)', open(f'{root}/sw.js', encoding='utf-8').read()).group(1)
+          files = []
+          for d, _, names in os.walk(root):
+              for name in names:
+                  rel = os.path.relpath(os.path.join(d, name), root).replace(os.sep, '/')
+                  if rel == 'update.json':
+                      continue
+                  files.append({'path': rel, 'sha256': hashlib.sha256(open(os.path.join(d, name), 'rb').read()).hexdigest()})
+          json.dump({'version': ver, 'files': files}, open(f'{root}/update.json', 'w', encoding='utf-8'), ensure_ascii=False)
+          print('update.json version', ver, 'files', len(files))
+          PYEOF
           fi
           touch site/.nojekyll
       - uses: actions/configure-pages@v5

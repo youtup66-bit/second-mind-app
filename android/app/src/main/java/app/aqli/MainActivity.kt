@@ -25,7 +25,7 @@ class MainActivity : ComponentActivity() {
     companion object {
         // رابط نسخة التجربة؛ يُغيَّر إلى الرابط الرسمي عند الحاجة
         // الصفحة مضمّنة في الـ APK نفسه (مجلد assets/app)، فتعمل دون إنترنت
-        const val START_URL = "https://appassets.androidplatform.net/assets/app/index.html"
+        const val START_URL = "https://appassets.androidplatform.net/app/index.html"
         const val HOST = "appassets.androidplatform.net"
         // الروابط العامة (الدعوات) تُفتح داخل التطبيق أيضاً
         const val PUBLIC_HOST = "youtup66-bit.github.io"
@@ -35,7 +35,14 @@ class MainActivity : ComponentActivity() {
     private var filePathCallback: ValueCallback<Array<Uri>>? = null
     private var pendingShare: String? = null
     private val assets by lazy {
-        WebViewAssetLoader.Builder().addPathHandler("/assets/", WebViewAssetLoader.AssetsPathHandler(this)).build()
+        WebViewAssetLoader.Builder().addPathHandler("/app/", WebFilesHandler(this)).build()
+    }
+    private val updater by lazy {
+        WebUpdater(
+            applicationContext,
+            emit = { ev -> web.post { web.evaluateJavascript("window.__aqliApp && window.__aqliApp($ev)", null) } },
+            onApplied = { web.post { web.loadUrl(START_URL) } },
+        )
     }
 
     private val pickFiles = registerForActivityResult(ActivityResultContracts.GetMultipleContents()) { uris ->
@@ -45,6 +52,17 @@ class MainActivity : ComponentActivity() {
 
     // إشعار تقدم تنزيل النموذج يحتاج إذناً من أندرويد 13 فما بعد؛ التنزيل نفسه يعمل دونه
     private val askNotifications = registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
+
+    // تحديث الصفحة من داخل التطبيق: الإصدار الحالي، وبدء التحديث (الأحداث تصل إلى window.__aqliApp)
+    inner class AppBridge {
+        @JavascriptInterface
+        fun version(): String = updater.currentVersion()
+
+        @JavascriptInterface
+        fun update() {
+            updater.run()
+        }
+    }
 
     // جسر بسيط يقرأه التطبيق: هل توجد صورة مشاركة؟ ويأخذها مرة واحدة
     inner class ShareBridge {
@@ -118,6 +136,8 @@ class MainActivity : ComponentActivity() {
         web.addJavascriptInterface(NativeAI(applicationContext, web), "AqliNative")
         // حفظ الملفات ومشاركتها (النسخ الاحتياطية والتقارير)
         web.addJavascriptInterface(FileBridge(this), "AqliFiles")
+        // تحديث الصفحة من داخل التطبيق
+        web.addJavascriptInterface(AppBridge(), "AqliApp")
 
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {

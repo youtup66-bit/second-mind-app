@@ -37,6 +37,8 @@ jobs:
         run: |
           mkdir -p android/app/src/main/assets/app
           cp -r index.html manifest.webmanifest sw.js css js icons android/app/src/main/assets/app/
+          # إصدار الصفحة المضمّنة (يُقارن به التحديث من داخل التطبيق)
+          grep -o 'const VERSION = [0-9]*' sw.js | grep -o '[0-9]*$' > android/app/src/main/assets/app/version.txt
 
       - name: مفتاح التوقيع
         env:

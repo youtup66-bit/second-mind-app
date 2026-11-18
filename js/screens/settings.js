@@ -1,5 +1,6 @@
 // شاشة الإعدادات: مفتاح Gemini يُحفظ على الجهاز فقط
-import { IS_DEV } from '../env.js';
+import { IS_DEV, IS_BUNDLED } from '../env.js';
+import { canUpdateApp, appVersion, startAppUpdate } from '../app-update.js';
 import { getSetting, setSetting, deleteSetting, clearAll, clearMessages } from '../storage.js';
 import { DEFAULT_MODEL, DEFAULT_LITE_MODEL, testKey, getUsage, ttsCooldownUntil, clearTtsCooldown, economyMode } from '../gemini.js';
 import { canSpeak, canListen, canRecord, canBrowserListen, speak, stopSpeaking, unlockAudio, voicesReady } from '../voice.js';
@@ -161,6 +162,12 @@ export async function mount(root) {
       <p class="status" id="voice-status" role="status"></p>
     </section>
 
+    ${IS_BUNDLED && canUpdateApp() ? `<section class="card" id="app-update">
+      <h2>تحديث التطبيق</h2>
+      <p class="muted">الإصدار المثبّت: <b id="app-ver">${appVersion() || '؟'}</b>. التحديث ينزّل التغييرات في الواجهة فقط، دون تنزيل APK جديد.</p>
+      <div class="row"><button class="btn" id="app-update-btn">⬇️ تحديث التطبيق الآن</button></div>
+      <p class="status" id="app-update-msg" role="status"></p>
+    </section>` : ''}
     <section class="card" id="usage">
       <h2>استهلاك Gemini اليوم</h2>
       <div id="usage-table"></div>
@@ -423,6 +430,7 @@ export async function mount(root) {
     root.querySelector('#install-help').hidden = installed || can;
   };
   renderInstall();
+  bindAppUpdate(root);
   root.querySelector('#ai-check-btn').addEventListener('click', async () => {
     const { aiCheck } = await import('../ai-check.js');
     const out = root.querySelector('#ai-check');
@@ -918,5 +926,24 @@ async function renderDevTools(box) {
       msg.textContent = err.message;
       e.currentTarget.disabled = false;
     }
+  });
+}
+
+// زر تحديث التطبيق (داخل الـ APK فقط)
+function bindAppUpdate(root) {
+  const btn = root.querySelector('#app-update-btn');
+  if (!btn) return;
+  const msg = root.querySelector('#app-update-msg');
+  btn.addEventListener('click', () => {
+    btn.disabled = true;
+    msg.className = 'status';
+    msg.textContent = 'أتحقق من التحديثات…';
+    const off = startAppUpdate((ev) => {
+      if (ev.type === 'uptodate') { msg.textContent = `التطبيق محدّث (الإصدار ${ev.version}) ✓`; btn.disabled = false; off(); }
+      else if (ev.type === 'start') msg.textContent = `جارٍ تنزيل التحديث ${ev.version} (${ev.total} ملف)…`;
+      else if (ev.type === 'progress') msg.textContent = `جارٍ التنزيل… ${ev.done} من ${ev.total}`;
+      else if (ev.type === 'done') { msg.textContent = `تم التحديث إلى ${ev.version}. يُعاد تحميل التطبيق…`; off(); }
+      else if (ev.type === 'error') { msg.className = 'status status--err'; msg.textContent = `تعذّر التحديث: ${ev.message}`; btn.disabled = false; off(); }
+    });
   });
 }
