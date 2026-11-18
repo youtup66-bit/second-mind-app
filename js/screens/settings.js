@@ -122,20 +122,6 @@ export async function mount(root) {
       <p class="muted">الألوان ثابتة: أخضر واتساب في كل الشاشات.</p>
     </section>
 
-    <section class="card" id="install">
-      <h2>تثبيت التطبيق</h2>
-      <p class="muted" id="install-state"></p>
-      <div class="row"><button class="btn" id="install-btn" hidden>📲 ثبّت التطبيق على الشاشة الرئيسية</button></div>
-      <p class="muted" id="app-version"></p>
-      <button type="button" class="text-btn" id="check-update">تحقق من التحديثات</button>
-      <p class="status" id="update-status" role="status"></p>
-      <div class="install-help" id="install-help" hidden>
-        <p><b>أندرويد (Chrome):</b> القائمة ⋮ أعلى المتصفح ← <b>"تثبيت التطبيق"</b> أو <b>"إضافة إلى الشاشة الرئيسية"</b>.</p>
-        <p><b>آيفون (Safari):</b> زر المشاركة ⬆️ أسفل الشاشة ← <b>"إضافة إلى الشاشة الرئيسية"</b>.</p>
-        <p class="muted">بعد التثبيت يفتح كتطبيق مستقل بأيقونته، دون شريط المتصفح، ويعمل دون إنترنت.</p>
-      </div>
-    </section>
-
     <section class="card" id="voice">
       <h2>صوت الردود</h2>
       <p class="muted">صوت قراءة ردود الذكاء.</p>
@@ -402,34 +388,7 @@ export async function mount(root) {
     show(keyStatus, 'تم حفظ النموذج.');
   });
 
-  // ---- الإصدار والتحديث ----
-  const verEl = root.querySelector('#app-version');
-  navigator.serviceWorker?.controller?.postMessage('VERSION');
-  const onVer = (e) => { if (e.data?.type === 'VERSION') verEl.textContent = `الإصدار ${e.data.version}${e.data.dev ? ' (نسخة تجريبية)' : ''}`; };
-  navigator.serviceWorker?.addEventListener('message', onVer);
-  cleanup.push(() => navigator.serviceWorker?.removeEventListener('message', onVer));
-  root.querySelector('#check-update').addEventListener('click', async (e) => {
-    const st = root.querySelector('#update-status');
-    e.currentTarget.disabled = true;
-    st.className = 'status';
-    st.textContent = 'أتحقق…';
-    const r = await window.__checkUpdate?.().catch(() => 'none');
-    st.textContent = { found: 'يتوفر تحديث: اضغط "تحديث الآن" في الأسفل.', installing: 'يُنزَّل تحديث الآن… سيظهر زر التحديث بعد لحظات.', latest: 'لديك أحدث إصدار ✓', none: 'تعذّر التحقق الآن.' }[r] || '';
-    root.querySelector('#check-update').disabled = false;
-  });
 
-  // ---- تثبيت التطبيق ----
-  const installed = matchMedia('(display-mode: standalone)').matches || navigator.standalone;
-  const installBtn = root.querySelector('#install-btn');
-  const renderInstall = () => {
-    const can = !!window.__installPrompt;
-    root.querySelector('#install-state').textContent = installed
-      ? 'التطبيق مثبّت على جوالك ✓'
-      : can ? 'ثبّته ليفتح كتطبيق مستقل بأيقونة على الشاشة الرئيسية.' : 'اتبع الخطوات لتثبيته على الشاشة الرئيسية:';
-    installBtn.hidden = installed || !can;
-    root.querySelector('#install-help').hidden = installed || can;
-  };
-  renderInstall();
   bindAppUpdate(root);
   root.querySelector('#ai-check-btn').addEventListener('click', async () => {
     const { aiCheck } = await import('../ai-check.js');
@@ -437,18 +396,6 @@ export async function mount(root) {
     out.hidden = false;
     out.textContent = 'أفحص…';
     out.textContent = await aiCheck();
-  });
-  const onInstallable = () => renderInstall();
-  window.addEventListener('sm:installable', onInstallable);
-  cleanup.push(() => window.removeEventListener('sm:installable', onInstallable));
-  installBtn.addEventListener('click', async () => {
-    const ev = window.__installPrompt;
-    if (!ev) return renderInstall();
-    ev.prompt();
-    const { outcome } = await ev.userChoice;
-    window.__installPrompt = null;
-    root.querySelector('#install-state').textContent = outcome === 'accepted' ? 'جارٍ التثبيت… ستجد أيقونته على الشاشة الرئيسية ✓' : 'لم يُثبَّت. يمكنك تثبيته لاحقاً من قائمة المتصفح.';
-    installBtn.hidden = true;
   });
 
   // ---- الذكاء على الجهاز ----
