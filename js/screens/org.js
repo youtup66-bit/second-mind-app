@@ -217,7 +217,7 @@ function renderAccount(root, s) {
         <p class="muted">${manager ? 'مدير' : 'موظف'} في <b>${esc(s.org?.name)}</b> · <span dir="ltr">@${esc(s.member.username)}</span></p>
       </div>
       <a class="btn org-wide" href="#/group">💬 مجموعة المؤسسة</a>
-      ${manager ? `<a class="btn btn--ghost org-wide" href="#/staff">الموظفين</a>${rulesBox('عند كل تحديث للتطبيق يذكر قواعد جديدة: ')}` : ''}
+      ${manager ? `<a class="btn btn--ghost org-wide" href="#/staff">المنتسبين</a>${rulesBox('عند كل تحديث للتطبيق يذكر قواعد جديدة: ')}` : ''}
       <button type="button" class="btn btn--ghost org-wide" id="logout">تسجيل الخروج</button>
     </div>`;
   if (manager) bindRulesBox(root);

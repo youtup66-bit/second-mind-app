@@ -6,7 +6,7 @@ import { totals, PERIODS } from '../points.js';
 import { getSetting, getGroupMessages } from '../storage.js';
 import { staffTabs } from '../staff-nav.js';
 
-export const title = 'الموظفين';
+export const title = 'المنتسبين';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const initial = (name) => esc(String(name || '؟').trim().charAt(0));
@@ -36,9 +36,9 @@ export async function mount(root) {
     <div class="staff">
       ${staffTabs('staff')}
       <p class="muted staff__org">${esc(s.org?.name)}</p>
-      <ul class="staff-list" id="list" aria-label="الموظفون"></ul>
+      <ul class="staff-list" id="list" aria-label="المنتسبين"></ul>
       <details class="removed-staff" id="removed" hidden>
-        <summary>الموظفون المحذوفون</summary>
+        <summary>المنتسبون المحذوفون</summary>
         <ul class="removed-list" id="removed-list"></ul>
       </details>
       <details class="removed-staff" id="archived" hidden>
@@ -86,7 +86,7 @@ export async function mount(root) {
     // النقاط أمام الأسماء (حسب الفترة المختارة في شاشة النقاط)
     const period = await getSetting('pointsPeriod', 'month');
     const t = await totals(period).catch(() => new Map());
-    // الموظفون المحذوفون: آخر معلوماتهم قبل الحذف
+    // المنتسبون المحذوفون: آخر معلوماتهم قبل الحذف
     const { listRemoved, listArchived, removedLines } = await import('../removed-staff.js');
     const gone = await listRemoved();
     const old = await listArchived();
@@ -159,7 +159,7 @@ export async function mount(root) {
     out.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
   }
 
-  // الموظفون المحذوفون: أرشفة، وإلغاء الأرشفة، وحذف نهائي (مع سؤال عن منشوراته ونقاطه)
+  // المنتسبون المحذوفون: أرشفة، وإلغاء الأرشفة، وحذف نهائي (مع سؤال عن منشوراته ونقاطه)
   const onRemovedClick = async (e) => {
     const li = e.target.closest('li[data-uid]');
     if (!li) return;
@@ -221,7 +221,7 @@ async function renderEmployee(root, id) {
   if (!m) { location.hash = '#/staff'; return; }
   root.innerHTML = `
     <div class="org">
-      <a class="link-btn staff-back" href="#/staff">→ الموظفين</a>
+      <a class="link-btn staff-back" href="#/staff">→ المنتسبين</a>
       <div class="org-hero">
         <div class="staff-row__avatar staff-row__avatar--big" aria-hidden="true">${initial(m.display_name)}</div>
         <h2>${esc(m.display_name)}</h2>

@@ -431,7 +431,7 @@ function openEditor(root, g = null) {
 }
 
 // المحادثات بثلاثة أقسام: المحادثات (التي ينشئها الأعضاء)، والأقسام (كروب العامة وكروبات الكرات)، والموظفون (للتواصل المباشر)
-const TABS = [['chats', 'المحادثات'], ['sections', 'الأقسام'], ['people', 'الموظفون']];
+const TABS = [['chats', 'المحادثات'], ['sections', 'الأقسام'], ['people', 'المنتسبين']];
 async function mountList(root, s, syncErr, mode, tab = 'chats') {
   const orgName = s.org?.name || 'المؤسسة';
   const chat = true;
@@ -450,7 +450,7 @@ async function mountList(root, s, syncErr, mode, tab = 'chats') {
           <a class="chats-groups-side" href="#/chats?tab=chats&view=groups">مجموعات</a>
           ${s.member.role === 'manager' ? '<a class="chats-mind-side" href="#/mind">البيانات المركزية</a>' : ''}
           <a class="chats-nav-side" href="#/tasks">المهام</a>
-          ${s.member.role === 'manager' ? '<a class="chats-nav-side" href="#/staff">الموظفين</a>' : ''}
+          ${s.member.role === 'manager' ? '<a class="chats-nav-side" href="#/staff">المنتسبين</a>' : ''}
           <a class="chats-nav-side" href="#/settings">الإعدادات</a>
         </div>
         ${s.member.role === 'manager' ? '<div class="daily-side" id="daily-side"><div class="daily-title">تقرير يومي</div><div class="daily-list" id="daily-list"><p class="muted">لحظة…</p></div></div>' : ''}

@@ -20,6 +20,6 @@ export function mindTabs(current, sections = 'structure', withFolder = false) {
 }
 
 export function staffTabs(current) {
-  return `<nav class="struct-tabs page-tabs" aria-label="الموظفين">${TABS.map(([route, label]) =>
+  return `<nav class="struct-tabs page-tabs" aria-label="المنتسبين">${TABS.map(([route, label]) =>
     (route === current ? `<b aria-current="page">${label}</b>` : `<a href="#/${route}">${label}</a>`)).join('')}</nav>`;
 }
