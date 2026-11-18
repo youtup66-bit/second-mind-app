@@ -469,6 +469,21 @@ async function mountList(root, s, syncErr, mode, tab = 'chats') {
       ${tab === 'chats' ? '<button type="button" class="g-new" id="g-new">مجموعة جديدة</button>' : ''}
     </section>`;
   root.querySelector('#g-new')?.addEventListener('click', () => openEditor(root));
+  // التنقل باللمس بين المحادثات والأقسام والموظفون: سحب أفقي واضح (لا يتعارض مع التمرير العمودي)
+  const swipeEl = root.querySelector('.g-list');
+  if (swipeEl) {
+    let sx = 0, sy = 0;
+    swipeEl.addEventListener('touchstart', (e) => { sx = e.touches[0].clientX; sy = e.touches[0].clientY; }, { passive: true });
+    swipeEl.addEventListener('touchend', (e) => {
+      const t = e.changedTouches[0];
+      const dx = t.clientX - sx, dy = t.clientY - sy;
+      if (Math.abs(dx) < 70 || Math.abs(dy) > 50) return;
+      const i = TABS.findIndex((x) => x[0] === tab);
+      const next = dx < 0 ? i + 1 : i - 1; // السحب لليسار: التبويب التالي (إلى اليسار)، لليمين: السابق
+      if (next < 0 || next >= TABS.length) return;
+      location.hash = `#/chats?tab=${TABS[next][0]}&view=groups`;
+    }, { passive: true });
+  }
   const list = root.querySelector('#g-rooms');
   const statusEl = root.querySelector('#g-status');
   // بحث الأقسام: يبقى نصه عند إعادة الرسم، ويتجاهل الهمزات والتشكيل والتاء المربوطة
