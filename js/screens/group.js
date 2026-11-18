@@ -459,7 +459,7 @@ async function mountList(root, s, syncErr, mode, tab = 'chats') {
     <section class="chat chat--wa chat--plain chat--group g-list">
       ${showOrb ? `<a class="chats-orb" href="#/home" aria-label="المساعد"><span class="chats-orb__ball" aria-hidden="true"></span></a>` : ''}
       <nav class="chats-words" aria-label="أقسام المحادثات">
-        ${TABS.map(([id, label]) => (id === tab ? `<b aria-current="page">${label}</b>` : `<a href="#/chats?tab=${id}">${label}</a>`)).join('')}
+        ${TABS.map(([id, label]) => (id === tab ? `<b aria-current="page">${label}</b>` : `<a href="#/chats?tab=${id}${groupsView ? '&view=groups' : ''}">${label}</a>`)).join('')}
       </nav>
       <small class="chats-status" id="g-status"></small>
       ${tab === 'sections' ? '<input type="search" class="g-search" id="g-search" placeholder="ابحث عن كرة بالاسم" aria-label="ابحث عن كرة">' : ''}
