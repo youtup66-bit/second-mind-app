@@ -1,4 +1,4 @@
-// وصف أوامر الرفيقة (بلا أي تبعيات ثقيلة، ليستورده gemini.js دون حلقة استيراد)
+// وصف أوامر المساعد (بلا أي تبعيات ثقيلة، ليستورده gemini.js دون حلقة استيراد)
 import { CATEGORIES, isCustom } from './categories.js';
 
 export const ACTION_IDS = [
@@ -11,12 +11,16 @@ export const ACTION_IDS = [
   'org_place_employee', 'org_remove_employee', 'org_set_assistant',
   'work_add', 'work_update', 'work_delete', 'points_add', 'points_review', 'points_auto',
   'post_to_group', 'invite_employee', 'make_org_report', 'assign_task', 'complete_org_task',
-  'set_reminder',
+  'set_reminder', 'edit_report',
 ];
 
 // ملخص المؤسسة الحالي (يضعه التطبيق قبل كل طلب، للمدير فقط)
 let orgCtx = '';
 export const setActionContext = (text) => { orgCtx = text || ''; };
+// التقارير المحفوظة (تقارير Word والنصية) يراها المساعد لتعرف ما يُحفظ أو يُعدَّل
+let reportsCtx = '';
+export const setReportsContext = (text) => { reportsCtx = text || ''; };
+export const actionContext = () => orgCtx;
 
 // وصف الأوامر للنموذج (يُبنى في كل مرة ليحوي الأقسام والشخصيات الحالية)
 export function actionsPrompt() {
@@ -25,9 +29,10 @@ export function actionsPrompt() {
   const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
   return `
 اليوم: ${new Intl.DateTimeFormat('ar', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }).format(now)} (${today})، والساعة ${now.getHours()}:${String(now.getMinutes()).padStart(2, '0')}.
-أنتِ تستطيعين التحكم في التطبيق نفسه عبر الحقل actions (مصفوفة أوامر). نفّذي أمراً فقط إن طلبه المستخدم صراحة أو بوضوح،
-واذكري في reply ما فعلتِه بجملة قصيرة. إن لم يطلب شيئاً فاتركي actions فارغة. لا تعدي بشيء لا تستطيعين فعله.
+أنت تستطيع التحكم في التطبيق نفسه عبر الحقل actions (مصفوفة أوامر). نفّذ أمراً فقط إن طلبه المستخدم صراحة أو بوضوح،
+واذكر في reply ما فعلته بجملة قصيرة. إن لم يطلب شيئاً فاترك actions فارغة. لا تعد بشيء لا تستطيع فعله.
 الأقسام الحالية (الكرات في شاشة العقل): ${cats}.
+${reportsCtx ? `التقارير المحفوظة في التطبيق (يمكنك حفظ أيّ منها أو تعديله بالاسم):\n${reportsCtx}\n` : 'لا توجد تقارير محفوظة بعد.\n'}قدرات الملفات في التطبيق (لا تقولي إنها غير ممكنة): يستطيع التطبيق إنشاء تقرير Word من كروبات المؤسسة من نافذة التقارير، وتعديل آخر تقرير بالأمر edit_report، وحفظ آخر تقرير أو المحادثة في الجهاز عندما يكتب المستخدم «احفظ التقرير» أو «صدّر المحادثة». الحفظ يظهر كبطاقة ملف في المحادثة نفسها. لا تقولي إنك حفظت أو أنشأت ملفاً إلا إذا ظهرت له بطاقة؛ إن لم يُنفَّذ الأمر فقولي ذلك بصدق.
 الأوامر المتاحة وحقولها:
 - create_category: إنشاء كرة/قسم جديد. name: الاسم (كلمة إلى ثلاث)، description: ماذا يدخل فيه، color: لون اختياري بصيغة #RRGGBB.
 - rename_category: target: اسم القسم الحالي، name: الاسم الجديد. (للأقسام التي أضافها المستخدم فقط)
@@ -36,8 +41,8 @@ export function actionsPrompt() {
 - open_screen: target: mind (الكرات) أو folder (المجلد) أو summaries (الملخصات) أو settings (الإعدادات)
   أو structure (عقل المؤسسة) أو staff (الموظفين) أو points (النقاط) أو group (منشورات المجموعة).
 - delete_note: حذف ملاحظة. target: كلمات من نصها. (سيُطلب منه التأكيد)
-- set_theme: value: whatsapp أو purple (ألوان التطبيق).
 - set_reminder: تذكير في موعد. value: الموعد بصيغة ISO 8601 بتوقيت الجهاز (احسبيه من الوقت الحالي المذكور)، name: نص التذكير.
+- edit_report: تعديل تقرير Word محفوظ. name: تعليمات التعديل كما طلبها (مثل: اجعل الملخص أقصر). target: جزء من عنوان التقرير أو تاريخه إن ذكره المستخدم (وإلا يُعدَّل الأحدث). لا تستعمليه إلا إن طلب المستخدم تعديل تقرير.
 - make_summary: value: day أو week أو month.
 - complete_task: تعليم مهمة بأنها أُنجزت. target: كلمات من نص المهمة.
 - set_voice: value: on أو off (نطق الردود بصوت).
@@ -63,7 +68,7 @@ ${orgCtx}
 - make_org_report: value: week أو month (تقرير عمل المؤسسة).
 - assign_task: حوّل كلامه إلى مهمة لشخص (تظهر له بطاقة يؤكدها بلمسة). employee: اسم الشخص، value: المهمة بصيغة أمر قصيرة واضحة (مثل: تركيب كاميرتين في الطابق الثاني)، due: الموعد بصيغة YYYY-MM-DD إن ذُكر، احسبه من تاريخ اليوم أعلاه («قبل الخميس» أو «الخميس» = الخميس القادم، «باجر» = غداً، «نهاية الأسبوع» = الخميس). لعدة أشخاص: أمر لكل شخص.
 - complete_org_task: تعليم مهمة مكلّفة كمنجزة. target: اسم الموظف أو كلمات من المهمة.
-نفّذي عدة أوامر معاً إن طلب ذلك (حتى ٦)، مثل إنشاء شعبة ثم وحدات تحتها.` : ''}`;
+نفّذ عدة أوامر معاً إن طلب ذلك (حتى ٦)، مثل إنشاء شعبة ثم وحدات تحتها.` : ''}`;
 }
 
 export const actionsSchema = {

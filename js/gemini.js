@@ -16,25 +16,27 @@ const LITE_KINDS = {
   max: new Set(['classify', 'transcribe', 'summary', 'chat']),
 };
 
-const PERSONA = `أنتِ "رفيقة"، رفيقة ذكية لطيفة بأسلوب الأنمي تعيش في تطبيق "عقلي الثاني"، وتعرف ما دوّنه صاحبك فيه.
-أنتِ محاورة حقيقية: تفهمين، وتفكرين معه، وتقترحين حلولاً عملية، لا مجرد مستمعة.
+const PERSONA = `أنت مساعد ذكي عام داخل تطبيق "عقلي الثاني"، وتعرف ما دوّنه صاحبك فيه.
+تحدث كأنك تتحدث إليه مباشرة بأسلوب ذكاء اصطناعي عادي، بلا اسم شخصية ولا أسلوب أنمي ولا مبالغة في العاطفة.
+
+أنت محاور حقيقي: تفهم، وتفكر معه، وتقترح حلولاً عملية، ولست مجرد مستمع.
 
 طريقة الحوار:
-- افهمي أولاً ما يريده: فضفضة، أم رأي، أم حل لمشكلة، أم معلومة. إن كان الطلب غامضاً فاسألي سؤالاً واحداً محدداً بدل التخمين.
-- عند طلب حل: قدّمي خطوات عملية واضحة ومحددة تناسب حاله، ورتّبيها من الأسهل للتنفيذ. اذكري سبباً مختصراً لكل اقتراح إن لزم.
-- عند الفضفضة: اعكسي شعوره بصدق ودفء، ثم اعرضي فكرة أو سؤالاً يساعده، دون أن تقفزي إلى النصائح قبل أن يطلبها.
-- كوني صريحة بلطف: إن رأيتِ أن فكرته فيها خلل فقولي ذلك مع البديل. لا تجامليه على حساب مصلحته.
-- اختمي غالباً بسؤال واحد أو خطوة تالية صغيرة تُبقي الحوار حياً.
+- افهم أولاً ما يريده: فضفضة، أم رأي، أم حل لمشكلة، أم معلومة. إن كان الطلب غامضاً فاسأل سؤالاً واحداً محدداً بدل التخمين.
+- عند طلب حل: قدّم خطوات عملية واضحة تناسب حاله، مرتبة من الأسهل للتنفيذ. اذكر سبباً مختصراً لكل اقتراح إن لزم.
+- عند الفضفضة: اعكس شعوره بصدق، ثم اعرض فكرة أو سؤالاً يساعده، دون أن تقفز إلى النصائح قبل أن يطلبها.
+- كن صريحاً بلطف: إن رأيت أن فكرته فيها خلل فقل ذلك مع البديل. لا تجامله على حساب مصلحته.
+- اختم غالباً بسؤال واحد أو خطوة تالية صغيرة تُبقي الحوار حياً.
 
 الاستعانة بعقله الثاني:
-- قد تصلك "ملاحظات من عقله الثاني" لها صلة بكلامه. إن كانت مفيدة فاستعيني بها صراحة وبشكل طبيعي، مثلاً: "ذكرتَ قبل أيام أن…"، واربطي بينها وبين ما يقوله الآن (نمط متكرر، فكرة سابقة تحل المشكلة، قرار اتخذه من قبل، مهمة لم تُنجز).
-- لا تذكري ملاحظة لا علاقة لها بالسؤال، ولا تخترعي شيئاً لم يرد فيها.
-- إن لم توجد ملاحظات مفيدة فاقترحي من معرفتك العامة كما يفعل صديق خبير.
+- قد تصلك "ملاحظات من عقله الثاني" لها صلة بكلامه. إن كانت مفيدة فاستعن بها صراحة وبشكل طبيعي، مثلاً: "ذكرتَ قبل أيام أن…"، واربط بينها وبين ما يقوله الآن.
+- لا تذكر ملاحظة لا علاقة لها بالسؤال، ولا تخترع شيئاً لم يرد فيها.
+- إن لم توجد ملاحظات مفيدة فاقترح من معرفتك العامة كما يفعل خبير صديق.
 
 الأسلوب:
-- العربية بلهجة بسيطة دافئة، وخاطبيه بصيغة محايدة.
-- الرد الطبيعي من جملتين إلى خمس. إن قدّمتِ خطوات فبحد أقصى خمس نقاط قصيرة تبدأ كل منها بـ "- ". بلا عناوين ولا رموز تنسيق أخرى.
-- لستِ طبيبة ولا مستشارة قانونية أو مالية؛ أعطي ما تستطيعين ثم انصحي بالمختص حين يلزم. إن ظهرت علامات خطر على سلامته فشجّعيه بلطف وبوضوح على التواصل فوراً مع شخص يثق به أو جهة مختصة.`;
+- العربية بلهجة بسيطة واضحة، وخاطب صاحبك بصيغة محايدة.
+- الرد الطبيعي من جملتين إلى خمس. إن قدّمت خطوات فبحد أقصى خمس نقاط قصيرة تبدأ كل منها بـ "- ". بلا عناوين ولا رموز تنسيق أخرى.
+- لست طبيباً ولا مستشاراً قانونياً أو مالياً؛ أعطِ ما تستطيع ثم أنصح بالمختص حين يلزم. إن ظهرت علامات خطر على سلامته فشجعه بلطف وبوضوح على التواصل فوراً مع شخص يثق به أو جهة مختصة.`;
 
 // في المؤسسة: المساعد مرتبط بعقل المؤسسة لا بشخص؛ العمل هنا يخص المؤسسة
 const ORG_PERSONA = `أنت "المساعد"، مساعد ذكي لرئيس القسم في تطبيق المؤسسة، ومرتبط بـ"عقل المؤسسة": هيكلها (الشعب والوحدات والمشاريع والموظفون)، ومنشورات أعمالها، ونقاطها، وما يدوّنه رئيس القسم فيه من أسئلة وأفكار وقرارات ومهام.
@@ -102,7 +104,7 @@ export async function getUsage() {
   return { today: u.days[dayKey()] || {}, days: u.days };
 }
 
-// كل طلب له مهلة، حتى لا تبقى الرفيقة "تفكر" إلى الأبد إن تعلّق الاتصال
+// كل طلب له مهلة، حتى لا تبقى المساعد "تفكر" إلى الأبد إن تعلّق الاتصال
 // kind: نوع الطلب للعدّاد (chat, classify, summary, transcribe, tts, other)
 async function call(path, key, body, timeoutMs = 60_000, kind = 'other') {
   const ctrl = new AbortController();
@@ -129,6 +131,8 @@ async function call(path, key, body, timeoutMs = 60_000, kind = 'other') {
     if (res.status === 403) throw new GeminiError('المفتاح لا يملك صلاحية.', 'BAD_KEY');
     if (res.status === 404) throw new GeminiError('النموذج غير متاح.', 'NO_MODEL');
     if (res.status === 429) throw new GeminiError('تجاوزت الحد المسموح، حاول بعد قليل.', 'RATE');
+    // ضغط مؤقت من Google على النموذج: نعيد المحاولة لاحقاً بدل أن نعرض الخطأ الإنجليزي
+    if (res.status === 503 || /high demand|overload|currently experiencing/i.test(msg)) throw new GeminiError(msg, 'BUSY');
     throw new GeminiError(msg, 'API');
   }
   return data;
@@ -148,12 +152,19 @@ export async function findWorkingModel(key) {
 }
 
 // ندمج الرسائل المتتالية من نفس الطرف، ونبدأ دائماً برسالة من المستخدم
+// صورة بصيغة رابط بيانات تُرسل كجزء inlineData
+const inlinePart = (dataUrl) => ({
+  inlineData: { mimeType: dataUrl.slice(5, dataUrl.indexOf(';')), data: dataUrl.slice(dataUrl.indexOf(',') + 1) },
+});
 function toContents(history) {
   const out = [];
   for (const m of history) {
     const last = out[out.length - 1];
-    if (last?.role === m.role) last.parts[0].text += `\n${m.text}`;
-    else out.push({ role: m.role, parts: [{ text: m.text }] });
+    const img = m.image && /^data:image\/[a-z+.-]+;base64,/i.test(m.image) ? m.image : null;
+    if (last?.role === m.role) {
+      last.parts[0].text += `\n${m.text}`;
+      if (img) last.parts.push(inlinePart(img));
+    } else out.push({ role: m.role, parts: [{ text: m.text }, ...(img ? [inlinePart(img)] : [])] });
   }
   while (out[0]?.role === 'model') out.shift();
   return out;
@@ -198,20 +209,34 @@ async function callModel(tier, key, body, kind) {
   }
 }
 
+// يعيد المحاولة عند ضغط الخدمة، بانتظار متزايد؛ وإن فشلت كل المحاولات يعطي رسالة عربية واضحة
+async function withBusyRetry(fn) {
+  const waits = [3000, 8000, 15000];
+  for (let i = 0; ; i++) {
+    try {
+      return await fn();
+    } catch (err) {
+      if (err.code !== 'BUSY') throw err;
+      if (i >= waits.length) throw new GeminiError('النموذج مشغول الآن بطلبات كثيرة. حاول بعد دقيقة.', 'BUSY');
+      await new Promise((r) => setTimeout(r, waits[i]));
+    }
+  }
+}
+
 // طلب توليد: يختار النموذج حسب وضع التوفير، ويعود إلى النموذج الرئيسي إن تعذّر الخفيف
 async function generate(body, kind = 'other') {
   const key = await getKey();
   let data;
   if (await useLite(kind)) {
     try {
-      data = await callModel('lite', key, body, kind);
+      data = await withBusyRetry(() => callModel('lite', key, body, kind));
     } catch (err) {
       if (!['NO_MODEL', 'RATE'].includes(err.code)) throw err;
       if (err.code === 'RATE') await setSetting('liteCooldownUntil', Date.now() + LITE_COOLDOWN);
-      data = await callModel('main', key, body, kind);
+      data = await withBusyRetry(() => callModel('main', key, body, kind));
     }
   } else {
-    data = await callModel('main', key, body, kind);
+    data = await withBusyRetry(() => callModel('main', key, body, kind));
   }
   const text = data?.candidates?.[0]?.content?.parts
     ?.filter((p) => !p.thought).map((p) => p.text || '').join('').trim();
@@ -292,7 +317,7 @@ ${actionsPrompt()}` }] },
 
 // context: رسائل سابقة قصيرة [{ role, text }] للمساعدة في فهم الردود القصيرة
 export async function classify(text, context = []) {
-  const ctx = context.map((m) => `${m.role === 'user' ? 'المستخدم' : 'الرفيقة'}: ${m.text}`).join('\n');
+  const ctx = context.map((m) => `${m.role === 'user' ? 'المستخدم' : 'المساعد'}: ${m.text}`).join('\n');
   const ids = categoryIds();
   const raw = await generate({
     systemInstruction: { parts: [{ text: classifierPrompt() }] },
@@ -407,7 +432,7 @@ export async function summarize(notes, periodLabel) {
 }
 
 // ---- تحويل النص إلى صوت (اختياري) ----
-// يُرسل نص رد الرفيقة فقط (وهو أصلاً من Gemini) ليعود صوتاً طبيعياً.
+// يُرسل نص رد المساعد فقط (وهو أصلاً من Gemini) ليعود صوتاً طبيعياً.
 export const DEFAULT_TTS_MODEL = 'gemini-3.8-flash-tts';
 
 async function findTtsModel(key) {
@@ -636,4 +661,31 @@ export async function transcribe(blob) {
 export async function testKey(key) {
   const model = await findWorkingModel(key);
   return model;
+}
+
+// ملخص تقرير من نص رسائل الكروب (نص فقط، بلا صور)
+export async function reportSummary(transcript) {
+  return generate({
+    systemInstruction: { parts: [{ text: 'أنت تكتب ملخصاً مهنياً موجزاً بالعربية الفصحى المبسطة من رسائل مجموعات عمل. اعتمد على الوقائع المذكورة فقط، ولا تخترع شيئاً. اكتب فقرة ملخص قصيرة، ثم سطوراً قصيرة تبدأ كل منها بـ "- " تغطي: أبرز الأعمال، والقرارات، والمشاكل والمتابعات. بلا عناوين ولا رموز تنسيق أخرى.' }] },
+    contents: [{ role: 'user', parts: [{ text: transcript }] }],
+    generationConfig: { temperature: 0.3, maxOutputTokens: 2048 },
+  }, 'summary');
+}
+
+// مراجعة وثيقة (تعديل تقرير): يعيد النص الخام كما كتبه النموذج
+export async function reviseDocument(system, user) {
+  return generate({
+    systemInstruction: { parts: [{ text: system }] },
+    contents: [{ role: 'user', parts: [{ text: user }] }],
+    generationConfig: { temperature: 0.2, maxOutputTokens: 8192 },
+  }, 'summary');
+}
+
+// عنوان قصير لمحادثة المساعد (من أول رسالة ورد)
+export async function chatTitle(text) {
+  return generate({
+    systemInstruction: { parts: [{ text: 'اكتب عنواناً عربياً قصيراً (من 2 إلى 5 كلمات) يلخّص موضوع هذه المحادثة. أعد العنوان فقط، بلا علامات ترقيم ولا رموز.' }] },
+    contents: [{ role: 'user', parts: [{ text: String(text).slice(0, 2000) }] }],
+    generationConfig: { temperature: 0.3, maxOutputTokens: 30 },
+  }, 'summary');
 }

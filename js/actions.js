@@ -1,4 +1,4 @@
-// أوامر تنفذها الرفيقة في التطبيق: تطلبها في ردّها نفسه (حقل actions)، فينفذها التطبيق هنا.
+// أوامر تنفذها المساعد في التطبيق: تطلبها في ردّها نفسه (حقل actions)، فينفذها التطبيق هنا.
 // كل أمر يعيد نتيجة تُعرض تحت الرد. الحذف لا يتم إلا بعد تأكيد المستخدم.
 import {
   CATEGORIES, PALETTE, categoryById, isCustom, addCategory, updateCategory, removeCategory,
@@ -65,7 +65,7 @@ async function run(a, ctx) {
       const c = findCategory(a.target);
       if (!c) return say(false, `لم أجد قسم «${a.target}»`);
       if (!isCustom(c.id)) return say(false, `«${c.label}» قسم أساسي لا يُحذف`);
-      if (!confirm(`الرفيقة تريد حذف قسم «${c.label}». تنتقل ملاحظاته إلى "تفكير". موافق؟`)) return say(false, 'لم يُحذف القسم (ألغيتَ)');
+      if (!confirm(`المساعد يريد حذف قسم «${c.label}». تنتقل ملاحظاته إلى "تفكير". موافق؟`)) return say(false, 'لم يُحذف القسم (ألغيتَ)');
       const n = await removeCategory(c.id);
       return say(true, `حذفتُ قسم «${c.label}»${n ? ` ونقلتُ ${n} ملاحظة إلى "تفكير"` : ''}`, '#/mind');
     }
@@ -122,7 +122,7 @@ async function run(a, ctx) {
     case 'set_chat_style': {
       const wa = v.startsWith('wh') || v.includes('واتس');
       ctx.setWaMode?.(wa);
-      return say(true, wa ? 'انتقلتُ إلى واجهة المحادثة' : 'عدتُ إلى واجهة الرفيقة');
+      return say(true, wa ? 'انتقلتُ إلى واجهة المحادثة' : 'عدتُ إلى واجهة المساعد');
     }
     case 'set_mind_view': {
       const mode = v.startsWith('s') || v.includes('حجم') ? 'size' : 'heat';
@@ -155,10 +155,7 @@ async function run(a, ctx) {
       return say(true, `سأذكّرك ${fmt.format(r.at)}: ${r.text}`, '#/reports');
     }
     case 'set_theme': {
-      const theme = v.startsWith('p') || v.includes('بنفس') ? 'purple' : 'whatsapp';
-      await setSetting('appTheme', theme);
-      window.dispatchEvent(new CustomEvent('sm:setting', { detail: { key: 'appTheme', value: theme } }));
-      return say(true, theme === 'purple' ? 'غيّرتُ الألوان إلى البنفسجي' : 'غيّرتُ الألوان إلى ألوان واتساب');
+      return say(true, 'الألوان ثابتة: أخضر واتساب في كل الشاشات');
     }
     default:
       return ORG_ACTIONS.has(a.action) ? runOrgAction(a) : null;

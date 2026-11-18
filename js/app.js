@@ -19,7 +19,7 @@ import { setOrbVisible } from './orb-float.js';
 import { startGroupSync, groupEvents, unreadCount, groupBranch, waitBranch } from './group.js';
 import { autoSnapshot } from './backup.js';
 import { getSetting } from './storage.js';
-import { IS_DEV } from './env.js';
+import { IS_DEV, IS_BUNDLED } from './env.js';
 import { loadCategories } from './categories.js';
 
 const routes = { home, mind, folder, settings, org, join: org, staff, group, chats, branch, tasks, structure, points, reports };
@@ -29,7 +29,7 @@ const titleEl = document.getElementById('screen-title');
 let current = null;
 let navId = 0;
 
-// الموظف: منشورات الأعمال والإعدادات فقط (لا عقل ولا رفيقة ولا ذكاء)
+// الموظف: منشورات الأعمال والإعدادات فقط (لا عقل ولا مساعد ولا ذكاء)
 const EMPLOYEE_ROUTES = new Set(['group', 'chats', 'branch', 'tasks', 'settings', 'org', 'join']);
 // ما يفتحه المسؤول بحسب خيارات إظهاره (يقررها رئيس القسم)
 const officialAllows = (name) => {
@@ -95,15 +95,15 @@ window.addEventListener('beforeinstallprompt', (e) => {
 });
 window.addEventListener('appinstalled', () => { window.__installPrompt = null; });
 
-// ---- الرفيقة الطافية داخل التطبيق ----
+// ---- المساعد الطافي داخل التطبيق ----
 let floaterRoute = 'home';
-// تطبيق مؤسسة: لا رفيقة مرسومة ولا رفيقة طافية
+// تطبيق مؤسسة: لا مساعد مرسومة ولا مساعد طافية
 const noCompanion = true;
 // لا تطفو فوق شاشات المحادثة (الرئيسية والمجموعة)
-// كرة المساعد الطافية: عند رئيس القسم في كل الشاشات عدا شاشة المساعد
+// كرة المساعد الطافي: عند رئيس القسم في كل الشاشات عدا شاشة المساعد
 // لا تطفو فوق شاشة المساعد ولا الإعدادات (تغطي أزرارها)
 const syncFloater = () => setOrbVisible((role === 'manager' || (role === 'employee' && !!groupBranch()?.perms?.assistant)) && floaterRoute !== 'home' && floaterRoute !== 'settings');
-// بلا رفيقة: تبويب "المحادثة"، والشاشة الرئيسية بلا شريط عنوان (رأس المحادثة يكفي)
+// بلا مساعد: تبويب "المحادثة"، والشاشة الرئيسية بلا شريط عنوان (رأس المحادثة يكفي)
 // تبويب "الموظفين" يظهر للمدير فقط (الصلاحية الفعلية تفرضها قاعدة البيانات)
 function applyRole(next) {
   const changed = (next || null) !== role;
@@ -171,12 +171,10 @@ async function refreshBadge() {
 groupEvents.addEventListener('message', refreshBadge);
 groupEvents.addEventListener('seen', refreshBadge);
 
-// المظهر: auto = واتساب حين تُخفى الرفيقة، وإلا البنفسجي
-let appTheme = 'auto';
+// المظهر: أخضر واتساب دائماً (لا خيار آخر)
 function applyTheme() {
-  const wa = appTheme === 'whatsapp' || (appTheme === 'auto' && noCompanion);
-  document.body.classList.toggle('theme-wa', wa);
-  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', wa ? '#202c33' : '#140f2e');
+  document.body.classList.add('theme-wa');
+  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', '#202c33');
 }
 function applyNoCompanion() {
   document.body.classList.toggle('no-companion', noCompanion);
@@ -185,21 +183,19 @@ function applyNoCompanion() {
   if (tab) {
     tab.querySelector('.tabbar__icon').textContent = noCompanion ? '💬' : '✦';
     // في المؤسسة "المحادثات" تبويب للمجموعات، فالذكاء يُسمى "المساعد"
-    tab.querySelector('span:last-child').textContent = noCompanion ? 'المساعد' : 'الرفيقة';
+    tab.querySelector('span:last-child').textContent = 'المساعد';
   }
 }
 
 (async () => {
   applyRole(await getSetting('orgRole', null));
-  appTheme = await getSetting('appTheme', 'auto');
   applyNoCompanion();
 })();
 
-// الإعدادات تُعلن عن تغييراتها فنحدّث الرفيقة الطافية فوراً
+// الإعدادات تُعلن عن تغييراتها فنحدّث المساعد الطافي فوراً
 window.addEventListener('sm:setting', (e) => {
   const { key, value } = e.detail;
   if (key === 'orgRole') applyRole(value);
-  if (key === 'appTheme') { appTheme = value; applyTheme(); }
 });
 
 window.addEventListener('hashchange', navigate);
@@ -248,13 +244,6 @@ window.addEventListener('unhandledrejection', (e) => {
   toast(msg);
 });
 
-// إن كان صوت Piper مختاراً نحمّله في الذاكرة بهدوء، فلا يتأخر أول رد
-setTimeout(async () => {
-  if (role === 'employee' || await getSetting('voiceEngine', 'device') !== 'piper') return;
-  const { warmUpPiper, isPiperReady } = await import('./piper.js');
-  if (await isPiperReady()) warmUpPiper();
-}, 4000);
-
 // الذكاء على الجهاز: نحفظ مكتبته مسبقاً وأنت متصل (ليعمل دون إنترنت)، ونجهّزه إن كان هو المستخدم دائماً
 setTimeout(async () => {
   if (role === 'employee' || !(await getSetting('localModel', ''))) return;
@@ -297,6 +286,7 @@ if ('serviceWorker' in navigator) {
     location.reload();
   });
   window.addEventListener('load', async () => {
+    if (IS_BUNDLED) return; // داخل الـ APK الملفات محلية، ولا تحتاج عامل خدمة
     try {
       const reg = await navigator.serviceWorker.register('./sw.js');
       const watch = (w) => w?.addEventListener('statechange', () => {

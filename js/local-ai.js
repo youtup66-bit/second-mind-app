@@ -11,8 +11,25 @@ const WEBLLM_URL = 'https://cdn.jsdelivr.net/npm/@mlc-ai/web-llm@0.2.87/lib/inde
 const WLLAMA_URL = 'https://cdn.jsdelivr.net/npm/@wllama/wllama@3.8.1/esm/index.js';
 const WLLAMA_WASM = 'https://cdn.jsdelivr.net/npm/@wllama/wllama@3.8.1/esm/wasm/wllama.wasm';
 
+// داخل تطبيق أندرويد يوجد جسر AqliNative: المحرك الأصلي (llama.cpp) يعمل على المعالج بثبات،
+// فيُستعمل وحده بدل متصفح الـ WebView الذي يتعطل مع wllama
+const NATIVE = (typeof window !== 'undefined' && window.AqliNative) || null;
+// نماذج المحرك الأصلي (داخل التطبيق): أصغر وأسرع، أو أكبر وأذكى وتحتاج ذاكرة أكثر
+const nativeModel = (id, repo, file, label, note, sizeMB, minBytes) => ({
+  id, engine: 'native', url: `https://huggingface.co/Qwen/${repo}/resolve/main/${file}`, file,
+  label, note, sizeMB, gpuMB: 0, minBytes,
+});
+const NATIVE_MODELS = [
+  nativeModel('native-qwen25-05b', 'Qwen2.5-0.5B-Instruct-GGUF', 'qwen2.5-0.5b-instruct-q4_k_m.gguf',
+    'Qwen 2.5 (0.5B) — الأصغر', 'يعمل على أي جوال حديث، لكن ردوده أبسط.', 400, 300e6),
+  nativeModel('native-qwen25-15b', 'Qwen2.5-1.5B-Instruct-GGUF', 'qwen2.5-1.5b-instruct-q4_k_m.gguf',
+    'Qwen 2.5 (1.5B) — متوسط', 'ردود أفضل بالعربية. يحتاج نحو 2 جيجا من ذاكرة الجوال.', 1100, 900e6),
+  nativeModel('native-qwen25-3b', 'Qwen2.5-3B-Instruct-GGUF', 'qwen2.5-3b-instruct-q4_k_m.gguf',
+    'Qwen 2.5 (3B) — الأكبر', 'الأذكى بينها. يحتاج نحو 3.5 جيجا من ذاكرة الجوال، والتنزيل ~2 جيجا.', 2000, 1.8e9),
+];
+
 // sizeMB تقريبي للتنزيل، gpuMB ذاكرة كرت الشاشة المطلوبة تقريباً
-export const LOCAL_MODELS = [
+export const LOCAL_MODELS = NATIVE ? NATIVE_MODELS : [
   {
     id: 'gemma3-1b', engine: 'webllm', modelId: 'gemma3-1b-it-q4f16_1-MLC',
     label: 'Gemma 3 (1B)', note: 'خفيف ومتوازن، وعربيته جيدة. البداية الموصى بها.', sizeMB: 750, gpuMB: 711, recommended: true,
@@ -40,6 +57,26 @@ export const modelById = (id) => LOCAL_MODELS.find((m) => m.id === id) || null;
 
 export class LocalAIError extends Error {
   constructor(message, code) { super(message); this.code = code; }
+}
+
+// ---- جسر المحرك الأصلي ----
+// الأحداث تصل من التطبيق عبر window.__aqliNative؛ كل طلب له معرّف يُوجَّه إليه حدثه
+const nativeWaiters = new Map();
+let nativeSeq = 0;
+window.__aqliNative = (ev) => nativeWaiters.get(ev?.id)?.(ev);
+
+// يبدأ طلباً عند التطبيق، ويعيد وعداً يُحل عند النهاية. onEvent لأحداث التقدم والرموز
+function nativeCall(start, onEvent) {
+  return new Promise((resolve, reject) => {
+    const id = `n${++nativeSeq}`;
+    nativeWaiters.set(id, (ev) => {
+      if (ev.type === 'progress' || ev.type === 'token') return onEvent?.(ev);
+      nativeWaiters.delete(id);
+      if (ev.type === 'error') reject(new LocalAIError(ev.message || 'خطأ غير معروف', 'LOAD'));
+      else resolve(ev);
+    });
+    try { start(id); } catch (err) { nativeWaiters.delete(id); reject(err); }
+  });
 }
 
 // ---- دعم WebGPU ----
@@ -113,6 +150,7 @@ export const damagedFile = new LocalAIError('ملف النموذج المحفو�
 
 export async function isModelReady(model) {
   if (!model) return false;
+  if (model.engine === 'native') return !!NATIVE?.hasModel(model.file);
   if (model.engine === 'wllama' && await cachedBlob(model.url, model.minBytes).then((b) => !!b)) return true;
   if (model.engine === 'webllm') {
     const id = await effectiveModelId(model);
@@ -123,8 +161,12 @@ export async function isModelReady(model) {
 }
 
 export async function selectedModel() {
+  // في التطبيق: النموذج المختار من الإعدادات، والافتراضي الأصغر
+  if (NATIVE) return modelById(await getSetting('localModel', '')) || NATIVE_MODELS[0];
   return modelById(await getSetting('localModel', '')) || null;
 }
+
+export const nativeAvailable = () => !!NATIVE;
 
 export async function localReady() {
   const m = await selectedModel();
@@ -163,7 +205,11 @@ export async function prepareModel(model, onProgress) {
   if (loading) await loading.catch(() => {});
   loading = (async () => {
     await unloadActive();
-    if (model.engine === 'webllm') {
+    if (model.engine === 'native') {
+      // المحرك الأصلي يحمّل النموذج لكل طلب بنفسه؛ هنا نضمن وجود الملف فقط (ننزّله إن لزم)
+      if (!NATIVE?.hasModel(model.file)) await nativeDownload(model, onProgress);
+      active = { model, kind: 'native', engine: null };
+    } else if (model.engine === 'webllm') {
       const blocked = await blockedReason(model);
       if (blocked) throw new LocalAIError(blocked, 'NO_GPU');
       const id = await effectiveModelId(model);
@@ -214,8 +260,16 @@ export async function prepareModel(model, onProgress) {
   try { return await loading; } finally { loading = null; }
 }
 
+// تنزيل النموذج داخل التطبيق (ملف واحد إلى مجلد التطبيق)
+function nativeDownload(model, onProgress) {
+  return nativeCall((id) => NATIVE.download(model.url, model.file, id), (ev) => {
+    onProgress?.(ev.total > 0 ? Math.min(0.99, ev.loaded / ev.total) : 0, '');
+  });
+}
+
 export async function removeModel(model) {
   if (active?.model.id === model.id) await unloadActive();
+  if (model.engine === 'native') NATIVE?.removeModel(model.file);
   try {
     if (model.engine === 'wllama') await (await caches.open(MODELS_CACHE)).delete(model.url);
     if (model.engine === 'webllm') {
@@ -256,7 +310,7 @@ async function ensureActiveRaw() {
 // يحفظ مكتبة تشغيل النموذج المختار على الجهاز وأنت متصل، ليعمل دون إنترنت لاحقاً
 export async function prefetchRuntime() {
   const model = await selectedModel();
-  if (!model || !navigator.onLine) return;
+  if (!model || !navigator.onLine || model.engine === 'native') return;
   const urls = model.engine === 'webllm' ? [WEBLLM_URL] : [WLLAMA_URL, WLLAMA_WASM];
   await Promise.all(urls.map((u) => fetch(u).catch(() => {})));
 }
@@ -317,7 +371,16 @@ async function localChatOnce(messages, { onToken, maxTokens = 400, temperature =
     text += piece;
     onToken?.(stripThinking(text));
   };
-  if (a.kind === 'webllm') {
+  if (a.kind === 'native') {
+    // المحرك يبدأ كل طلب بسياق نظيف، فنضع سجل المحادثة السابق داخل الرسالة نفسها
+    const system = messages.find((m) => m.role === 'system')?.content || '';
+    const turns = messages.filter((m) => m.role !== 'system');
+    const last = turns.at(-1)?.content || '';
+    const history = turns.slice(0, -1)
+      .map((m) => `${m.role === 'assistant' ? 'المساعد' : 'المستخدم'}: ${m.content}`).join('\n');
+    const user = history ? `سجل المحادثة:\n${history}\n\nرسالة المستخدم الآن:\n${last}` : last;
+    await nativeCall((id) => NATIVE.chat(id, a.model.file, system, user, maxTokens), (ev) => push(ev.text));
+  } else if (a.kind === 'webllm') {
     const stream = await a.engine.chat.completions.create({
       messages, stream: true, temperature, max_tokens: maxTokens,
       ...(a.model.noThinking && { extra_body: { enable_thinking: false } }),

@@ -1,19 +1,24 @@
-// شاشة الرفيقة: الشخصية الطافية + المحادثة صوتاً أو كتابة + تصنيف كل ملاحظة
+// شاشة المساعد: الشخصية الطافية + المحادثة صوتاً أو كتابة + تصنيف كل ملاحظة
 import {
   addEntry, addMessage, getEntries, getEntry, getMessage, getMessages, getSetting, getSummaries,
   setSetting, updateEntry, updateMessage, deleteMessage, deleteEntry,
 } from '../storage.js';
 import { transcribe } from '../gemini.js';
 import { smartChat } from '../ai.js';
+import { exportChatFile } from '../backup.js';
+import { editLastReport, reportFile, textReportFile, reportsContext } from '../report-build.js';
+import { initConvs, activeConvId, listConvs, createConv, openConv, renameConv, deleteConv, touchConv } from '../storage.js';
+import { chatTitle } from '../gemini.js';
+import { saveFile, shareFile } from '../native-files.js';
 import { executeActions } from '../actions.js';
-import { setActionContext } from '../actions-spec.js';
+import { setActionContext, setReportsContext } from '../actions-spec.js';
 import { orgContext } from '../org-actions.js';
 import { CATEGORIES, NONE, categoryById } from '../categories.js';
 import { classifyEntry, classifyPending, setCategory } from '../classifier.js';
 import { recall } from '../recall.js';
 import { canListen, canRecord, canBrowserListen, listen, record, speak, stopSpeaking, unlockAudio } from '../voice.js';
 
-export const title = 'الرفيقة';
+export const title = 'المساعد';
 
 const TAP_LINES = ['أنا هنا معك 💜', 'بماذا تفكر الآن؟', 'احكِ لي، سأحفظ كل شيء.', 'هيهي، هذا يدغدغ!'];
 const HISTORY_LIMIT = 20; // عدد الرسائل الأخيرة التي تُرسل كسياق
@@ -26,7 +31,7 @@ function greeting() {
   return 'مساء الخير، كيف كان يومك؟';
 }
 
-// الفقاعة فوق الرفيقة تعرض بداية الرد فقط؛ الرد كاملاً في المحادثة
+// الفقاعة فوق المساعد تعرض بداية الرد فقط؛ الرد كاملاً في المحادثة
 function bubbleText(reply) {
   const first = reply.split(/\n/)[0];
   const cut = first.length > 140 ? `${first.slice(0, 140).replace(/\s+\S*$/, '')}…` : first;
@@ -45,6 +50,13 @@ function loadDraft() {
   try { return localStorage.getItem(DRAFT_KEY) || ''; } catch { return ''; }
 }
 
+// أمر حفظ التقرير: كلمات الحفظ مع «تقرير» أو مع «بالتنزيلات»، ولا يُعدّ أمر تعديل
+const SAVE_VERB = /(احفظ|صدّر|صدر|نزّل|نزل|حمّل|شارك)/;
+const EDIT_WORDS = /(عدّل|عدل|غيّر|اجعل|أضف|احذف|اختصر|وسّع)/;
+const isSaveReportCommand = (t) => t.length <= 120 && !EDIT_WORDS.test(t)
+  && ((SAVE_VERB.test(t) && (/تقرير/.test(t) || /التنزيلات|جهازي/.test(t)))
+    || (/تقرير/.test(t) && /التنزيلات|جهازي/.test(t)));
+
 const escapeHtml = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
 let companion = null;
@@ -56,23 +68,30 @@ export async function mount(root) {
   let speakOn = !textOnly && await getSetting('speakReplies', true);
   // الميكروفون مستقل عن "نص فقط" (الذي يوقف نطق الردود فقط)
   const showMic = canListen && await getSetting('micOn', true);
-  // بلا رفيقة: محادثة عادية مثل واتساب، دون شخصية ولا انسدال
+  // بلا مساعد: محادثة عادية مثل واتساب، دون شخصية ولا انسدال
   // تطبيق مؤسسة: محادثة عادية مثل واتساب دائماً، بلا شخصية مرسومة (الذكاء كما هو)
   const plain = true;
 
+  await initConvs();
   root.innerHTML = `
     <section class="chat${plain ? ' chat--wa chat--plain' : ''}">
+      <div class="conv-bar" id="conv-bar">
+        <button type="button" class="conv-bar__btn" id="conv-new" aria-label="محادثة جديدة"><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>
+        <span class="conv-bar__title" id="conv-title"></span>
+        <button type="button" class="conv-bar__btn" id="conv-menu" aria-label="المحادثات السابقة"><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>
+      </div>
+      <div class="conv-sheet" id="conv-sheet" hidden><ul class="conv-list" id="conv-list"></ul></div>
       <header class="wa-head" id="wa-head" hidden>
-        <button type="button" class="wa-head__who" id="wa-who" aria-label="أظهر الرفيقة">
+        <button type="button" class="wa-head__who" id="wa-who" aria-label="أظهر المساعد">
           <span class="wa-avatar" id="wa-avatar" aria-hidden="true"></span>
           <span class="wa-head__text"><b id="wa-name"></b><small id="wa-status">${plain ? 'متصل' : 'متصلة'}</small></span>
         </button>
-        ${plain ? '<span class="wa-head__tools" id="wa-tools"></span>' : '<button type="button" class="wa-head__btn" id="wa-expand" aria-label="أظهر الرفيقة" title="أظهر الرفيقة">⌄</button>'}
+        ${plain ? '<span class="wa-head__tools" id="wa-tools"></span>' : '<button type="button" class="wa-head__btn" id="wa-expand" aria-label="أظهر المساعد" title="أظهر المساعد">⌄</button>'}
       </header>
       <p class="wa-note" id="wa-note" hidden role="status"></p>
       <div class="chat__hero">
         <div class="chat__tools">
-          <button type="button" class="tool" id="wa-on" title="واجهة محادثة بلا رفيقة">💬 واجهة المحادثة</button>
+          <button type="button" class="tool" id="wa-on" title="واجهة محادثة بلا مساعد">💬 واجهة المحادثة</button>
           <button type="button" class="tool" id="voice-toggle" ${textOnly ? 'hidden' : ''}></button>
           <button type="button" class="tool tool--stop" id="stop-voice" hidden aria-label="أوقف الصوت">⏹ أوقف الصوت</button>
           ${textOnly ? '<a class="tool" href="#/settings?talk" title="غيّره من الإعدادات">🔇 ردود بلا صوت</a>' : ''}
@@ -80,10 +99,12 @@ export async function mount(root) {
         <p class="bubble" id="bubble" role="status">${greeting()}</p>
         <div class="chat__stage" id="stage"></div>
       </div>
-      <button type="button" class="chat__handle" id="handle" aria-label="اسحب لتطوي الرفيقة أو تنسدلها"><span></span></button>
+      <button type="button" class="chat__handle" id="handle" aria-label="اسحب لتطوي المساعد أو تنسدلها"><span></span></button>
       <ol class="chat__log" id="log" aria-label="المحادثة"></ol>
+      <div class="composer__pending" id="ai-pending" hidden></div>
       <form class="composer" id="composer" autocomplete="off">
         <button type="button" class="composer__mic" id="mic" aria-label="تحدّث" ${showMic ? '' : 'hidden'}>🎙</button>
+        <button type="button" class="composer__attach" id="ai-attach" aria-label="أرفق صورة">📎</button>
         <textarea id="input" rows="1" placeholder="اكتب ما في بالك..." aria-label="رسالتك"></textarea>
         <button type="button" class="composer__clear" id="clear" aria-label="مسح النص" hidden>✕</button>
         <button type="submit" class="composer__send" id="send" aria-label="إرسال">➤</button>
@@ -103,6 +124,34 @@ export async function mount(root) {
   const bubble = root.querySelector('#bubble');
   const log = root.querySelector('#log');
   const form = root.querySelector('#composer');
+  // صورة مرفقة مع الرسالة التالية (تُرسل إلى Gemini فقط)
+  let pendingImage = null;
+  const pendingEl = root.querySelector('#ai-pending');
+  function showPending() {
+    pendingEl.hidden = !pendingImage;
+    pendingEl.innerHTML = pendingImage
+      ? `<img src="${pendingImage}" alt="الصورة المرفقة"><button type="button" class="link-btn" id="ai-pending-x" aria-label="أزل الصورة">✕ أزل</button>`
+      : '';
+    pendingEl.querySelector('#ai-pending-x')?.addEventListener('click', () => { pendingImage = null; showPending(); });
+  }
+  root.querySelector('#ai-attach').addEventListener('click', () => {
+    const pick = document.createElement('input');
+    pick.type = 'file';
+    pick.accept = 'image/*';
+    Object.assign(pick.style, { position: 'fixed', left: '0', top: '0', width: '1px', height: '1px', opacity: '0', pointerEvents: 'none' });
+    document.body.appendChild(pick);
+    pick.addEventListener('change', async () => {
+      const f = pick.files?.[0];
+      pick.remove();
+      if (!f) return;
+      try {
+        const { compressImage } = await import('../group.js');
+        pendingImage = await compressImage(f, 1024, 400_000);
+        showPending();
+      } catch (err) { say(`تعذّر تجهيز الصورة: ${err.message || err}`); }
+    });
+    try { pick.click(); } catch (err) { say(`تعذّر فتح نافذة الصور: ${err.message || err}`); }
+  });
   const input = root.querySelector('#input');
   const mic = root.querySelector('#mic');
   const clearBtn = root.querySelector('#clear');
@@ -110,7 +159,7 @@ export async function mount(root) {
   const stopVoiceBtn = root.querySelector('#stop-voice');
   let tapIdx = 0;
 
-  // مساءً، إن كتبت أشياء كثيرة اليوم ولم تلخصه بعد، تقترح الرفيقة ملخصاً
+  // مساءً، إن كتبت أشياء كثيرة اليوم ولم تلخصه بعد، تقترح المساعد ملخصاً
   (async () => {
     if (new Date().getHours() < 19) return;
     const start = new Date(); start.setHours(0, 0, 0, 0);
@@ -142,7 +191,7 @@ export async function mount(root) {
     }
   }
 
-  // ---- واجهة المحادثة (شبيهة بواتساب): الرفيقة تنسدل وتختفي، وتبقى المحادثة ----
+  // ---- واجهة المحادثة (شبيهة بواتساب): المساعد تنسدل وتختفي، وتبقى المحادثة ----
   const chatEl = root.querySelector('.chat');
   const waNote = root.querySelector('#wa-note');
   let waMode = plain || (await getSetting('chatStyle', 'companion')) === 'whatsapp';
@@ -152,14 +201,13 @@ export async function mount(root) {
   const orgHead = orgRole === 'manager' || orgRole === 'employee'; // المسؤول المسموح له بالمساعد يرجع إلى المحادثات أيضاً
   if (plain) {
     root.querySelector('#wa-name').textContent = 'المساعد';
-    root.querySelector('#wa-avatar').innerHTML = '<span class="g-orb" aria-hidden="true"></span>';
-    root.querySelector('#wa-avatar').classList.add('wa-avatar--orb');
+    root.querySelector('#wa-avatar').textContent = 'م';
     root.querySelector('#wa-who').setAttribute('aria-label', 'المساعد');
     if (orgHead) root.querySelector('#wa-who').insertAdjacentHTML('beforebegin', '<a class="wa-head__back" href="#/chats" aria-label="رجوع إلى المحادثات">→</a>');
     root.querySelector('#wa-tools').append(root.querySelector('#stop-voice'), root.querySelector('#voice-toggle'));
   }
   function setWaMode(on) {
-    if (plain) on = true; // الرفيقة مخفية نهائياً من الإعدادات
+    if (plain) on = true; // المساعد مخفية نهائياً من الإعدادات
     waMode = on;
     chatEl.classList.toggle('chat--wa', on);
     root.querySelector('#wa-head').hidden = !on;
@@ -170,7 +218,7 @@ export async function mount(root) {
   if (waMode) setWaMode(true);
   root.querySelector('#wa-on').addEventListener('click', () => setWaMode(true));
   // ---- الانسدال بالسحب ----
-  // في وضع الرفيقة: اسحب المقبض للأعلى فتنطوي مع إصبعك. في واجهة المحادثة: اسحب الرأس أو المقبض للأسفل فتنسدل.
+  // في وضع المساعد: اسحب المقبض للأعلى فتنطوي مع إصبعك. في واجهة المحادثة: اسحب الرأس أو المقبض للأسفل فتنسدل.
   const hero = root.querySelector('.chat__hero');
   const handle = root.querySelector('#handle');
   let pull = null;
@@ -186,7 +234,7 @@ export async function mount(root) {
     pull = { y0: e.clientY, full: fullHeight(), from: waMode ? 'wa' : 'companion', moved: false, id: e.pointerId };
     e.currentTarget.setPointerCapture(e.pointerId);
     hero.style.transition = 'none';
-    // في واجهة المحادثة نُظهر الرفيقة مطويّة لتنسدل من تحت الرأس
+    // في واجهة المحادثة نُظهر المساعد مطويّة لتنسدل من تحت الرأس
     if (waMode) { hero.style.maxHeight = '0px'; hero.style.opacity = '0'; chatEl.classList.add('is-pulling'); }
   }
   function movePull(e) {
@@ -194,7 +242,7 @@ export async function mount(root) {
     const dy = e.clientY - pull.y0;
     if (Math.abs(dy) > 6) pull.moved = true;
     if (!pull.moved) return;
-    // ارتفاع الرفيقة يتبع الإصبع
+    // ارتفاع المساعد يتبع الإصبع
     const h = pull.from === 'companion' ? Math.max(0, pull.full + Math.min(0, dy)) : Math.min(pull.full, Math.max(0, dy));
     hero.style.maxHeight = `${h}px`;
     hero.style.opacity = String(Math.min(1, h / (pull.full * 0.6)));
@@ -220,7 +268,7 @@ export async function mount(root) {
     el.addEventListener('pointerup', endPull);
     el.addEventListener('pointercancel', endPull);
   }
-  // الحالة في الرأس تتبع حالة الرفيقة
+  // الحالة في الرأس تتبع حالة المساعد
   const STATUS = plain
     ? { thinking: 'يكتب…', listening: 'يستمع…', talking: 'يتكلم…' }
     : { thinking: 'تكتب…', listening: 'تستمع…', talking: 'تتكلم…' };
@@ -284,6 +332,13 @@ export async function mount(root) {
     li.className = `msg msg--${msg.role}${pending ? ' msg--pending' : ''}`;
     if (msg.id) li.dataset.id = msg.id;
     li.dataset.role = msg.role;
+    if (msg.image && /^data:image\//.test(msg.image)) {
+      const im = document.createElement('img');
+      im.className = 'msg__img';
+      im.src = msg.image;
+      im.alt = 'صورة مرفقة';
+      li.append(im);
+    }
     const body = document.createElement('span');
     body.className = 'msg__text';
     body.textContent = msg.text;
@@ -307,7 +362,7 @@ export async function mount(root) {
     return li;
   }
 
-  // "استعنتُ بملاحظاتك": يوضح أي ملاحظات قرأتها الرفيقة قبل ردها
+  // "استعنتُ بملاحظاتك": يوضح أي ملاحظات قرأتها المساعد قبل ردها
   function renderUsed(li, used) {
     li.querySelector('.used')?.remove();
     if (!used.length) return;
@@ -344,15 +399,140 @@ export async function mount(root) {
     if (chip) renderChip(chip, entry);
   }
 
-  const entriesById = Object.fromEntries((await getEntries()).map((e) => [e.id, e]));
-  (await getMessages(50)).forEach((m) => {
-    const li = append(m, {
-      entry: m.role === 'user' && m.entryId ? entriesById[m.entryId] || null : null,
-      used: (m.used || []).map((id) => entriesById[id]).filter(Boolean),
+  // رسائل المحادثة المفتوحة (تُعاد كتابتها عند فتح محادثة أخرى)
+  async function renderHistory() {
+    const entriesById = Object.fromEntries((await getEntries()).map((e) => [e.id, e]));
+    (await getMessages(50)).forEach((m) => {
+      const li = append(m, {
+        entry: m.role === 'user' && m.entryId ? entriesById[m.entryId] || null : null,
+        used: (m.used || []).map((id) => entriesById[id]).filter(Boolean),
+      });
+      markEngine(li, m.engine);
+      if (m.actions) renderActions(li, m.actions);
     });
-    markEngine(li, m.engine);
-    if (m.actions) renderActions(li, m.actions);
+  }
+  await renderHistory();
+
+  // ---- المحادثات المتعددة: شريط بعلامة + وقائمة ----
+  const convBar = root.querySelector('#conv-bar');
+  const convTitle = root.querySelector('#conv-title');
+  const convSheet = root.querySelector('#conv-sheet');
+  const convList = root.querySelector('#conv-list');
+  const DEFAULT_TITLE = 'محادثة جديدة';
+  async function updateBarTitle() {
+    const cur = (await listConvs()).find((c) => c.id === activeConvId());
+    convTitle.textContent = cur?.title || DEFAULT_TITLE;
+  }
+  async function reloadConversation() {
+    log.innerHTML = '';
+    await renderHistory();
+    await updateBarTitle();
+    if (!convSheet.hidden) await renderConvList();
+  }
+  async function renderConvList() {
+    const list = (await listConvs()).slice().sort((a, b) => b.updatedAt - a.updatedAt);
+    const active = activeConvId();
+    convList.innerHTML = list.map((c) => `<li class="conv-item${c.id === active ? ' is-active' : ''}" data-id="${escapeHtml(c.id)}">
+        <span class="conv-item__title">${escapeHtml(c.title)}</span>
+        <span class="conv-item__actions" hidden>
+          <button type="button" class="conv-item__btn" data-act="edit" aria-label="تعديل الاسم">✏️</button>
+          <button type="button" class="conv-item__btn" data-act="del" aria-label="حذف">🗑</button>
+        </span>
+      </li>`).join('') || '<li class="muted conv-empty">لا محادثات بعد.</li>';
+  }
+  async function toggleConvList(force) {
+    const show = typeof force === 'boolean' ? force : convSheet.hidden;
+    convSheet.hidden = !show;
+    if (show) await renderConvList();
+  }
+  root.querySelector('#conv-menu').addEventListener('click', () => toggleConvList());
+  root.querySelector('#conv-new').addEventListener('click', async () => {
+    if (busy) { say('لحظة، ما زلت أفكر في رسالتك السابقة…'); return; }
+    await createConv();
+    await reloadConversation();
+    await toggleConvList(false);
   });
+
+  // ضغطة واحدة: تظهر أيقونتا التعديل والحذف. ضغطتان سريعتان: تُفتح المحادثة
+  let tap = { id: '', at: 0 };
+  let tapTimer = null;
+  function selectConvItem(li) {
+    convList.querySelectorAll('.conv-item.is-selected').forEach((x) => {
+      if (x !== li) { x.classList.remove('is-selected'); x.querySelector('.conv-item__actions').hidden = true; }
+    });
+    const on = li.classList.toggle('is-selected');
+    li.querySelector('.conv-item__actions').hidden = !on;
+  }
+  async function openFromList(id) {
+    await openConv(id);
+    await reloadConversation();
+    await toggleConvList(false);
+  }
+  async function renameFromList(li) {
+    const id = li.dataset.id;
+    const title = li.querySelector('.conv-item__title');
+    const input = Object.assign(document.createElement('input'), { className: 'conv-item__input', value: title.textContent, maxLength: 60 });
+    title.replaceWith(input);
+    input.focus();
+    let done = false;
+    const save = async (keep) => {
+      if (done) return;
+      done = true;
+      if (keep && input.value.trim()) await renameConv(id, input.value.trim());
+      await renderConvList();
+      await updateBarTitle();
+    };
+    input.addEventListener('keydown', (e) => { if (e.key === 'Enter') save(true); if (e.key === 'Escape') save(false); });
+    input.addEventListener('blur', () => save(true));
+  }
+  async function removeFromList(id) {
+    const list = await listConvs();
+    const name = list.find((c) => c.id === id)?.title || DEFAULT_TITLE;
+    if (!confirm(`حذف «${name}» مع كل رسائلها نهائياً؟`)) return;
+    const wasActive = id === activeConvId();
+    await deleteConv(id);
+    if (wasActive) await reloadConversation();
+    else { await updateBarTitle(); await renderConvList(); }
+  }
+  convList.addEventListener('click', async (e) => {
+    const li = e.target.closest('.conv-item');
+    if (!li) return;
+    const act = e.target.closest('[data-act]')?.dataset.act;
+    if (act === 'edit') return renameFromList(li);
+    if (act === 'del') return removeFromList(li.dataset.id);
+    if (e.target.closest('.conv-item__input')) return;
+    const id = li.dataset.id;
+    const now = Date.now();
+    if (tap.id === id && now - tap.at < 350) {
+      clearTimeout(tapTimer);
+      tap = { id: '', at: 0 };
+      return openFromList(id);
+    }
+    tap = { id, at: now };
+    clearTimeout(tapTimer);
+    tapTimer = setTimeout(() => selectConvItem(li), 350);
+  });
+
+  // بعد أول رد في المحادثة: عنوان قصير يكتبه الذكاء
+  async function autoTitle() {
+    const id = activeConvId();
+    await touchConv(id);
+    const cur = (await listConvs()).find((c) => c.id === id);
+    if (!cur || cur.title !== DEFAULT_TITLE) { await updateBarTitle(); return; }
+    const msgs = await getMessages(4);
+    const firstUser = msgs.find((m) => m.role === 'user');
+    const lastModel = [...msgs].reverse().find((m) => m.role === 'model' && m.text && !m.text.startsWith('⚠️'));
+    if (!firstUser || !lastModel) return;
+    let title = '';
+    try {
+      title = String(await chatTitle(`${firstUser.text}\n${lastModel.text}`)).replace(/["'«»؟?!.:،]/g, '').trim();
+    } catch { /* يُستعمل الاحتياطي أدناه */ }
+    if (!title) title = firstUser.text.split(/\s+/).slice(0, 4).join(' ');
+    await renameConv(id, title.slice(0, 60));
+    await updateBarTitle();
+    if (!convSheet.hidden) await renderConvList();
+  }
+  await updateBarTitle();
 
   // ما فات تصنيفه سابقاً (بلا مفتاح أو اتصال) نصنّفه الآن بهدوء
   classifyPending(refreshChip).then(() => {
@@ -528,8 +708,9 @@ export async function mount(root) {
   }
 
   async function send(raw, source = 'text') {
-    const text = raw.trim();
-    if (!text) return;
+    const text0 = raw.trim();
+    if (!text0 && !pendingImage) return;
+    const text = text0 || '📷 صورة';
     if (busy) {
       // نُبقي النص في الخانة ونخبره بدل التجاهل الصامت
       input.value = text; autosize();
@@ -540,10 +721,44 @@ export async function mount(root) {
     stopVoice();
     closeActions();
     input.value = ''; autosize();
+    const image = pendingImage;
+    pendingImage = null;
+    showPending();
+
+    // «احفظ التقرير»: آخر تقرير Word كبطاقة ملف في المحادثة، بلا رسالة إلى الذكاء
+    if (!image && isSaveReportCommand(text0)) {
+      try {
+        append(await addMessage({ role: 'user', text }));
+        let doc;
+        try {
+          doc = await reportFile(text0);
+        } catch (err) {
+          // لا تقرير Word محفوظ: نحوّل أحدث تقرير نصي إلى Word ونحفظه
+          if (!/لا توجد تقارير محفوظة/.test(err.message || '')) throw err;
+          doc = await textReportFile(text0);
+        }
+        const note = /جديد/.test(text0) ? ' (لإنشاء تقرير جديد اختر النطاق من نافذة التقارير)' : '';
+        append(await addMessage({ role: 'model', text: `هذا التقرير «${doc.title}» (النسخة ${doc.version})${note}:` }));
+        appendFileCard(doc);
+      } catch (err) {
+        append(await addMessage({ role: 'model', text: `⚠️ ${err.message || err}` }));
+      } finally { busy = false; }
+      return;
+    }
+
+    // «صدّر المحادثة»: ملف جاهز داخل المحادثة نفسها، بلا رسالة إلى الذكاء
+    if (!image && /^(صدّر|صدر|احفظ)\s+المحادثة$/.test(text0)) {
+      try {
+        append(await addMessage({ role: 'user', text }));
+        append(await addMessage({ role: 'model', text: 'جهّزتُ ملف المحادثة. احفظه أو شاركه:' }));
+        appendFileCard(await exportChatFile());
+      } finally { busy = false; }
+      return;
+    }
 
     // نحفظ كلام المستخدم أولاً حتى لا يضيع شيء
     const entry = await addEntry({ text, source });
-    const userMsg = await addMessage({ role: 'user', text, entryId: entry.id });
+    const userMsg = await addMessage({ role: 'user', text, entryId: entry.id, ...(image ? { image } : {}) });
     append(userMsg, { entry });
 
     companion.setState('thinking');
@@ -556,7 +771,9 @@ export async function mount(root) {
       // طلب واحد يعيد الرد وتصنيف رسالتك معاً (توفيراً للحصة)، من Gemini أو من النموذج على الجهاز
       // المدير: نُطلع الذكاء على عقل المؤسسة الحالي ليديره بالأسماء الصحيحة
       setActionContext(await orgContext().catch(() => ''));
-      const result = await smartChat(recent.map(({ role, text: t }) => ({ role, text: t })), {
+      setReportsContext(await reportsContext().catch(() => ''));
+      // الصورة تُرسل مع رسالتك الحالية فقط، لا مع كل السجل
+      const result = await smartChat(recent.map(({ role, text: t, image: img, id }) => ({ role, text: t, image: img && id === userMsg.id ? img : undefined })), {
         memories,
         onToken: (t) => streamInto(pending, t),
       });
@@ -564,7 +781,18 @@ export async function mount(root) {
       applyClassification(entry.id, result);
       const modelMsg = await addMessage({ role: 'model', text: reply, used: used.map((e) => e.id), engine: result.engine === 'local' ? 'local' : undefined });
       markEngine(pending, result.engine);
-      // أوامر طلبتها الرفيقة (إنشاء قسم، تغيير إعداد...): ننفذها ونعرض نتيجتها تحت الرد
+      // تعديل تقرير Word: ينفّذه التطبيق ويعرض النسخة الجديدة كبطاقة ملف
+      const editReq = result.actions?.find((a) => a?.action === 'edit_report');
+      if (editReq) {
+        result.actions = result.actions.filter((a) => a !== editReq);
+        try {
+          const doc = await editLastReport(editReq.name || '', editReq.target || '');
+          appendFileCard(doc, { autoSave: true });
+        } catch (err) {
+          append(await addMessage({ role: 'model', text: `⚠️ ${err.message || err}` }));
+        }
+      }
+      // أوامر طلبتها المساعد (إنشاء قسم، تغيير إعداد...): ننفذها ونعرض نتيجتها تحت الرد
       if (result.actions?.length) {
         const done = await executeActions(result.actions, {
           entryId: entry.id,
@@ -580,6 +808,7 @@ export async function mount(root) {
       pending.querySelector('.msg__text').textContent = reply;
       pending.classList.remove('msg--pending');
       renderUsed(pending, used);
+      autoTitle().catch(() => {});
       lastReplyBubble = escapeHtml(bubbleText(reply));
       say(lastReplyBubble);
       log.scrollTop = log.scrollHeight;
@@ -598,6 +827,39 @@ export async function mount(root) {
     }
   }
 
+  // بطاقة ملف في المحادثة: حفظ في التنزيلات، أو مشاركة
+  function appendFileCard({ blob, filename }, { autoSave = false } = {}) {
+    const li = document.createElement('li');
+    li.className = 'msg msg--model';
+    const card = document.createElement('div');
+    card.className = 'file-card';
+    card.innerHTML = `<b></b><small>${autoSave ? 'جارٍ الحفظ في التنزيلات…' : `${Math.max(1, Math.round(blob.size / 1024))} ك.ب`}</small>
+      <div class="file-card__actions">
+        <button type="button" class="btn btn--ghost" data-act="save">حفظ</button>
+        <button type="button" class="btn btn--ghost" data-act="share">مشاركة</button>
+      </div>`;
+    card.querySelector('b').textContent = filename;
+    card.addEventListener('click', async (e) => {
+      const act = e.target.closest('[data-act]')?.dataset.act;
+      if (!act) return;
+      // النتيجة تظهر داخل البطاقة نفسها (التنبيهات العامة لا تظهر في كل واجهات المحادثة)
+      const status = card.querySelector('small');
+      try {
+        if (act === 'save') status.textContent = `حُفظ في ${await saveFile(blob, filename)} ✓`;
+        else await shareFile(blob, filename);
+      } catch (err) { status.textContent = `تعذّر: ${err.message || String(err)}`; }
+    });
+    li.append(card);
+    log.append(li);
+    log.scrollTop = log.scrollHeight;
+    if (autoSave) {
+      const status = card.querySelector('small');
+      saveFile(blob, filename)
+        .then((where) => { status.textContent = `حُفظ في ${where} ✓`; })
+        .catch((err) => { status.textContent = `تعذّر الحفظ التلقائي: ${err.message || err}. استخدم حفظ.`; });
+    }
+  }
+
   // يعرض رد النموذج المحلي وهو يُكتب
   function streamInto(li, text) {
     li.classList.remove('msg--pending');
@@ -605,7 +867,7 @@ export async function mount(root) {
     log.scrollTop = log.scrollHeight;
   }
 
-  // نتائج أوامر الرفيقة: سطر لكل أمر، مع رابط "عرض" إن وُجد
+  // نتائج أوامر المساعد: سطر لكل أمر، مع رابط "عرض" إن وُجد
   function renderActions(li, done, undo) {
     li.querySelector('.msg__acts')?.remove();
     if (!done?.length) return;

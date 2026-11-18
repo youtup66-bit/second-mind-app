@@ -1,7 +1,7 @@
 // شاشة منشورات الأعمال: قائمة مجموعات مثل واتساب (العامة، ومجموعة لكل كرة أنت فيها)،
 // وكل مجموعة محادثة مستقلة (نصوص وصور وكلام يتحول إلى نص). ‎#/group‎ القائمة · ‎#/group?room=…‎ المحادثة
 import {
-  startGroupSync, groupEvents, groupMe, groupMembers, groupOnline, groupRooms, sendGroup, resend, markSeen, compressImage,
+  startGroupSync, groupEvents, groupMe, groupMembers, groupOnline, groupRooms, sendGroup, resend, markSeen, compressImage, compressVideo, blobToDataUrl, chunkMax,
   GENERAL, roomOf, unreadByRoom, roomNameOf, groupBranch, isChatRoom, groupInvites, myContacts, saveChat, deleteChat, acceptInvite, declineInvite, leaveChat,
 } from '../group.js';
 import { PALETTE } from '../org-structure.js';
@@ -138,7 +138,7 @@ export async function mountMode(root, mode) {
     // بلا مسافات بين العناصر (الفقاعة تحفظ الأسطر كما كُتبت)
     li.innerHTML = [
       m.mine ? '' : `<span class="msg__from" style="color:${colorFor(m.from)}">${esc(m.fromName)}</span>`,
-      m.image ? `<img class="msg__img" src="${m.image}" alt="صورة" loading="lazy">` : '',
+      m.image && m.image.startsWith('data:video/') ? `<video class="msg__video" src="${m.image}" controls playsinline preload="metadata"></video>` : m.image ? `<img class="msg__img" src="${m.image}" alt="صورة" loading="lazy">` : '',
       m.text ? `<span class="msg__text">${esc(m.text)}</span>` : '',
       `<span class="msg__time">${fmtTime.format(m.sentAt)}${m.mine ? ` <span class="tick tick--${m.status}">${TICKS[m.status] || ''}</span>` : ''}</span>`,
       m.mine && m.status === 'failed' ? '<button type="button" class="msg__retry">لم تُرسل · أعد المحاولة</button>' : '',
@@ -205,7 +205,7 @@ export async function mountMode(root, mode) {
     say('افتح الصور…');
     const pick = document.createElement('input');
     pick.type = 'file';
-    pick.accept = 'image/*';
+    pick.accept = 'image/*,video/*';
     // غير مرئي لكن موجود في الصفحة بحجم صغير: بعض الهواتف لا تفتح حقلاً مخفياً تماماً
     Object.assign(pick.style, { position: 'fixed', left: '0', top: '0', width: '1px', height: '1px', opacity: '0', pointerEvents: 'none' });
     document.body.appendChild(pick);
@@ -213,11 +213,24 @@ export async function mountMode(root, mode) {
       const f = pick.files?.[0];
       pick.remove();
       if (!f) return;
-      say('أجهّز الصورة…');
+      const isVideo = f.type.startsWith('video/');
+      // خيار إضافي: الملف كاملاً بلا ضغط، يُقسَّم إلى أجزاء (أبطأ، لكنه يحفظ الجودة)
+      const full = confirm('إرسال الملف كاملاً بدون ضغط؟\n\nموافق: كامل، ويُقسَّم إلى أجزاء (أبطأ، حتى نحو 25 ميجابايت)\nإلغاء: مضغوط كالمعتاد (أسرع، وجودة أقل)');
+      say(full ? 'أجهّز الملف كاملاً…' : isVideo ? 'أجهّز الفيديو…' : 'أجهّز الصورة…');
       try {
-        const image = await compressImage(f);
+        let image, chunked = false;
+        if (full) {
+          image = await blobToDataUrl(f);
+          if (image.length > chunkMax) throw new Error('الملف أكبر من 25 ميجابايت، جرّب الوضع المضغوط.');
+          chunked = true;
+        } else if (isVideo) {
+          image = await blobToDataUrl(await compressVideo(f));
+          if (image.length > 890000) throw new Error('الفيديو طويل، جرّب مقطعاً أقصر.');
+        } else {
+          image = await compressImage(f);
+        }
         if (log.querySelector('.wa-day') && !log.querySelector('.msg')) log.innerHTML = '';
-        await sendGroup({ image, text: input.value.trim(), room });
+        await sendGroup({ image, text: input.value.trim(), room, chunked });
         input.value = ''; autosize(); syncComposer();
         note.hidden = true;
       } catch (err) { say(`تعذّر إرسال الصورة: ${esc(err.message)}`); }
@@ -424,12 +437,21 @@ async function mountList(root, s, syncErr, mode, tab = 'chats') {
   const chat = true;
   const base = '#/chats';
   const shareReady = await pendingShare().catch(() => false);
+  // نافذة المجموعات: القائمة نفسها بلا كرة المساعد (المساعد يبقى في نافذته)
+  const groupsView = new URLSearchParams(location.hash.split('?')[1] || '').get('view') === 'groups';
   const showOrb = s.member.role === 'manager' || !!groupBranch()?.perms?.assistant;
+  // الشاشة الرئيسية للمحادثات: الكرة فقط، وكلمة «مجموعات» تفتح نافذة الكروبات بتبويباتها
+  if (!groupsView) {
+    root.innerHTML = `
+      <section class="chat chat--wa chat--plain chat--group g-list chats-main">
+        ${showOrb ? `<a class="chats-orb" href="#/home" aria-label="المساعد"><span class="chats-orb__ball" aria-hidden="true"></span></a>` : ''}
+        <a class="chats-groups-open" href="#/chats?tab=chats&view=groups">مجموعات</a>
+      </section>`;
+    return;
+  }
   root.innerHTML = `
     <section class="chat chat--wa chat--plain chat--group g-list">
-      ${showOrb ? `<a class="chats-orb" href="#/home" aria-label="المساعد">
-          <span class="g-orb chats-orb__ball" aria-hidden="true"></span>
-          <b>المساعد</b><small>مرتبط بعقل المؤسسة</small></a>` : ''}
+      ${showOrb ? `<a class="chats-orb" href="#/home" aria-label="المساعد"><span class="chats-orb__ball" aria-hidden="true"></span></a>` : ''}
       <nav class="chats-words" aria-label="أقسام المحادثات">
         ${TABS.map(([id, label]) => (id === tab ? `<b aria-current="page">${label}</b>` : `<a href="#/chats?tab=${id}">${label}</a>`)).join('')}
       </nav>
@@ -521,7 +543,7 @@ async function mountList(root, s, syncErr, mode, tab = 'chats') {
     list.innerHTML = shareBanner + inv + empty + shown.map((it) => {
       const m = last.get(it.id);
       const n = unread.get(it.id) || 0;
-      const preview = m ? `${m.mine ? 'أنت' : esc(m.fromName)}: ${m.text ? esc(m.text.slice(0, 80)) : '📷 صورة'}` : `<i>${esc(it.kind)}</i>`;
+      const preview = m ? `${m.mine ? 'أنت' : esc(m.fromName)}: ${m.text ? esc(m.text.slice(0, 80)) : (m.image && m.image.startsWith('data:video/') ? '🎬 فيديو' : '📷 صورة')}` : `<i>${esc(it.kind)}</i>`;
       return `<li><a class="g-room${it.past ? ' is-past' : ''}" href="${base}?room=${encodeURIComponent(it.id)}${shareReady ? '&share=1' : ''}">
         <span class="wa-avatar wa-avatar--group" style="background:${esc(it.color)};color:${textOn(it.color)}" aria-hidden="true">${esc(initial(it.name))}</span>
         <span class="g-room__body">
@@ -530,7 +552,14 @@ async function mountList(root, s, syncErr, mode, tab = 'chats') {
         </span></a></li>`;
     }).join('');
     const n = shown.length;
-    statusEl.textContent = !groupOnline() ? 'بلا إنترنت' : !n ? '' : `${n} ${n === 1 ? 'مجموعة' : n === 2 ? 'مجموعتان' : n <= 10 ? 'مجموعات' : 'مجموعة'}`;
+    if (tab === 'chats' && groupOnline()) {
+      // كلمة جانبية بدل عدد المجموعات: «مجموعات» تفتح نافذتها، وفيها «المساعد» للعودة
+      statusEl.innerHTML = groupsView
+        ? '<a class="chats-groups-link" href="#/chats">← المساعد</a>'
+        : '<a class="chats-groups-link" href="#/chats?tab=chats&view=groups">مجموعات</a>';
+    } else {
+      statusEl.textContent = !groupOnline() ? 'بلا إنترنت' : !n ? '' : `${n} ${n === 1 ? 'مجموعة' : n === 2 ? 'مجموعتان' : n <= 10 ? 'مجموعات' : 'مجموعة'}`;
+    }
   }
   list.addEventListener('click', async (e) => {
     const person = e.target.closest('[data-uid]');

@@ -1,15 +1,15 @@
 :root {
-  --bg: #0b0820;
-  --bg-2: #140f2e;
-  --surface: #1c1640;
-  --surface-2: #261e55;
-  --border: #352a6e;
-  --text: #ece9ff;
-  --muted: #a39cd0;
-  --accent: #8b6cff;
-  --accent-2: #4f7dff;
-  --danger: #ff6b8a;
-  --ok: #5fe0b0;
+  --bg: #0b141a;
+  --bg-2: #202c33;
+  --surface: #111b21;
+  --surface-2: #2a3942;
+  --border: #2a3942;
+  --text: #e9edef;
+  --muted: #8696a0;
+  --accent: #00a884;
+  --accent-2: #00a884;
+  --danger: #f15c6d;
+  --ok: #00a884;
   --radius: 16px;
   --tabbar-h: 64px;
   font-family: "Tajawal", system-ui, sans-serif;
@@ -21,7 +21,7 @@
 html, body { margin: 0; height: 100%; }
 
 body {
-  background: radial-gradient(120% 80% at 50% 0%, #1d1650 0%, var(--bg) 60%) fixed;
+  background: var(--bg);
   background-color: var(--bg);
   color: var(--text);
   font-size: 16px;
@@ -606,7 +606,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); margin: 4px 0 12
   background: var(--wa-head); padding: 8px 12px; border-bottom: 1px solid rgba(255,255,255,.06);
 }
 .wa-head__who { flex: 1; display: flex; align-items: center; gap: 10px; background: none; border: 0; color: var(--wa-text); font: inherit; cursor: pointer; text-align: start; padding: 0; }
-.wa-avatar { width: 40px; height: 40px; border-radius: 50%; overflow: hidden; flex: none; background: radial-gradient(circle at 50% 40%, #2c3a7a, #141a3a); }
+.wa-avatar { width: 40px; height: 40px; border-radius: 50%; overflow: hidden; flex: none; background: #2a3942; }
 .wa-avatar svg { width: 100%; height: 100%; display: block; }
 .wa-avatar * { animation: none !important; }
 .wa-avatar .cmp-shadow, .wa-avatar .cmp-aura, .wa-avatar .cmp-think { display: none; }
@@ -1073,27 +1073,6 @@ body.on-staffnav .topbar { display: none; }
 .g-room__badge { background: var(--wa-green, #00a884); color: #111b21; font-size: .72rem; font-weight: 700; min-width: 20px; height: 20px; border-radius: 10px; display: grid; place-items: center; padding: 0 6px; }
 .g-past { margin: 0; padding: 12px 16px calc(12px + env(safe-area-inset-bottom)); text-align: center; font-size: .85rem; color: var(--wa-meta, #8696a0); background: var(--wa-head, #202c33); }
 .g-past[hidden], .composer[hidden] { display: none; }
-/* المساعد: كرة متوهجة مثل كرات عقل المؤسسة */
-.wa-avatar--orb { background: none; display: grid; place-items: center; overflow: visible; }
-.g-orb {
-  width: 22px; height: 22px; border-radius: 50%;
-  background: radial-gradient(circle at 38% 35%, #ffffff 0%, #bfe3ff 35%, #5aa7ff 75%, #2b5fb8 100%);
-  box-shadow: 0 0 14px 5px rgba(90,167,255,.55), 0 0 30px 10px rgba(90,167,255,.18);
-  animation: orb-glow 2.8s ease-in-out infinite;
-}
-@keyframes orb-glow { 50% { transform: scale(.9); box-shadow: 0 0 8px 3px rgba(90,167,255,.4), 0 0 18px 6px rgba(90,167,255,.12); } }
-.wa-head .wa-avatar--orb .g-orb { width: 18px; height: 18px; }
-/* كرة المساعد الطافية فوق التطبيق (A33): تحت النوافذ المنسدلة (35) وفوق الشاشات */
-.orb-float {
-  position: fixed; z-index: 34; width: 52px; height: 52px; padding: 0; border: 0; border-radius: 50%;
-  background: radial-gradient(circle, rgba(90,167,255,.18), rgba(11,15,20,0) 70%);
-  display: grid; place-items: center; cursor: pointer; touch-action: none; -webkit-tap-highlight-color: transparent;
-  transition: left .2s ease, top .2s ease;
-}
-.orb-float[hidden] { display: none; }
-.orb-float.is-dragging { transition: none; }
-.orb-float .g-orb { width: 24px; height: 24px; }
-.orb-float:active .g-orb { transform: scale(.85); }
 .g-new { position: absolute; inset-inline-end: 16px; bottom: 16px; background: var(--wa-green, #00a884); color: #111b21; border: 0; border-radius: 16px; padding: 14px 18px; font: inherit; font-weight: 700; box-shadow: 0 4px 14px rgba(0,0,0,.35); cursor: pointer; }
 .g-list { position: relative; }
 .g-list .g-rooms { padding-bottom: 80px; }
@@ -1237,7 +1216,12 @@ body.on-group .tasks .wa-head { padding-top: calc(env(safe-area-inset-top) + 8px
 
 /* المحادثات: كرة المساعد في الوسط، وتحتها الكلمات الثلاث (المحادثات · الأقسام · الموظفون) */
 .chats-orb { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 16px 0 6px; text-decoration: none; color: var(--wa-text, #e9edef); }
-.chats-orb__ball { width: 46px; height: 46px; border-radius: 50%; display: block; }
+.chats-orb__ball { width: 46px; height: 46px; border-radius: 50%; display: block; background: radial-gradient(circle at 38% 35%, #ffffff 0%, #bfe3ff 35%, #5aa7ff 75%, #2b5fb8 100%); animation: orb-breathe 3s ease-in-out infinite; }
+@keyframes orb-breathe {
+  0%, 100% { transform: scale(.9); opacity: .7; box-shadow: 0 0 8px 2px rgba(90,167,255,.35), 0 0 16px 4px rgba(90,167,255,.1); }
+  50% { transform: scale(1.06); opacity: 1; box-shadow: 0 0 18px 6px rgba(90,167,255,.7), 0 0 36px 12px rgba(90,167,255,.25); }
+}
+.chats-groups-link { color: var(--wa-green, #00a884); text-decoration: none; font-weight: 700; }
 .chats-orb b { font-size: 1rem; }
 .chats-orb small { color: var(--wa-meta, #8696a0); font-size: .78rem; }
 .chats-words { display: flex; justify-content: center; gap: 22px; padding: 10px 12px 8px; border-bottom: 1px solid rgba(255,255,255,.06); }
@@ -1271,3 +1255,37 @@ body.on-group .tasks .wa-head { padding-top: calc(env(safe-area-inset-top) + 8px
 
 /* زر إرسال الصورة في المحادثة */
 .composer__attach { width: 40px; height: 40px; border: 0; background: transparent; font-size: 1.2rem; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
+
+/* نتيجة فحص الذكاء */
+.ai-check { white-space: pre-wrap; font-size: .85rem; line-height: 1.8; background: var(--surface-2, #1b2230); padding: 10px 12px; border-radius: 10px; margin: 8px 0; }
+
+/* ---- المرفق في المحادثة: زر 📎 ومعاينة الصورة قبل الإرسال ---- */
+.composer__attach { background: none; border: 0; font-size: 1.25rem; padding: 6px; cursor: pointer; color: inherit; }
+.composer__pending { display: flex; align-items: center; gap: 10px; padding: 6px 10px; margin: 0 8px 4px; border-radius: 12px; background: var(--surface-2, #2a3942); }
+.composer__pending[hidden] { display: none; }
+.composer__pending img { width: 56px; height: 56px; object-fit: cover; border-radius: 8px; }
+.msg__img { display: block; max-width: 100%; max-height: 240px; border-radius: 10px; margin-bottom: 4px; }
+
+/* بطاقة ملف في المحادثة */
+.file-card { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border-radius: 12px; background: var(--surface-2, #2a3942); }
+.file-card b { word-break: break-all; }
+.file-card small { color: var(--muted, #8696a0); }
+.file-card__actions { display: flex; gap: 8px; }
+
+/* ---- المحادثات المتعددة للمساعد ---- */
+.conv-bar { display: flex; align-items: center; justify-content: space-between; direction: ltr; padding: 6px 10px; border-bottom: 1px solid var(--border, #2a3942); background: var(--bg-2, #202c33); }
+.conv-bar__btn { background: none; border: 0; color: var(--text, #e9edef); padding: 6px; border-radius: 10px; cursor: pointer; display: grid; place-items: center; }
+.conv-bar__btn:active { background: var(--surface-2, #2a3942); }
+.conv-bar__title { flex: 1; text-align: center; font-weight: 700; color: var(--text, #e9edef); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; direction: rtl; padding: 0 8px; }
+.conv-sheet { max-height: 45vh; overflow-y: auto; border-bottom: 1px solid var(--border, #2a3942); background: var(--bg, #0b141a); }
+.conv-sheet[hidden] { display: none; }
+.conv-list { list-style: none; margin: 0; padding: 0; }
+.conv-item { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 12px 14px; border-bottom: 1px solid rgba(255,255,255,.06); cursor: pointer; user-select: none; }
+.conv-item.is-active .conv-item__title { color: var(--wa-green, #00a884); }
+.conv-item__title { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.conv-item__actions { display: flex; gap: 6px; }
+.conv-item__actions[hidden] { display: none; }
+.conv-item__btn { background: var(--surface-2, #2a3942); border: 0; border-radius: 10px; padding: 6px 10px; cursor: pointer; font-size: 1rem; }
+.conv-item__input { flex: 1; font: inherit; padding: 6px 8px; border-radius: 8px; border: 1px solid var(--accent, #00a884); background: var(--surface-2, #2a3942); color: var(--text, #e9edef); }
+.conv-empty { padding: 14px; cursor: default; }
+.chats-groups-open { display: block; margin: 24px auto; width: max-content; padding: 12px 22px; border-radius: 16px; background: var(--wa-green, #00a884); color: #111b21; font-weight: 700; text-decoration: none; }

@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <defs>
+    <radialGradient id="core" cx="40%" cy="35%" r="70%">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset=".35" stop-color="#bfe3ff"/>
+      <stop offset=".7" stop-color="#5aa7ff"/>
+      <stop offset="1" stop-color="#2b5fb8"/>
+    </radialGradient>
+    <radialGradient id="halo" cx="50%" cy="50%" r="50%">
+      <stop offset="0" stop-color="#5aa7ff" stop-opacity=".55"/>
+      <stop offset="1" stop-color="#5aa7ff" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="4" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <rect width="512" height="512" rx="110" fill="#0b141a"/>
+  <!-- خطوط الدوائر الإلكترونية الخارجة من الكرة -->
+  <g stroke="#5aa7ff" stroke-width="5" fill="none" stroke-linecap="round" filter="url(#glow)" opacity=".9">
+    <path d="M150 210 H70 V130 H40"/>
+    <path d="M362 210 H450 V120 H478"/>
+    <path d="M150 300 H60 V390 H30"/>
+    <path d="M362 300 H460 V400 H486"/>
+    <path d="M256 150 V60 H200 V30"/>
+    <path d="M256 362 V470 H316 V486"/>
+  </g>
+  <g fill="#bfe3ff" filter="url(#glow)">
+    <circle cx="40" cy="130" r="9"/>
+    <circle cx="478" cy="120" r="9"/>
+    <circle cx="30" cy="390" r="9"/>
+    <circle cx="486" cy="400" r="9"/>
+    <circle cx="200" cy="30" r="9"/>
+    <circle cx="316" cy="486" r="9"/>
+  </g>
+  <!-- الهالة والكرة -->
+  <circle cx="256" cy="256" r="170" fill="url(#halo)"/>
+  <circle cx="256" cy="256" r="120" fill="url(#core)" filter="url(#glow)"/>
+  <!-- الحروف -->
+  <text x="256" y="256" text-anchor="middle" dominant-baseline="central" font-family="Arial, Helvetica, sans-serif" font-weight="800" font-size="118" letter-spacing="4" fill="#0b141a">OM</text>
+</svg>

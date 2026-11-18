@@ -13,8 +13,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: dev
 
       - uses: actions/setup-java@v4
         with:
@@ -24,6 +22,23 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.7'
+
+      - name: تحضير llama.cpp (المحرك الأصلي للذكاء)
+        run: |
+          git clone --depth 1 https://github.com/ggerganov/llama.cpp llama-src
+          SRC=llama-src/examples/llama.android/lib/src/main
+          cp $SRC/cpp/ai_chat.cpp $SRC/cpp/logging.h android/app/src/main/cpp/
+          mkdir -p android/app/src/main/java/com/arm
+          cp -r $SRC/java/com/arm/aichat android/app/src/main/java/com/arm/
+          # إضافة عقلي الثاني: دالة إعادة ضبط السياق (A25) تُلحق بآخر الملف لتصل إلى دوال المحرك الساكنة
+          cat android/app/src/main/cpp/aqli_reset.inc >> android/app/src/main/cpp/ai_chat.cpp
+
+      - name: تجهيز صفحة التطبيق داخل الـ APK
+        run: |
+          mkdir -p android/app/src/main/assets/app
+          cp -r index.html manifest.webmanifest sw.js css js icons android/app/src/main/assets/app/
+          # إصدار الصفحة المضمّنة (يُقارن به التحديث من داخل التطبيق)
+          grep -o 'const VERSION = [0-9]*' sw.js | grep -o '[0-9]*$' > android/app/src/main/assets/app/version.txt
 
       - name: مفتاح التوقيع
         env:

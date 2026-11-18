@@ -1,4 +1,5 @@
 // شاشة المؤسسة: الدخول، وإنشاء المؤسسة (المدير)، والانضمام بدعوة (الموظف)
+import { PUBLIC_BASE } from '../env.js';
 import {
   cloudConfig, setCloudConfig, clearCloudConfig, session, signIn, signOut, createOrg,
   readInvite, joinWithInvite, orgExists, sendReset,
@@ -297,7 +298,7 @@ async function renderJoin(root, params) {
 }
 
 function showKit(root, data) {
-  const url = `${location.origin}${location.pathname}#/org`;
+  const url = `${PUBLIC_BASE}#/org`;
   root.innerHTML = `
     <div class="org">
       <div class="org-hero">

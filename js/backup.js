@@ -1,9 +1,10 @@
+import { hasNativeFiles, saveFile, shareFile } from './native-files.js';
 // النسخ الاحتياطي: ملف ZIP يحوي بياناتك كاملة (data.json) ونسخة مقروءة بأقسامها (Markdown).
 // كل شيء يُبنى على الجهاز؛ لا يُرفع إلى أي خادم.
 import { CATEGORIES, NONE, categoryById } from './categories.js';
 import {
   exportData, importData, saveSnapshot, listSnapshots, getSnapshot, deleteSnapshot,
-  getSetting, setSetting,
+  getSetting, setSetting, getMessages, getAllMessages,
 } from './storage.js';
 import { createZip, readZip } from './zip.js';
 
@@ -24,13 +25,19 @@ function categoryMarkdown(cat, entries) {
   return lines.join('\n');
 }
 
+// ملف المحادثة مع المساعد (للحفظ أو المشاركة من داخل المحادثة)
+export async function exportChatFile() {
+  const messages = (await getAllMessages()).slice(-5000);
+  return { blob: new Blob([chatMarkdown(messages)], { type: 'text/markdown;charset=utf-8' }), filename: 'المحادثة.md' };
+}
+
 function chatMarkdown(messages) {
-  const lines = ['# المحادثة مع الرفيقة', ''];
+  const lines = ['# المحادثة مع المساعد', ''];
   let lastDay = '';
   for (const m of [...messages].sort((a, b) => a.createdAt - b.createdAt)) {
     const d = day(m.createdAt);
     if (d !== lastDay) { lines.push(`## ${d}`, ''); lastDay = d; }
-    lines.push(`**${m.role === 'user' ? 'أنا' : 'الرفيقة'}:** ${m.text}`, '');
+    lines.push(`**${m.role === 'user' ? 'أنا' : 'المساعد'}:** ${m.text}`, '');
   }
   return lines.join('\n');
 }
@@ -68,6 +75,7 @@ export async function buildBackupZip() {
 const markExported = () => setSetting('lastExportAt', Date.now());
 
 export function canShareFiles() {
+  if (hasNativeFiles()) return true; // داخل التطبيق: مشاركة أندرويد متاحة دائماً
   try {
     return !!navigator.canShare?.({ files: [new File([''], 'x.zip', { type: 'application/zip' })] });
   } catch { return false; }
@@ -75,12 +83,7 @@ export function canShareFiles() {
 
 export async function downloadBackup() {
   const { blob, filename, count } = await buildBackupZip();
-  const url = URL.createObjectURL(blob);
-  const a = Object.assign(document.createElement('a'), { href: url, download: filename });
-  document.body.append(a);
-  a.click();
-  a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 10_000);
+  await saveFile(blob, filename);
   await markExported();
   return { filename, count };
 }
@@ -88,8 +91,7 @@ export async function downloadBackup() {
 // مشاركة الملف (مثلاً إلى Google Drive أو البريد) على الجوال
 export async function shareBackup() {
   const { blob, filename, count } = await buildBackupZip();
-  const file = new File([blob], filename, { type: 'application/zip' });
-  await navigator.share({ files: [file], title: 'نسخة عقلي الثاني' });
+  await shareFile(blob, filename);
   await markExported();
   return { filename, count };
 }

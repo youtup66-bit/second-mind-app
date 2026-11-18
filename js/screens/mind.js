@@ -255,7 +255,7 @@ export async function mount(root) {
   const setHint = () => {
     hint.textContent = model.total
       ? (mindStyle === 'dots' ? 'المس نقطة لترى ما يرتبط بها · قرّب بإصبعين لتظهر الأسماء' : 'المس كرة أو اسم مجموعة · بإصبعين كبّر وصغّر')
-      : head ? 'تحدّث مع المساعد، وستكبر كرات عقل المؤسسة مع كل ما تقوله.' : 'تحدّث مع الرفيقة، وستكبر الكرات مع كل ما تقوله.';
+      : head ? 'تحدّث مع المساعد، وستكبر كرات عقل المؤسسة مع كل ما تقوله.' : 'تحدّث مع المساعد، وستكبر الكرات مع كل ما تقوله.';
   };
   setHint();
 
@@ -605,7 +605,7 @@ export async function mount(root) {
     const list = entries.filter((e) => e.category === openCat);
     if (!list.length && fromRooms.length) { notesEl.innerHTML = roomsHTML; return; }
     if (!list.length) {
-      notesEl.innerHTML = `<li class="notes__empty muted">لا توجد ملاحظات هنا بعد.${isCustom(openCat) ? ` ${head ? 'سيصنّف المساعد' : 'ستصنّف الرفيقة'} فيه ما يناسبه من كلامك القادم.` : ''}</li>`;
+      notesEl.innerHTML = `<li class="notes__empty muted">لا توجد ملاحظات هنا بعد.${isCustom(openCat) ? ` ${head ? 'سيصنّف المساعد' : 'ستصنّف المساعد'} فيه ما يناسبه من كلامك القادم.` : ''}</li>`;
       return;
     }
     notesEl.innerHTML = list.map((e) => noteHTML(e)).join('') + roomsHTML;
@@ -690,7 +690,7 @@ export async function mount(root) {
       else created = await addCategory(data);
       form.hidden = true;
       await rebuild();
-      hint.textContent = editingId ? 'عدّلتُ القسم ✓' : `أضفتُ "${data.label.trim()}" ✓ ${head ? 'سيصنّف المساعد' : 'ستصنّف الرفيقة'} فيه ما يناسبه من كلامك القادم.`;
+      hint.textContent = editingId ? 'عدّلتُ القسم ✓' : `أضفتُ "${data.label.trim()}" ✓ ${head ? 'سيصنّف المساعد' : 'ستصنّف المساعد'} فيه ما يناسبه من كلامك القادم.`;
       // قسم جديد: نفتح نافذته ونقترح البحث في الملاحظات القديمة
       if (created && entries.some((e) => e.category && e.category !== 'none')) {
         openSheet(created.id);

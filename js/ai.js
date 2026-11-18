@@ -6,6 +6,7 @@ import { getSetting } from './storage.js';
 import { chat as geminiChat, classify as geminiClassify, memoriesBlock } from './gemini.js';
 import { localChat, localReady, explainError, gpuUnavailable, gpuDeadError } from './local-ai.js';
 import { CATEGORIES, NONE } from './categories.js';
+import { actionContext } from './actions-spec.js';
 
 export const AI_MODE_DEFAULT = 'auto';
 const FALLBACK_CODES = new Set(['NETWORK', 'RATE', 'TIMEOUT', 'NO_KEY', 'BAD_KEY']);
@@ -16,11 +17,11 @@ const geminiAvailable = async (mode) => mode === 'auto' && navigator.onLine && !
 const localError = (err) => Object.assign(new Error(explainError(err)), { code: err.code || 'LOCAL_FAIL' });
 
 // شخصية مختصرة تناسب النماذج الصغيرة (التعليمات الطويلة تربكها)
-const LOCAL_PERSONA = `أنت "المساعد"، مساعد عمل لرئيس القسم في تطبيق المؤسسة، ومرتبط بعقل المؤسسة. تحدث بالعربية البسيطة المهنية الودودة، وخاطبه بصيغة محايدة.
+const LOCAL_PERSONA = `أنت مساعد ذكي عام داخل تطبيق "عقلي الثاني". تحدث كأنك تتحدث إلى صاحبك مباشرة، بالعربية البسيطة الواضحة، وبصيغة محايدة، دون اسم شخصية ولا أسلوب أنمي.
 - ردّ باختصار: من جملتين إلى أربع.
 - إن طلب حلاً فأعطه خطوات عملية قصيرة تبدأ كل منها بـ "- ".
-- إن وصلتك ملاحظات من عقل المؤسسة ولها صلة، فاستعن بها بقولك "ذكرتَ سابقاً أن...".
-- تحدث عن العمل لا عن نفسيات الأشخاص، ولا تخترع معلومات.`;
+- إن وصلتك ملاحظات من عقله الثاني ولها صلة، فاستعن بها بقولك "ذكرتَ سابقاً أن...".
+- لا تخترع معلومات.`;
 
 export async function aiMode() {
   const m = await getSetting('aiMode', AI_MODE_DEFAULT);
@@ -33,8 +34,44 @@ async function wantLocalFirst(mode) {
   return !navigator.onLine || !(await getSetting('geminiApiKey', ''));
 }
 
+// المدير فقط: نعطي النموذج عقل المؤسسة الحالي، ونطلب سطر ACTION واحداً عند طلب إضافة كرة
+function orgNote() {
+  const org = actionContext();
+  if (!org) return '';
+  return `\n\nأنت تساعد المدير في إدارة عقل المؤسسة. الحالي:\n${org.slice(0, 1200)}\n` +
+    'إن طلب المدير إضافة كرة أو فرع، فأضف في آخر ردك سطراً واحداً بهذه الصيغة فقط: ' +
+    'ACTION {"action":"org_add_branch","target":"اسم الفرع الأب كما ورد أعلاه","name":"اسم الكرة الجديدة"} ' +
+    'ولا تضفه إن لم يطلب ذلك صراحة.';
+}
+
+// أمر بسيط في رسالة المدير ("أضف كرة الصيانة تحت شعبة الشبكات") نفهمه مباشرة إن لم يُخرج النموذج سطر ACTION
+const SIMPLE_ADD = /[أا]ض(?:ف|يف)\S*\s+(?:كرة|فرع|قسم|وحدة|شعبة)?\s*(?:جديدة\s+)?(?:اسمها\s+|اسمه\s+|باسم\s+)?(.+?)\s+تحت\s+(.+?)\s*[.؟!]?$/;
+
+// يستخرج أمر الإضافة من رد النموذج (أو من رسالة المدير)، ويطلب تأكيده قبل التنفيذ
+function extractOrgAction(text, userText = '') {
+  if (!actionContext()) return { reply: text, actions: [] };
+  const m = text.match(/ACTION\s*(\{[^\n]*\})/) || text.match(/(\{[^{}\n]*"action"[^{}\n]*\})/);
+  let reply = text;
+  let a = null;
+  if (m) {
+    reply = text.replace(m[0], '').trim();
+    try { a = JSON.parse(m[1]); } catch { /* صيغة غير صالحة */ }
+  }
+  if (!a) {
+    const s = userText.trim().match(SIMPLE_ADD);
+    if (s) a = { action: 'org_add_branch', name: s[1], target: s[2] };
+  }
+  if (a?.action !== 'org_add_branch' || !a.target || !a.name) return { reply, actions: [] };
+  const target = String(a.target).trim();
+  const name = String(a.name).trim().slice(0, 60);
+  if (!window.confirm(`الذكاء يقترح إضافة «${name}» تحت «${target}». موافق؟`)) {
+    return { reply: `${reply}\n(لم تُضف الكرة)`, actions: [] };
+  }
+  return { reply, actions: [{ action: 'org_add_branch', target, name }] };
+}
+
 function toLocalMessages(history, memories) {
-  const msgs = [{ role: 'system', content: LOCAL_PERSONA + memoriesBlock(memories) }];
+  const msgs = [{ role: 'system', content: LOCAL_PERSONA + memoriesBlock(memories) + orgNote() }];
   for (const m of history.slice(-10)) {
     const role = m.role === 'model' ? 'assistant' : 'user';
     const last = msgs[msgs.length - 1];
@@ -60,15 +97,19 @@ export async function localClassify(text) {
 // يعيد { reply, category?, title?, engine: 'gemini'|'local' }
 // onToken(نص حتى الآن): لعرض رد النموذج المحلي وهو يُكتب
 export async function smartChat(history, { memories = [], classify = true, onToken } = {}) {
+  // النموذج على الجهاز لا يقرأ الصور، فالرسالة التي فيها صورة تذهب إلى Gemini
+  if ([...history].reverse().find((m) => m.role === 'user')?.image) {
+    return { ...(await geminiChat(history, { memories, classify })), engine: 'gemini' };
+  }
   const mode = await aiMode();
   const runLocal = async () => {
-    const reply = await localChat(toLocalMessages(history, memories), { onToken });
+    const lastUser = [...history].reverse().find((m) => m.role === 'user')?.text || '';
+    const { reply, actions } = extractOrgAction(await localChat(toLocalMessages(history, memories), { onToken }), lastUser);
     let category = null;
     if (classify) {
-      const lastUser = [...history].reverse().find((m) => m.role === 'user')?.text || '';
       try { category = await localClassify(lastUser); } catch { /* يُصنّف لاحقاً */ }
     }
-    return { reply, category, title: '', engine: 'local' };
+    return { reply, category, title: '', engine: 'local', actions };
   };
 
   if (await wantLocalFirst(mode)) {

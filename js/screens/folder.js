@@ -143,7 +143,7 @@ export async function mount(root) {
     const buttons = root.querySelectorAll('[data-period]');
     buttons.forEach((x) => { x.disabled = true; });
     sumStatus.className = 'status';
-    sumStatus.innerHTML = '<span class="dots"><i></i><i></i><i></i></span> الرفيقة تقرأ ملاحظاتك…';
+    sumStatus.innerHTML = '<span class="dots"><i></i><i></i><i></i></span> المساعد يقرأ ملاحظاتك…';
     try {
       await createSummary({ period: b.dataset.period });
       sumStatus.textContent = '';

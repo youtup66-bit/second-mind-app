@@ -1,8 +1,11 @@
 package app.aqli
 
+import android.Manifest
 import android.annotation.SuppressLint
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.util.Base64
 import android.webkit.JavascriptInterface
@@ -14,23 +17,51 @@ import android.webkit.WebViewClient
 import androidx.activity.ComponentActivity
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.webkit.WebViewAssetLoader
 
 // الغلاف: يفتح التطبيق (الموقع) داخل متصفح مدمج يملك أذوناته، ويتولى نافذة اختيار الصور والمشاركة
 class MainActivity : ComponentActivity() {
 
     companion object {
         // رابط نسخة التجربة؛ يُغيَّر إلى الرابط الرسمي عند الحاجة
-        const val START_URL = "https://youtup66-bit.github.io/second-mind-app/dev/"
-        const val HOST = "youtup66-bit.github.io"
+        // الصفحة مضمّنة في الـ APK نفسه (مجلد assets/app)، فتعمل دون إنترنت
+        const val START_URL = "https://appassets.androidplatform.net/app/index.html"
+        const val HOST = "appassets.androidplatform.net"
+        // الروابط العامة (الدعوات) تُفتح داخل التطبيق أيضاً
+        const val PUBLIC_HOST = "youtup66-bit.github.io"
     }
 
     private lateinit var web: WebView
     private var filePathCallback: ValueCallback<Array<Uri>>? = null
     private var pendingShare: String? = null
+    private val assets by lazy {
+        WebViewAssetLoader.Builder().addPathHandler("/app/", WebFilesHandler(this)).build()
+    }
+    private val updater by lazy {
+        WebUpdater(
+            applicationContext,
+            emit = { ev -> web.post { web.evaluateJavascript("window.__aqliApp && window.__aqliApp($ev)", null) } },
+            onApplied = { web.post { web.loadUrl(START_URL) } },
+        )
+    }
 
     private val pickFiles = registerForActivityResult(ActivityResultContracts.GetMultipleContents()) { uris ->
         filePathCallback?.onReceiveValue(uris.toTypedArray())
         filePathCallback = null
+    }
+
+    // إشعار تقدم تنزيل النموذج يحتاج إذناً من أندرويد 13 فما بعد؛ التنزيل نفسه يعمل دونه
+    private val askNotifications = registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
+
+    // تحديث الصفحة من داخل التطبيق: الإصدار الحالي، وبدء التحديث (الأحداث تصل إلى window.__aqliApp)
+    inner class AppBridge {
+        @JavascriptInterface
+        fun version(): String = updater.currentVersion()
+
+        @JavascriptInterface
+        fun update() {
+            updater.run()
+        }
     }
 
     // جسر بسيط يقرأه التطبيق: هل توجد صورة مشاركة؟ ويأخذها مرة واحدة
@@ -51,6 +82,9 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         web = WebView(this)
         setContentView(web)
+        if (Build.VERSION.SDK_INT >= 33 &&
+            checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) askNotifications.launch(Manifest.permission.POST_NOTIFICATIONS)
 
         web.settings.apply {
             javaScriptEnabled = true
@@ -59,14 +93,29 @@ class MainActivity : ComponentActivity() {
             allowFileAccess = false
         }
         web.webViewClient = object : WebViewClient() {
+            // ملفات الصفحة من أصول الـ APK
+            override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): android.webkit.WebResourceResponse? =
+                assets.shouldInterceptRequest(request.url)
+
             // الروابط الخارجية تُفتح في المتصفح الافتراضي، ويبقى التطبيق على موقعه
             override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
-                if (request.url.host == HOST) return false
+                if (request.url.host == HOST || request.url.host == PUBLIC_HOST) return false
                 startActivity(Intent(Intent.ACTION_VIEW, request.url))
                 return true
             }
         }
         web.webChromeClient = object : WebChromeClient() {
+            // نوافذ التأكيد (confirm) في الصفحة: نعرضها بنافذة أندرويد حتى لا يُعدّ الرد "لا" تلقائياً
+            override fun onJsConfirm(view: WebView, url: String?, message: String?, result: android.webkit.JsResult): Boolean {
+                android.app.AlertDialog.Builder(this@MainActivity)
+                    .setMessage(message ?: "")
+                    .setPositiveButton("موافق") { _, _ -> result.confirm() }
+                    .setNegativeButton("إلغاء") { _, _ -> result.cancel() }
+                    .setOnCancelListener { result.cancel() }
+                    .show()
+                return true
+            }
+
             override fun onShowFileChooser(
                 view: WebView,
                 callback: ValueCallback<Array<Uri>>,
@@ -83,6 +132,12 @@ class MainActivity : ComponentActivity() {
             }
         }
         web.addJavascriptInterface(ShareBridge(), "Android")
+        // الذكاء على الجهاز بالمحرك الأصلي (تنزيل النموذج والمحادثة)
+        web.addJavascriptInterface(NativeAI(applicationContext, web), "AqliNative")
+        // حفظ الملفات ومشاركتها (النسخ الاحتياطية والتقارير)
+        web.addJavascriptInterface(FileBridge(this), "AqliFiles")
+        // تحديث الصفحة من داخل التطبيق
+        web.addJavascriptInterface(AppBridge(), "AqliApp")
 
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {

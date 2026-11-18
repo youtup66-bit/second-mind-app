@@ -1,11 +1,11 @@
 // شاشة الإعدادات: مفتاح Gemini يُحفظ على الجهاز فقط
-import { IS_DEV } from '../env.js';
+import { IS_DEV, IS_BUNDLED } from '../env.js';
+import { canUpdateApp, appVersion, startAppUpdate } from '../app-update.js';
 import { getSetting, setSetting, deleteSetting, clearAll, clearMessages } from '../storage.js';
 import { DEFAULT_MODEL, DEFAULT_LITE_MODEL, testKey, getUsage, ttsCooldownUntil, clearTtsCooldown, economyMode } from '../gemini.js';
 import { canSpeak, canListen, canRecord, canBrowserListen, speak, stopSpeaking, unlockAudio, voicesReady } from '../voice.js';
 import { DEFAULT_SKIN } from '../skins.js';
 import { loadCategories } from '../categories.js';
-import { canPiper, isPiperReady, downloadPiper, removePiper, piperVoice } from '../piper.js';
 import {
   LOCAL_MODELS, webgpuSupported, shaderF16Supported, blockedReason, isModelReady, removeModel, localChat, retryGpu, explainError,
   canBackgroundFetch, startBackgroundDownload, backgroundDownload, cancelBackgroundDownload, interruptedDownload,
@@ -14,12 +14,12 @@ import {
 } from '../local-ai.js';
 import { aiMode } from '../ai.js';
 
-// يحفظ إعداداً ويُعلم بقية التطبيق (مثل الرفيقة الطافية)
+// يحفظ إعداداً ويُعلم بقية التطبيق (مثل المساعد الطافي)
 // وصف مختصر تحت اسم كل قسم (مثل إعدادات واتساب)
 const GROUP_HINTS = {
   'المطوّر': 'المؤسسة التجريبية، والدخول بأي حساب (نسخة التجربة فقط)',
   'المؤسسة': 'الدخول، وحساب المدير، والموظفون',
-  'المظهر': 'ألوان التطبيق: واتساب أو البنفسجي',
+  'المظهر': 'ألوان التطبيق: أخضر واتساب',
   'تثبيت التطبيق': 'التثبيت، والإصدار، والتحقق من التحديثات',
   'صوت الردود': 'نوع الصوت وطبقته وسرعته',
   'استهلاك Gemini اليوم': 'عدد الطلبات والحصة',
@@ -95,7 +95,7 @@ export async function mount(root) {
   const appTheme = await getSetting('appTheme', 'auto');
   const voiceReview = await getSetting('reviewVoice', false);
   let skin = await getSetting('companionSkin', DEFAULT_SKIN);
-  const engine = await getSetting('voiceEngine', 'device');
+  const engine = (await getSetting('voiceEngine', 'device')) === 'gemini' ? 'gemini' : 'device';
   const deviceVoice = await getSetting('deviceVoice', '');
   const pitchShift = Number(await getSetting('voicePitchShift', 0));
   const rateScale = Number(await getSetting('voiceRateScale', 1));
@@ -119,10 +119,7 @@ export async function mount(root) {
 
     <section class="card" id="look">
       <h2>المظهر</h2>
-      <div class="radio-col" role="radiogroup" aria-label="ألوان التطبيق">
-        <label class="switch"><input type="radio" name="theme" value="auto" ${appTheme === 'auto' ? 'checked' : ''}><span>ألوان واتساب (الافتراضي)</span></label>
-        <label class="switch"><input type="radio" name="theme" value="purple" ${appTheme === 'purple' ? 'checked' : ''}><span>البنفسجي الأصلي</span></label>
-      </div>
+      <p class="muted">الألوان ثابتة: أخضر واتساب في كل الشاشات.</p>
     </section>
 
     <section class="card" id="install">
@@ -144,24 +141,15 @@ export async function mount(root) {
       <p class="muted">صوت قراءة ردود الذكاء.</p>
       <div class="radio-col" role="radiogroup" aria-label="محرك الصوت">
         <label class="switch"><input type="radio" name="engine" value="device" ${engine === 'device' ? 'checked' : ''}><span>صوت الجهاز</span></label>
-        <label class="switch"><input type="radio" name="engine" value="piper" ${engine === 'piper' ? 'checked' : ''} ${canPiper ? '' : 'disabled'}><span>صوت Piper العربي (داخل التطبيق، دون إنترنت)</span></label>
         <label class="switch"><input type="radio" name="engine" value="gemini" ${engine === 'gemini' ? 'checked' : ''}><span>صوت Gemini الطبيعي</span></label>
       </div>
       <p class="muted" id="engine-note"></p>
       <p class="status" id="tts-cooldown" hidden></p>
 
-      <div id="piper-opts" hidden>
-        <p class="muted" id="piper-state"></p>
-        <div class="progress" id="piper-progress" hidden><span></span></div>
-        <div class="row">
-          <button class="btn" id="piper-download">⬇️ نزّل الصوت (~${piperVoice.approxMB} م.ب)</button>
-          <button class="btn btn--ghost" id="piper-remove" hidden>حذف الصوت من الجهاز</button>
-        </div>
-      </div>
       <div id="device-opts">
         <div id="device-voice-wrap">
         <label for="device-voice">صوت الجهاز</label>
-        <select id="device-voice"><option value="">تلقائي (حسب الشخصية)</option></select>
+        <select id="device-voice"><option value="">تلقائي</option></select>
         </div>
         <label for="pitch">حدّة الصوت <span class="muted" id="pitch-val"></span></label>
         <input type="range" id="pitch" min="-0.6" max="0.4" step="0.05" value="${pitchShift}">
@@ -174,6 +162,12 @@ export async function mount(root) {
       <p class="status" id="voice-status" role="status"></p>
     </section>
 
+    ${IS_BUNDLED && canUpdateApp() ? `<section class="card" id="app-update">
+      <h2>تحديث التطبيق</h2>
+      <p class="muted">الإصدار المثبّت: <b id="app-ver">${appVersion() || '؟'}</b>. التحديث ينزّل التغييرات في الواجهة فقط، دون تنزيل APK جديد.</p>
+      <div class="row"><button class="btn" id="app-update-btn">⬇️ تحديث التطبيق الآن</button></div>
+      <p class="status" id="app-update-msg" role="status"></p>
+    </section>` : ''}
     <section class="card" id="usage">
       <h2>استهلاك Gemini اليوم</h2>
       <div id="usage-table"></div>
@@ -195,9 +189,11 @@ export async function mount(root) {
       <ul class="models" id="models"></ul>
       <div class="row">
         <button class="btn btn--ghost" id="local-test">💬 جرّب النموذج المختار</button>
+        <button class="btn btn--ghost" id="ai-check-btn">🔍 فحص الذكاء (دون إنترنت)</button>
       </div>
+      <pre class="ai-check" id="ai-check" dir="ltr" hidden></pre>
       <p class="status" id="local-status" role="status"></p>
-      <p class="muted">على الجهاز يعمل: المحادثة والتصنيف. وتبقى من Gemini: الملخصات، وأسماء المجموعات، وتحويل 🎙 إلى نص (استخدم مايك لوحة المفاتيح دون إنترنت)، وصوت Gemini (صوت Piper يعمل دون إنترنت).</p>
+      <p class="muted">على الجهاز يعمل: المحادثة والتصنيف. وتبقى من Gemini: الملخصات، وأسماء المجموعات، وتحويل 🎙 إلى نص (استخدم مايك لوحة المفاتيح دون إنترنت)، وصوت Gemini الافتراضي.</p>
     </section>
 
     <section class="card" id="gemini">
@@ -257,13 +253,13 @@ export async function mount(root) {
       <p class="muted">"نص فقط" يوقف نطق الردود تماماً ويُخفي زر الصوت. الميكروفون يبقى حسب الخيار أعلاه.</p>
       <label class="switch">
         <input type="checkbox" id="speak" ${speakOn ? 'checked' : ''} ${canSpeak ? '' : 'disabled'}>
-        <span>الرفيقة تنطق ردودها بصوت (اضبطه من "صوت الرفيقة")</span>
+        <span>المساعد ينطق ردوده بصوت (اضبطه من "صوت المساعد")</span>
       </label>
       <label class="switch">
         <input type="checkbox" id="memory" ${memoryOn ? 'checked' : ''}>
-        <span>الرفيقة تستعين بملاحظاتي في ردودها</span>
+        <span>المساعد يستعين بملاحظاتي في ردوده</span>
       </label>
-      <p class="muted">يبحث التطبيق في ملاحظاتك على جهازك، ويرفق مع رسالتك أقرب ٥ ملاحظات صلة بها فقط، لتقترح الرفيقة حلولاً مبنية على ما دوّنته.</p>
+      <p class="muted">يبحث التطبيق في ملاحظاتك على جهازك، ويرفق مع رسالتك أقرب ٥ ملاحظات صلة بها فقط، لتقترح المساعد حلولاً مبنية على ما دوّنته.</p>
       <h3 class="subhead">التعرف على كلامك 🎙</h3>
       <label class="switch">
         <input type="checkbox" id="voice-review" ${voiceReview ? 'checked' : ''}>
@@ -329,7 +325,7 @@ export async function mount(root) {
       <p class="status" id="wipe-status" role="status"></p>
     </section>
   `;
-  // الموظف: لا رفيقة ولا عقل ولا ذكاء؛ نُبقي الحساب والمظهر والتثبيت والخصوصية فقط
+  // الموظف: لا مساعد ولا عقل ولا ذكاء؛ نُبقي الحساب والمظهر والتثبيت والخصوصية فقط
   if (await getSetting('orgRole', null) === 'employee') {
     const keep = new Set(['account', 'org', 'look', 'install', 'privacy', 'dev']); // dev: أدوات المطوّر في نسخة التجربة
     // المسؤول المسموح له بالمساعد: يضع مفتاحه الخاص (الموظف العادي لا مفتاح على جواله)
@@ -434,6 +430,14 @@ export async function mount(root) {
     root.querySelector('#install-help').hidden = installed || can;
   };
   renderInstall();
+  bindAppUpdate(root);
+  root.querySelector('#ai-check-btn').addEventListener('click', async () => {
+    const { aiCheck } = await import('../ai-check.js');
+    const out = root.querySelector('#ai-check');
+    out.hidden = false;
+    out.textContent = 'أفحص…';
+    out.textContent = await aiCheck();
+  });
   const onInstallable = () => renderInstall();
   window.addEventListener('sm:installable', onInstallable);
   cleanup.push(() => window.removeEventListener('sm:installable', onInstallable));
@@ -636,7 +640,7 @@ export async function mount(root) {
     retryGpu(); // تجربة صريحة: نمنح كرت الشاشة فرصة جديدة
     try {
       const reply = await localChat([
-        { role: 'system', content: 'أنتِ رفيقة لطيفة. أجيبي بالعربية بجملة واحدة.' },
+        { role: 'system', content: 'أنت مساعد ذكي. أجب بالعربية بجملة واحدة.' },
         { role: 'user', content: 'عرّفي نفسك باختصار.' },
       ], { maxTokens: 80, onToken: (t) => { localStatus.textContent = t; } });
       localStatus.className = 'status status--ok';
@@ -680,7 +684,6 @@ export async function mount(root) {
   const deviceOpts = root.querySelector('#device-opts');
   const NOTES = {
     device: 'فوري ومجاني ويعمل دون إنترنت، وجودته تعتمد على الأصوات المثبتة في جوالك.',
-    piper: 'صوت عربي ("كريم"، فصحى بلكنة أردنية) يعمل داخل التطبيق: يُنزَّل مرة واحدة ثم يعمل دون إنترنت ودون أي حصة، ولا يُرسل أي نص. صوت رجل، يرفع التطبيق حدّته لكل شخصية. أول جملة بعد فتح التطبيق تتأخر ثوانيَ ريثما يُحمَّل.',
     gemini: 'صوت طبيعي أجمل بكثير يناسب الشخصية. يُرسل نص الرد فقط إلى Gemini، ويستهلك من حصة مفتاحك، ويتأخر ثوانيَ قليلة. إن تعذّر يُستخدم صوت الجهاز تلقائياً.',
   };
   const cooldownEl = root.querySelector('#tts-cooldown');
@@ -700,45 +703,9 @@ export async function mount(root) {
     engineNote.textContent = NOTES[v];
     deviceOpts.hidden = v === 'gemini';
     root.querySelector('#device-voice-wrap').hidden = v !== 'device';
-    root.querySelector('#piper-opts').hidden = v !== 'piper';
     renderCooldown();
-    if (v === 'piper') renderPiper();
   };
 
-  // ---- صوت Piper ----
-  const piperState = root.querySelector('#piper-state');
-  const piperDl = root.querySelector('#piper-download');
-  const piperRm = root.querySelector('#piper-remove');
-  const piperBar = root.querySelector('#piper-progress');
-  async function renderPiper() {
-    const ready = await isPiperReady();
-    piperState.textContent = ready
-      ? 'الصوت مُنزَّل على جهازك ✓ ويعمل دون إنترنت.'
-      : `لم يُنزَّل بعد. الحجم نحو ${piperVoice.approxMB} ميغابايت؛ يُفضَّل التنزيل عبر Wi-Fi. حتى تنزيله يُستخدم صوت الجهاز.`;
-    piperDl.hidden = ready;
-    piperRm.hidden = !ready;
-  }
-  piperDl.addEventListener('click', async () => {
-    piperDl.disabled = true;
-    piperBar.hidden = false;
-    try {
-      await downloadPiper((f) => {
-        piperBar.firstElementChild.style.width = `${Math.round(f * 100)}%`;
-        piperState.textContent = `جارٍ التنزيل… ${Math.round(f * 100)}%`;
-      });
-      await renderPiper();
-    } catch (err) {
-      piperState.textContent = `${err.message} تحقق من الإنترنت ثم حاول مرة أخرى.`;
-    } finally {
-      piperDl.disabled = false;
-      piperBar.hidden = true;
-    }
-  });
-  piperRm.addEventListener('click', async () => {
-    if (!confirm('حذف صوت Piper من الجهاز؟ يمكنك تنزيله مرة أخرى لاحقاً.')) return;
-    await removePiper();
-    renderPiper();
-  });
   syncEngine();
   root.querySelectorAll('input[name="engine"]').forEach((r) => r.addEventListener('change', async () => {
     await setSetting('voiceEngine', r.value);
@@ -800,7 +767,6 @@ export async function mount(root) {
     setTimeout(() => { btn.disabled = false; }, 15000);
   });
 
-  root.querySelectorAll('input[name="theme"]').forEach((r) => r.addEventListener('change', () => saveAndAnnounce('appTheme', r.value)));
   root.querySelector('#mic-on').addEventListener('change', (e) => setSetting('micOn', e.target.checked));
   root.querySelector('#speak').addEventListener('change', (e) => setSetting('speakReplies', e.target.checked));
   root.querySelector('#memory').addEventListener('change', (e) => setSetting('useMemory', e.target.checked));
@@ -960,5 +926,24 @@ async function renderDevTools(box) {
       msg.textContent = err.message;
       e.currentTarget.disabled = false;
     }
+  });
+}
+
+// زر تحديث التطبيق (داخل الـ APK فقط)
+function bindAppUpdate(root) {
+  const btn = root.querySelector('#app-update-btn');
+  if (!btn) return;
+  const msg = root.querySelector('#app-update-msg');
+  btn.addEventListener('click', () => {
+    btn.disabled = true;
+    msg.className = 'status';
+    msg.textContent = 'أتحقق من التحديثات…';
+    const off = startAppUpdate((ev) => {
+      if (ev.type === 'uptodate') { msg.textContent = `التطبيق محدّث (الإصدار ${ev.version}) ✓`; btn.disabled = false; off(); }
+      else if (ev.type === 'start') msg.textContent = `جارٍ تنزيل التحديث ${ev.version} (${ev.total} ملف)…`;
+      else if (ev.type === 'progress') msg.textContent = `جارٍ التنزيل… ${ev.done} من ${ev.total}`;
+      else if (ev.type === 'done') { msg.textContent = `تم التحديث إلى ${ev.version}. يُعاد تحميل التطبيق…`; off(); }
+      else if (ev.type === 'error') { msg.className = 'status status--err'; msg.textContent = `تعذّر التحديث: ${ev.message}`; btn.disabled = false; off(); }
+    });
   });
 }
