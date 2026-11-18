@@ -5,7 +5,7 @@ import {
   GENERAL, roomOf, unreadByRoom, roomNameOf, groupBranch, isChatRoom, groupInvites, myContacts, saveChat, deleteChat, acceptInvite, declineInvite, leaveChat,
 } from '../group.js';
 import { PALETTE } from '../org-structure.js';
-import { getGroupMessages } from '../storage.js';
+import { getGroupMessages, getSetting } from '../storage.js';
 import { sendObjection, listObjections } from '../objections.js';
 import { session, cloudConfig } from '../cloud.js';
 import { attachHoldMic } from '../hold-mic.js';
@@ -443,17 +443,30 @@ async function mountList(root, s, syncErr, mode, tab = 'chats') {
   const showOrb = !groupsView && (s.member.role === 'manager' || !!groupBranch()?.perms?.assistant);
   // الشاشة الرئيسية للمحادثات: الكرة فقط، وكلمة «مجموعات» تفتح نافذة الكروبات بتبويباتها
   if (!groupsView) {
+    // لون الأيقونات وشفافيتها من الإعدادات (افتراضي: أخضر، كامل الوضوح)
+    const hex = await getSetting('iconColor', '#4ade80');
+    const alpha = Math.min(100, Math.max(10, Number(await getSetting('iconAlpha', 100)) || 100));
+    const iconStyle = `--icon-color:${/^#[0-9a-f]{6}$/i.test(hex) ? hex : '#4ade80'};--icon-alpha:${alpha / 100}`;
+    const IC = {
+      groups: '<circle cx="9" cy="8" r="3.2"/><circle cx="16.5" cy="9" r="2.6"/><path d="M3.5 19c.6-3.2 2.7-5 5.5-5s4.9 1.8 5.5 5"/><path d="M14.5 14.2c2.4-.3 4.3 1.2 4.9 4.3"/>',
+      data: '<path d="M7 18h10a4 4 0 0 0 .6-7.95A6 6 0 0 0 6.2 9.3 3.6 3.6 0 0 0 7 18z"/><path d="M12 15v-5"/><path d="M9.8 12.2L12 10l2.2 2.2"/>',
+      tasks: '<rect x="5" y="4.5" width="14" height="16" rx="2.5"/><path d="M9 4.5V3.5h6v1"/><path d="M8.5 12.5l2 2 3.5-4"/><path d="M8.5 17h7"/>',
+      staff: '<circle cx="12" cy="8.5" r="3.8"/><path d="M5 20c.8-3.8 3.4-6 7-6s6.2 2.2 7 6"/>',
+      settings: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>',
+      daily: '<rect x="3" y="13" width="4" height="8" rx="1"/><rect x="10" y="8" width="4" height="13" rx="1"/><rect x="17" y="3" width="4" height="18" rx="1"/>',
+    };
+    const ico = (k) => `<svg class="side-ico" width="24" height="24" viewBox="0 0 24 24" ${k === 'daily' ? 'fill="currentColor" stroke="none"' : 'fill="none" stroke="currentColor" stroke-width="1.8"'} aria-hidden="true">${IC[k]}</svg>`;
     root.innerHTML = `
-      <section class="chat chat--wa chat--plain chat--group g-list chats-main">
+      <section class="chat chat--wa chat--plain chat--group g-list chats-main chats-main--home" style="${iconStyle}">
         ${showOrb ? `<a class="chats-orb" href="#/home" aria-label="المساعد"><span class="chats-orb__ball" aria-hidden="true"></span></a>` : ''}
         <div class="chats-side" id="chats-side">
-          <a class="chats-groups-side" href="#/chats?tab=chats&view=groups">مجموعات</a>
-          ${s.member.role === 'manager' ? '<a class="chats-mind-side" href="#/mind">البيانات المركزية</a>' : ''}
-          <a class="chats-nav-side" href="#/tasks">المهام</a>
-          ${s.member.role === 'manager' ? '<a class="chats-nav-side" href="#/staff">المنتسبين</a>' : ''}
-          <a class="chats-nav-side" href="#/settings">الإعدادات</a>
+          <a class="chats-groups-side" href="#/chats?tab=chats&view=groups">${ico('groups')}<span>مجموعات</span></a>
+          ${s.member.role === 'manager' ? `<a class="chats-mind-side" href="#/mind">${ico('data')}<span>البيانات المركزية</span></a>` : ''}
+          <a class="chats-nav-side" href="#/tasks">${ico('tasks')}<span>المهام</span></a>
+          ${s.member.role === 'manager' ? `<a class="chats-nav-side" href="#/staff">${ico('staff')}<span>المنتسبين</span></a>` : ''}
+          <a class="chats-nav-side" href="#/settings">${ico('settings')}<span>الإعدادات</span></a>
         </div>
-        ${s.member.role === 'manager' ? '<div class="daily-side" id="daily-side"><div class="daily-title">تقرير يومي</div><div class="daily-list" id="daily-list"><p class="muted">لحظة…</p></div></div>' : ''}
+        ${s.member.role === 'manager' ? `<div class="daily-side" id="daily-side"><div class="daily-title">${ico('daily')}<span>تقرير يومي</span></div><div class="daily-list" id="daily-list"><p class="muted">لحظة…</p></div></div>` : ''}
       </section>`;
     if (s.member.role === 'manager') {
       const { dailyBars } = await import('../daily-report.js');

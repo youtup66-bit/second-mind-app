@@ -1291,7 +1291,20 @@ body.on-group .tasks .wa-head { padding-top: calc(env(safe-area-inset-top) + 8px
 /* «مجموعات»: كلمة جانبية تنسدل من الحافة اليمنى، وتظهر بالضغط في وسط الشاشة */
 .chats-side { position: fixed; top: 16vh; right: 0; direction: rtl; text-align: right; transform: translateX(100%); transition: transform .25s ease; display: flex; flex-direction: column; align-items: flex-start; gap: 14px; padding: 6px 12px; z-index: 20; }
 .chats-side.is-open { transform: translateX(0); }
-.chats-groups-side, .chats-mind-side, .chats-nav-side { color: var(--text, #e9edef); font-size: 1.1rem; font-weight: 700; text-decoration: none; }
+.chats-groups-side, .chats-mind-side, .chats-nav-side { color: var(--text, #e9edef); font-size: 1.05rem; font-weight: 700; text-decoration: none; display: flex; align-items: center; gap: 10px; min-width: 190px; height: 52px; box-sizing: border-box; padding: 0 12px; border-radius: 14px; border: 1px solid rgba(255,255,255,.12); }
+.side-ico { color: var(--icon-color, #4ade80); opacity: var(--icon-alpha, 1); flex-shrink: 0; }
+.look-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 8px 0; }
+/* الشاشة الرئيسية: كرة خضراء كبيرة في الوسط تتنفس، والقوائم الجانبية شفافة تنسدل عند اللمس */
+.chats-main--home { position: relative; min-height: 100dvh; overflow: hidden; }
+.chats-main--home .chats-orb { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); padding: 0; margin: 0; }
+.chats-main--home .chats-orb__ball { width: 260px; height: 260px; background: radial-gradient(circle at 34% 28%, #e6fff3 0%, #4ade80 20%, #16a34a 58%, #063b28 100%); animation: home-breathe 4s ease-in-out infinite; }
+@keyframes home-breathe {
+  0%, 100% { transform: scale(1); box-shadow: 0 0 60px 14px rgba(74,222,128,.42); }
+  50% { transform: scale(1.06); box-shadow: 0 0 90px 26px rgba(74,222,128,.6); }
+}
+.chats-main--home .chats-side, .chats-main--home .daily-side { background: transparent; }
+.chats-main--home .chats-side a, .chats-main--home .chats-side a:hover { background: transparent; }
+.chats-main--home .daily-side { border-right: 1px solid rgba(74,222,128,.35); box-shadow: none; }
 
 /* الشريط السفلي أُلغي: تنقله الكلمات الجانبية في المحادثات */
 .tabbar { display: none !important; }

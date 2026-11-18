@@ -119,7 +119,11 @@ export async function mount(root) {
 
     <section class="card" id="look">
       <h2>المظهر</h2>
-      <p class="muted">الألوان ثابتة: أخضر واتساب في كل الشاشات.</p>
+      <p class="muted">الألوان ثابتة في الشاشات، ما عدا أيقونات القوائم الجانبية في المحادثات.</p>
+      <h3 class="subhead">أيقونات القوائم الجانبية</h3>
+      <label class="look-row"><span>اللون</span><input type="color" id="ic-color" value="#4ade80"></label>
+      <label class="look-row"><span>الشفافية <b id="ic-alpha-out">100%</b></span><input type="range" id="ic-alpha" min="10" max="100" step="5" value="100"></label>
+      <div class="text-btns"><button class="text-btn text-btn--muted" type="button" id="ic-reset">إعادة الافتراضي</button></div>
     </section>
 
     <section class="card" id="voice">
@@ -390,6 +394,7 @@ export async function mount(root) {
 
 
   bindAppUpdate(root);
+  bindIconStyle(root);
   root.querySelector('#ai-check-btn').addEventListener('click', async () => {
     const { aiCheck } = await import('../ai-check.js');
     const out = root.querySelector('#ai-check');
@@ -873,6 +878,31 @@ async function renderDevTools(box) {
       msg.textContent = err.message;
       e.currentTarget.disabled = false;
     }
+  });
+}
+
+// لون أيقونات القوائم الجانبية وشفافيتها (تُقرأ في شاشة المحادثات)
+async function bindIconStyle(root) {
+  const c = root.querySelector('#ic-color');
+  const a = root.querySelector('#ic-alpha');
+  const out = root.querySelector('#ic-alpha-out');
+  if (!c || !a) return;
+  const color = await getSetting('iconColor', '#4ade80');
+  const alpha = Number(await getSetting('iconAlpha', 100)) || 100;
+  c.value = /^#[0-9a-f]{6}$/i.test(color) ? color : '#4ade80';
+  a.value = alpha;
+  out.textContent = `${alpha}%`;
+  c.addEventListener('input', () => setSetting('iconColor', c.value));
+  a.addEventListener('input', () => {
+    out.textContent = `${a.value}%`;
+    setSetting('iconAlpha', Number(a.value));
+  });
+  root.querySelector('#ic-reset')?.addEventListener('click', async () => {
+    await deleteSetting('iconColor');
+    await deleteSetting('iconAlpha');
+    c.value = '#4ade80';
+    a.value = 100;
+    out.textContent = '100%';
   });
 }
 
