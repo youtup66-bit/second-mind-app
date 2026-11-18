@@ -454,11 +454,20 @@ async function mountList(root, s, syncErr, mode, tab = 'chats') {
           ${s.member.role === 'manager' ? '<a class="chats-nav-side" href="#/staff">الموظفين</a>' : ''}
           <a class="chats-nav-side" href="#/settings">الإعدادات</a>
         </div>
+        ${s.member.role === 'manager' ? '<div class="daily-side" id="daily-side"><div class="daily-title">تقرير يومي</div><div class="daily-list" id="daily-list"><p class="muted">لحظة…</p></div></div>' : ''}
       </section>`;
+    if (s.member.role === 'manager') {
+      const { dailyBars } = await import('../daily-report.js');
+      const bars = await dailyBars().catch(() => []);
+      root.querySelector('#daily-list').innerHTML = bars.length
+        ? bars.map((b) => `<div class="daily-row"><div class="daily-name">${esc(b.name)}</div><div class="daily-line"><div class="daily-bar"><div class="daily-fill" style="width:${Math.round(b.ratio * 100)}%"></div></div><span class="daily-pts">${b.points}</span></div></div>`).join('')
+        : '<p class="muted">لا نقاط اليوم بعد.</p>';
+    }
     // الضغط في وسط الشاشة يُخرج كلمة «مجموعات» من الجانب ويُعيدها
     root.querySelector('.chats-main')?.addEventListener('click', (e) => {
       if (e.target.closest('a')) return;
       root.querySelector('#chats-side')?.classList.toggle('is-open');
+      root.querySelector('#daily-side')?.classList.toggle('is-open');
     });
     return;
   }
