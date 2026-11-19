@@ -520,12 +520,14 @@ async function mountList(root, s, syncErr, mode, tab = 'chats') {
       <nav class="chats-words" aria-label="أقسام المحادثات">
         ${TABS.map(([id, label]) => (id === tab ? `<b aria-current="page">${label}</b>` : `<a href="#/chats?tab=${id}${groupsView ? '&view=groups' : ''}">${label}</a>`)).join('')}
       </nav>
+      <div class="g-pane" id="g-pane">
       <small class="chats-status" id="g-status"></small>
       ${groupsView ? `<input type="search" class="g-search" id="g-search" placeholder="${tab === 'people' ? 'ابحث عن موظف بالاسم' : tab === 'sections' ? 'ابحث عن كرة بالاسم' : 'ابحث في المحادثات'}" aria-label="بحث">` : ''}
       <p class="wa-note" id="g-note" ${syncErr ? '' : 'hidden'} role="status">${esc(syncErr)}</p>
       <div id="g-decisions"></div>
       <ul class="g-rooms" id="g-rooms" aria-label="${TABS.find((x) => x[0] === tab)?.[1] || ''}"></ul>
       ${tab === 'chats' ? '<button type="button" class="g-new" id="g-new">مجموعة جديدة</button>' : ''}
+      </div>
     </section>`;
   root.querySelector('#g-new')?.addEventListener('click', () => openEditor(root));
   // التنقل بين التبويبات: النقر على الكلمة، أو سحب أفقي تتبعه الشاشة بالإصبع ثم تنزلق للتبويب التالي
@@ -536,23 +538,28 @@ async function mountList(root, s, syncErr, mode, tab = 'chats') {
     e.preventDefault();
     const to = new URLSearchParams(a.getAttribute('href').split('?')[1] || '').get('tab');
     const toI = TABS.findIndex((x) => x[0] === to);
-    if (toI >= 0 && toI !== from) switchTab(to, toI > from ? 1 : -1);
+    if (toI >= 0 && toI !== from) switchTab(to, toI > from ? -1 : 1);
   });
+  // السحب يحرّك نافذة العمل فقط؛ العناوين (المحادثات، الأقسام، المنتسبين) تبقى ثابتة
   const swipeEl = root.querySelector('.g-list');
-  if (swipeEl) {
-    // دخول الشاشة بالانزلاق من الجهة نفسها التي سُحبت منها
+  const pane = root.querySelector('#g-pane');
+  // بعد انتهاء الحركة نزيل التحويل، لأن التحويل يُغيّر مرجع تموضع العناصر الثابتة (مثل زر المجموعة الجديدة)
+  const settle = () => setTimeout(() => { pane.style.transition = ''; pane.style.transform = ''; }, SLIDE_MS + 20);
+  if (swipeEl && pane) {
+    // الشاشة الجديدة تدخل من الجهة التي يقع فيها تبويبها، فتبدو الحركة منطقية مع موقع الكلمات
     if (slideIn) {
-      swipeEl.style.transition = 'none';
-      swipeEl.style.transform = `translateX(${slideIn * 100}%)`;
-      swipeEl.getBoundingClientRect();
-      swipeEl.style.transition = `transform ${SLIDE_MS}ms ease-out`;
-      swipeEl.style.transform = 'translateX(0)';
+      pane.style.transition = 'none';
+      pane.style.transform = `translateX(${slideIn * 100}%)`;
+      pane.getBoundingClientRect();
+      pane.style.transition = `transform ${SLIDE_MS}ms ease-out`;
+      pane.style.transform = 'translateX(0)';
+      settle();
       slideIn = 0;
     }
     let sx = 0, sy = 0, lock = null, dxNow = 0;
     swipeEl.addEventListener('touchstart', (e) => {
       sx = e.touches[0].clientX; sy = e.touches[0].clientY; lock = null; dxNow = 0;
-      swipeEl.style.transition = 'none';
+      pane.style.transition = 'none';
     }, { passive: true });
     swipeEl.addEventListener('touchmove', (e) => {
       const t = e.touches[0];
@@ -564,18 +571,18 @@ async function mountList(root, s, syncErr, mode, tab = 'chats') {
       const next = dx < 0 ? from + 1 : from - 1;
       const edge = next < 0 || next >= TABS.length;
       dxNow = edge ? dx * 0.25 : dx;
-      swipeEl.style.transform = `translateX(${dxNow}px)`;
+      pane.style.transform = `translateX(${-dxNow}px)`; // عكس اتجاه الإصبع
     }, { passive: false });
     swipeEl.addEventListener('touchend', () => {
       if (lock !== 'h') return;
-      const w = swipeEl.offsetWidth || window.innerWidth;
-      const dir = dxNow < 0 ? 1 : -1; // السحب لليسار: التالي، ويدخل من اليمين
+      const w = pane.offsetWidth || window.innerWidth;
+      const dir = dxNow < 0 ? 1 : -1; // التبويب المقصود: التالي (dir=1) أو السابق
       const next = from + dir;
       const commit = next >= 0 && next < TABS.length && Math.abs(dxNow) > Math.min(120, w * 0.25);
-      swipeEl.style.transition = `transform ${SLIDE_MS}ms ease-out`;
-      if (!commit) { swipeEl.style.transform = 'translateX(0)'; return; }
-      swipeEl.style.transform = `translateX(${dir > 0 ? -100 : 100}%)`;
-      setTimeout(() => switchTab(TABS[next][0], dir), SLIDE_MS);
+      pane.style.transition = `transform ${SLIDE_MS}ms ease-out`;
+      if (!commit) { pane.style.transform = 'translateX(0)'; settle(); return; }
+      pane.style.transform = `translateX(${dir > 0 ? 100 : -100}%)`; // الحالية تخرج عكس الإصبع
+      setTimeout(() => switchTab(TABS[next][0], -dir), SLIDE_MS); // والجديدة تدخل من الجهة المقابلة
     }, { passive: true });
   }
   const list = root.querySelector('#g-rooms');
