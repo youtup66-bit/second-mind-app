@@ -40,7 +40,7 @@ object Pdf {
             page = doc.startPage(PdfDocument.PageInfo.Builder(W, H, pageNo).create())
             y = M.toFloat()
             // رقم الصفحة في الأسفل
-            val foot = layout("صفحة $pageNo — عقلي (ملاحظات)", footPaint, width, Layout.Alignment.ALIGN_CENTER)
+            val foot = layout("صفحة $pageNo — Note AI", footPaint, width, Layout.Alignment.ALIGN_CENTER)
             page!!.canvas.save(); page!!.canvas.translate(M.toFloat(), (H - M / 2 - foot.height).toFloat()); foot.draw(page!!.canvas); page!!.canvas.restore()
         }
 

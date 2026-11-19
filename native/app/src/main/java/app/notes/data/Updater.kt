@@ -111,7 +111,7 @@ class Updater(private val ctx: Context) {
         apkFile.delete()
         val id = dm.enqueue(
             DownloadManager.Request(Uri.parse("$BASE/aqli-notes.apk"))
-                .setTitle("تحديث تطبيق الملاحظات")
+                .setTitle("تحديث Note AI")
                 .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE)
                 .setDestinationInExternalFilesDir(ctx, "updates", "aqli-notes.apk")
                 .setAllowedOverMetered(true),

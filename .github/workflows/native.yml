@@ -68,6 +68,6 @@ jobs:
         run: |
           gh release view notes-latest >/dev/null 2>&1 || \
             gh release create notes-latest --prerelease --target "$GITHUB_SHA" \
-              --title "تطبيق الملاحظات (آخر نسخة)" \
+              --title "Note AI (آخر نسخة)" \
               --notes "يُحدَّث تلقائياً مع كل بناء. نزّل aqli-notes.apk وثبّته."
           gh release upload notes-latest out/aqli-notes.apk out/version.json --clobber
