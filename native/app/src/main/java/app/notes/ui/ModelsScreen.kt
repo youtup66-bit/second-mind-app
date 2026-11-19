@@ -170,7 +170,10 @@ fun ModelsScreen(state: AppState) {
                 }
                 UpdateButton(update)
             }
-            UpdateCard(update)
+            UpdateCard(update, onInstall = {
+                if (Build.VERSION.SDK_INT >= 33) notifPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+                update.install()
+            })
         }
 
         // الذكاء الصناعي: اختيار من يرد (أساسي، Gemini، أو نموذج على الهاتف)، ثم إعداد Gemini وتنزيل النماذج
@@ -532,19 +535,40 @@ class UpdateUi(private val up: Updater, private val scope: CoroutineScope) {
         }
     }
 
+    init {
+        // تنزيل بدأ سابقاً (ولو خرجتَ من الصفحة) يُتابَع من حيث وصل
+        if (up.downloadId() >= 0) watch()
+    }
+
     fun install() {
         if (busy) return
         if (!up.canInstall()) {
             text = "اسمح للتطبيق بتثبيت التحديثات، ثم ارجع واضغط «تنزيل وتثبيت» مرة أخرى."
             up.openInstallPermission(); return
         }
-        busy = true; progress = 0; text = "ينزّل التحديث…"
+        up.startDownload()
+        watch()
+    }
+
+    /** متابعة التنزيل الجاري في الخلفية؛ عند انتهائه تُفتح شاشة التثبيت. */
+    private fun watch() {
+        busy = true; progress = 0
+        text = "ينزّل التحديث… يمكنك الخروج من الصفحة أو التطبيق، وسيصلك إشعار حين يجهز."
         scope.launch {
-            try {
-                val apk = up.download { progress = it }
-                text = "اضغط «تحديث» في نافذة أندرويد. ملاحظاتك تبقى كما هي."
-                up.install(apk)
-            } catch (e: Throwable) { text = "فشل تنزيل التحديث: ${e.message ?: ""}" }
+            while (true) {
+                val s = withContext(Dispatchers.IO) { up.state() }
+                when {
+                    s == null -> { text = ""; break }
+                    s.failed -> { up.clear(); text = "فشل تنزيل التحديث. تأكد من الإنترنت وأعد المحاولة."; break }
+                    s.done -> {
+                        up.clear(); available = null
+                        text = "اضغط «تحديث» في نافذة أندرويد. ملاحظاتك تبقى كما هي."
+                        up.install(); break
+                    }
+                    else -> progress = s.percent
+                }
+                delay(1000)
+            }
             progress = -1; busy = false
         }
     }
@@ -568,7 +592,7 @@ private fun UpdateButton(u: UpdateUi) {
 }
 
 @Composable
-private fun UpdateCard(u: UpdateUi) {
+private fun UpdateCard(u: UpdateUi, onInstall: () -> Unit) {
     if (u.text.isEmpty()) return
     Spacer(Modifier.height(10.dp))
     Card {
@@ -578,7 +602,7 @@ private fun UpdateCard(u: UpdateUi) {
             LinearProgressIndicator(progress = { u.progress / 100f }, modifier = Modifier.fillMaxWidth())
             Text("${u.progress}٪", color = TextDim, fontSize = 12.sp)
         }
-        if (u.available != null && !u.busy) TextButton(onClick = { u.install() }) { Text("تنزيل وتثبيت") }
+        if (u.available != null && !u.busy) TextButton(onClick = onInstall) { Text("تنزيل وتثبيت") }
     }
 }
 

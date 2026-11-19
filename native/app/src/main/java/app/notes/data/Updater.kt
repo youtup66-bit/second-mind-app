@@ -1,5 +1,11 @@
 package app.notes.data
 
+import android.app.DownloadManager
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -14,6 +20,18 @@ import java.net.HttpURLConnection
 import java.net.URL
 
 data class AppVersion(val code: Long, val name: String)
+
+data class UpdateDownload(val percent: Int, val done: Boolean, val failed: Boolean)
+
+/** يستقبل خبر انتهاء تنزيل التحديث من أندرويد ولو كان التطبيق مغلقاً. */
+class UpdateReceiver : BroadcastReceiver() {
+    override fun onReceive(ctx: Context, intent: Intent) {
+        val id = intent.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, -1)
+        val up = Updater(ctx.applicationContext)
+        if (id < 0 || id != up.downloadId()) return
+        if (up.state()?.done == true) up.notifyReady()
+    }
+}
 
 /**
  * تحديث التطبيق نفسه من إصدار "notes-latest" في GitHub.
@@ -70,12 +88,70 @@ class Updater(private val ctx: Context) {
     }
 
     /** يفتح شاشة التثبيت في أندرويد؛ المستخدم يؤكد. */
-    fun install(apk: File) {
+    fun install(apk: File = apkFile) {
+        ctx.getSystemService(NotificationManager::class.java).cancel(READY_NOTIF)
+        ctx.startActivity(installIntent(apk))
+    }
+
+    private fun installIntent(apk: File): Intent {
         val uri = FileProvider.getUriForFile(ctx, "${ctx.packageName}.files", apk)
-        ctx.startActivity(
-            Intent(Intent.ACTION_VIEW)
-                .setDataAndType(uri, "application/vnd.android.package-archive")
-                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK),
+        return Intent(Intent.ACTION_VIEW)
+            .setDataAndType(uri, "application/vnd.android.package-archive")
+            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+    }
+
+    // ---- التنزيل عبر مدير التنزيلات: يستمر بعد الخروج من الصفحة أو إغلاق التطبيق ----
+    private val prefs = ctx.getSharedPreferences("update", Context.MODE_PRIVATE)
+    private val dm = ctx.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
+    val apkFile: File get() = File(File(ctx.getExternalFilesDir(null), "updates"), "aqli-notes.apk")
+
+    fun downloadId(): Long = prefs.getLong("dl", -1)
+
+    fun startDownload() {
+        apkFile.delete()
+        val id = dm.enqueue(
+            DownloadManager.Request(Uri.parse("$BASE/aqli-notes.apk"))
+                .setTitle("تحديث تطبيق الملاحظات")
+                .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE)
+                .setDestinationInExternalFilesDir(ctx, "updates", "aqli-notes.apk")
+                .setAllowedOverMetered(true),
+        )
+        prefs.edit().putLong("dl", id).apply()
+    }
+
+    /** حالة التنزيل الجاري: النسبة، وهل انتهى أو فشل. null إن لم يكن هناك تنزيل. */
+    fun state(): UpdateDownload? {
+        val id = downloadId()
+        if (id < 0) return null
+        dm.query(DownloadManager.Query().setFilterById(id)).use { c ->
+            if (!c.moveToFirst()) { clear(); return null }
+            val done = c.getLong(c.getColumnIndexOrThrow(DownloadManager.COLUMN_BYTES_DOWNLOADED_SO_FAR))
+            val total = c.getLong(c.getColumnIndexOrThrow(DownloadManager.COLUMN_TOTAL_SIZE_BYTES))
+            val pct = if (total > 0) (done * 100 / total).toInt() else 0
+            return when (c.getInt(c.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS))) {
+                DownloadManager.STATUS_SUCCESSFUL -> UpdateDownload(100, done = true, failed = false)
+                DownloadManager.STATUS_FAILED -> UpdateDownload(pct, done = false, failed = true)
+                else -> UpdateDownload(pct, done = false, failed = false)
+            }
+        }
+    }
+
+    fun clear() = prefs.edit().remove("dl").apply()
+
+    /** إشعار «التحديث جاهز» حين ينتهي التنزيل والتطبيق مغلق؛ الضغط عليه يفتح شاشة التثبيت. */
+    fun notifyReady() {
+        val nm = ctx.getSystemService(NotificationManager::class.java)
+        nm.createNotificationChannel(NotificationChannel("update", "تحديثات التطبيق", NotificationManager.IMPORTANCE_DEFAULT))
+        val pi = PendingIntent.getActivity(ctx, 3, installIntent(apkFile), PendingIntent.FLAG_IMMUTABLE)
+        nm.notify(
+            READY_NOTIF,
+            Notification.Builder(ctx, "update")
+                .setSmallIcon(android.R.drawable.stat_sys_download_done)
+                .setContentTitle("التحديث جاهز")
+                .setContentText("اضغط للتثبيت. ملاحظاتك تبقى كما هي.")
+                .setContentIntent(pi)
+                .setAutoCancel(true)
+                .build(),
         )
     }
 
@@ -89,6 +165,7 @@ class Updater(private val ctx: Context) {
         }
 
     companion object {
+        private const val READY_NOTIF = 9
         const val BASE = "https://github.com/youtup66-bit/second-mind-app/releases/download/notes-latest"
     }
 }
