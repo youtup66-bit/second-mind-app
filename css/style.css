@@ -1293,6 +1293,28 @@ body.on-group .tasks .wa-head { padding-top: calc(env(safe-area-inset-top) + 8px
 .look-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 8px 0; }
 /* الخلفية الموحدة للتطبيق (الموجات الخضراء من body) تظهر في المحادثات أيضاً */
 .chat--wa { background-image: none; }
+
+/* ---- واجهة الدخول: كرة الذكاء تتنفس، وضوء خلفي معها، وبطاقة زجاجية ---- */
+.auth { position: relative; padding-top: 8px; }
+.auth-hero { position: relative; text-align: center; padding: 22px 0 4px; }
+.auth-glow { position: absolute; left: 50%; top: 120px; width: 380px; height: 380px; margin-left: -190px; margin-top: -190px; border-radius: 50%; background: radial-gradient(circle, color-mix(in srgb, var(--accent) 30%, transparent) 0%, transparent 62%); animation: auth-halo 4s ease-in-out infinite; pointer-events: none; }
+.auth-orb { position: relative; width: 120px; height: 120px; margin: 0 auto; border-radius: 50%; display: grid; place-items: center; background: radial-gradient(circle at 34% 28%, #e6fff3 0%, #4ade80 20%, #16a34a 58%, #063b28 100%); animation: auth-breathe 4s ease-in-out infinite; }
+.auth-orb svg { opacity: .85; }
+.auth-title { margin: 16px 0 2px; font-size: 1.5rem; font-weight: 800; }
+.auth-sub { margin: 0; font-size: .9rem; color: var(--muted); }
+.auth-card { margin-top: 20px; padding: 20px; border-radius: 28px; background: linear-gradient(180deg, rgba(14,58,44,.7), rgba(6,24,18,.85)); border: 1px solid rgba(134,239,172,.2); box-shadow: 0 16px 50px rgba(0,0,0,.4); position: relative; z-index: 1; animation: auth-rise .7s .15s ease both; }
+.auth-h { margin: 0 0 12px; font-size: 1.15rem; font-weight: 700; }
+.auth-card input { transition: box-shadow .25s ease, border-color .25s ease; }
+.auth-card input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 28%, transparent); }
+.auth-card .btn { transition: transform .2s ease, box-shadow .2s ease, filter .2s ease; }
+.auth-card .btn:hover { filter: brightness(1.06); }
+.auth-card .btn:active { transform: scale(.98); }
+.auth-bio { width: 100%; height: 48px; margin-top: 10px; border-radius: 16px; background: rgba(255,255,255,.05); border: 1px solid rgba(134,239,172,.25); color: var(--text); font: inherit; font-size: .95rem; cursor: pointer; transition: background .2s ease, transform .2s ease; }
+.auth-bio:active { transform: scale(.98); background: rgba(255,255,255,.1); }
+@keyframes auth-breathe { 0%, 100% { transform: scale(1); box-shadow: 0 0 44px 10px color-mix(in srgb, var(--orb, #4ade80) 42%, transparent); } 50% { transform: scale(1.06); box-shadow: 0 0 70px 20px color-mix(in srgb, var(--orb, #4ade80) 60%, transparent); } }
+@keyframes auth-halo { 0%, 100% { opacity: .5; transform: scale(1); } 50% { opacity: .9; transform: scale(1.08); } }
+@keyframes auth-rise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .auth-orb, .auth-glow, .auth-card { animation: none; } }
 /* الشاشة الرئيسية: كرة خضراء كبيرة في الوسط تتنفس، والقوائم الجانبية شفافة تنسدل عند اللمس */
 .chats-main--home { position: relative; min-height: 100dvh; overflow: hidden; }
 .chats-main--home .chats-orb { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); padding: 0; margin: 0; }

@@ -125,18 +125,29 @@ async function renderLogin(root, err) {
   let exists = true;
   try { exists = await orgExists(); } catch (e) { err ||= e; }
   if (!alive) return;
-  root.innerHTML = `
-    <div class="org">
+  // واجهة الدخول: الكرة تتنفس مع ضوء خلفي، وبطاقة زجاجية للنموذج (الاختيار B)
+  const hero = exists ? `
+      <div class="auth-hero" aria-hidden="true">
+        <div class="auth-glow"></div>
+        <div class="auth-orb"><svg width="46" height="46" viewBox="0 0 24 24" fill="none" stroke="#f0fff7" stroke-width="1.6"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/><path d="M19 17l.7 1.8L21.5 19.5l-1.8.7L19 22l-.7-1.8-1.8-.7 1.8-.7z"/></svg></div>
+        <h2 class="auth-title">عقلي الثاني</h2>
+        <p class="auth-sub">مساعدك الذكي الخاص بالمؤسسة</p>
+      </div>` : `
       <div class="org-hero">
         <div class="org-hero__icon" aria-hidden="true">🔐</div>
-        <h2>${exists ? 'تسجيل الدخول' : 'إنشاء المؤسسة'}</h2>
-        <p class="muted">${exists ? 'ادخل بحسابك في المؤسسة.' : 'أنت أول من يدخل: ستصبح مدير المؤسسة، ولا يمكن لغيرك إنشاء مؤسسة أخرى هنا.'}</p>
-      </div>
+        <h2>إنشاء المؤسسة</h2>
+        <p class="muted">أنت أول من يدخل: ستصبح مدير المؤسسة، ولا يمكن لغيرك إنشاء مؤسسة أخرى هنا.</p>
+      </div>`;
+  root.innerHTML = `
+    <div class="org${exists ? ' auth' : ''}">
+      ${hero}
       ${err ? `<p class="status status--err">${esc(err.message)}</p>` : ''}
-      <form class="card org-form" id="login-form" ${exists ? '' : 'hidden'}>
+      <form class="card org-form${exists ? ' auth-card' : ''}" id="login-form" ${exists ? '' : 'hidden'}>
+        ${exists ? '<h3 class="auth-h">تسجيل الدخول</h3>' : ''}
         ${userField('li-user', 'البريد (لرئيس القسم بعد ربطه) أو اسم المستخدم')}
         ${field('li-pass', 'كلمة المرور', 'type="password" autocomplete="current-password" dir="ltr" required')}
         <button class="btn" id="li-go" type="submit">دخول</button>
+        <button type="button" class="auth-bio" id="li-bio">الدخول بالبصمة</button>
         <p class="status" id="li-msg" role="status"></p>
         <p class="status" id="li-hint" role="status" hidden></p>
         <div class="row"><button type="button" class="link-btn" id="li-forgot">نسيت كلمة المرور؟</button><button type="button" class="link-btn" id="li-hintbtn">تلميح كلمة المرور</button></div>
@@ -155,6 +166,7 @@ async function renderLogin(root, err) {
     </div>`;
 
   const liBtn = root.querySelector('#li-go');
+  root.querySelector('#li-bio')?.addEventListener('click', () => setMsg(root.querySelector('#li-msg'), 'الدخول بالبصمة يُفعَّل مع الحاسوب المركزي.'));
   root.querySelector('#login-form').addEventListener('submit', busyButton(liBtn, async () => {
     try {
       const s = await signIn(root.querySelector('#li-user').value, root.querySelector('#li-pass').value);
