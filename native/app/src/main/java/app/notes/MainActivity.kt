@@ -15,6 +15,10 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val repo = Repo(Db.get(applicationContext))
+        // الضغط على إشعار «التحديث جاهز»
+        if (intent?.action == app.notes.data.Updater.ACTION_INSTALL) {
+            Thread { runCatching { app.notes.data.Updater(applicationContext).install() } }.start()
+        }
         // إعادة الكرة العائمة إن كانت مفعّلة
         if (BubblePrefs(this).enabled && android.provider.Settings.canDrawOverlays(this)) runCatching { FloatingService.start(this) }
         setContent {

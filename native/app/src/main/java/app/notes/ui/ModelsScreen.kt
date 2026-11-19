@@ -603,7 +603,9 @@ class UpdateUi(private val up: Updater, private val scope: CoroutineScope) {
                     s.done -> {
                         up.clear(); available = null
                         text = "اضغط «تحديث» في نافذة أندرويد. ملاحظاتك تبقى كما هي."
-                        up.install(); break
+                        try { withContext(Dispatchers.IO) { up.install() } }
+                        catch (e: Throwable) { text = "تعذّر بدء التثبيت: ${e.message}" }
+                        break
                     }
                     else -> progress = s.percent
                 }

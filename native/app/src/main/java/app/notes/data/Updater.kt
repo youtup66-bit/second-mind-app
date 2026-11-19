@@ -7,11 +7,13 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.BroadcastReceiver
 import android.content.Context
+import android.content.pm.PackageInstaller
+import android.widget.Toast
+import androidx.core.content.IntentCompat
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
-import androidx.core.content.FileProvider
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
@@ -22,6 +24,34 @@ import java.net.URL
 data class AppVersion(val code: Long, val name: String)
 
 data class UpdateDownload(val percent: Int, val done: Boolean, val failed: Boolean)
+
+/** نتيجة التثبيت من أندرويد: يطلب التأكيد، أو يعرض سبب الفشل بالعربية. */
+class InstallResultReceiver : BroadcastReceiver() {
+    override fun onReceive(ctx: Context, intent: Intent) {
+        val status = intent.getIntExtra(PackageInstaller.EXTRA_STATUS, PackageInstaller.STATUS_FAILURE)
+        val sys = intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE).orEmpty()
+        val msg = when (status) {
+            PackageInstaller.STATUS_PENDING_USER_ACTION -> {
+                IntentCompat.getParcelableExtra(intent, Intent.EXTRA_INTENT, Intent::class.java)?.let {
+                    ctx.startActivity(it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                }
+                return
+            }
+            PackageInstaller.STATUS_SUCCESS -> return
+            PackageInstaller.STATUS_FAILURE_ABORTED -> "أُلغي التثبيت. اضغط ⟳ ثم «تنزيل وتثبيت» لتعيد المحاولة."
+            PackageInstaller.STATUS_FAILURE_CONFLICT ->
+                "تعارض مع النسخة المثبّتة (توقيع مختلف). ثبّت مرة واحدة من الرابط المباشر بعد حذف التطبيق."
+            PackageInstaller.STATUS_FAILURE_STORAGE -> "مساحة الهاتف لا تكفي للتحديث."
+            PackageInstaller.STATUS_FAILURE_INVALID, PackageInstaller.STATUS_FAILURE_INCOMPATIBLE ->
+                "ملف التحديث غير صالح لهذا الهاتف. أعد التنزيل."
+            PackageInstaller.STATUS_FAILURE_BLOCKED -> "منع الهاتف التثبيت (حماية Play أو إعدادات المصادر غير المعروفة)."
+            else -> "فشل التثبيت."
+        }
+        val full = if (sys.isNotBlank()) "$msg\n($sys)" else msg
+        Toast.makeText(ctx, full, Toast.LENGTH_LONG).show()
+        ctx.getSharedPreferences("update", Context.MODE_PRIVATE).edit().putString("last_error", full).apply()
+    }
+}
 
 /** يستقبل خبر انتهاء تنزيل التحديث من أندرويد ولو كان التطبيق مغلقاً. */
 class UpdateReceiver : BroadcastReceiver() {
@@ -87,18 +117,31 @@ class Updater(private val ctx: Context) {
         )
     }
 
-    /** يفتح شاشة التثبيت في أندرويد؛ المستخدم يؤكد. */
+    /**
+     * التثبيت بواجهة أندرويد الرسمية للتحديث الذاتي (PackageInstaller)، فتصل نتيجته
+     * إلى InstallResultReceiver: يطلب تأكيدك، ويعرض سبب الفشل إن فشل.
+     * ينسخ الملف، فيُستدعى خارج الخيط الرئيسي.
+     */
     fun install(apk: File = apkFile) {
         ctx.getSystemService(NotificationManager::class.java).cancel(READY_NOTIF)
-        ctx.startActivity(installIntent(apk))
+        if (!apk.exists() || apk.length() < 1_000_000) throw IllegalStateException("ملف التحديث غير موجود؛ نزّله من جديد")
+        val installer = ctx.packageManager.packageInstaller
+        val params = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL).apply {
+            setAppPackageName(ctx.packageName)
+            setSize(apk.length())
+        }
+        val id = installer.createSession(params)
+        installer.openSession(id).use { s ->
+            s.openWrite("update.apk", 0, apk.length()).use { out ->
+                apk.inputStream().use { it.copyTo(out, 1 shl 16) }
+                s.fsync(out)
+            }
+            val flags = PendingIntent.FLAG_UPDATE_CURRENT or (if (Build.VERSION.SDK_INT >= 31) PendingIntent.FLAG_MUTABLE else 0)
+            val result = PendingIntent.getBroadcast(ctx, id, Intent(ctx, InstallResultReceiver::class.java), flags)
+            s.commit(result.intentSender)
+        }
     }
 
-    private fun installIntent(apk: File): Intent {
-        val uri = FileProvider.getUriForFile(ctx, "${ctx.packageName}.files", apk)
-        return Intent(Intent.ACTION_VIEW)
-            .setDataAndType(uri, "application/vnd.android.package-archive")
-            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
-    }
 
     // ---- التنزيل عبر مدير التنزيلات: يستمر بعد الخروج من الصفحة أو إغلاق التطبيق ----
     private val prefs = ctx.getSharedPreferences("update", Context.MODE_PRIVATE)
@@ -142,7 +185,11 @@ class Updater(private val ctx: Context) {
     fun notifyReady() {
         val nm = ctx.getSystemService(NotificationManager::class.java)
         nm.createNotificationChannel(NotificationChannel("update", "تحديثات التطبيق", NotificationManager.IMPORTANCE_DEFAULT))
-        val pi = PendingIntent.getActivity(ctx, 3, installIntent(apkFile), PendingIntent.FLAG_IMMUTABLE)
+        // الضغط يفتح التطبيق ليبدأ التثبيت وهو في المقدمة
+        val open = Intent(ctx, app.notes.MainActivity::class.java)
+            .setAction(ACTION_INSTALL)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+        val pi = PendingIntent.getActivity(ctx, 3, open, PendingIntent.FLAG_IMMUTABLE)
         nm.notify(
             READY_NOTIF,
             Notification.Builder(ctx, "update")
@@ -165,6 +212,7 @@ class Updater(private val ctx: Context) {
         }
 
     companion object {
+        const val ACTION_INSTALL = "app.notes.INSTALL_UPDATE"
         private const val READY_NOTIF = 9
         const val BASE = "https://github.com/youtup66-bit/second-mind-app/releases/download/notes-latest"
     }

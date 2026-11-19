@@ -44,6 +44,10 @@
         </service>
 
         <receiver
+            android:name=".data.InstallResultReceiver"
+            android:exported="false" />
+
+        <receiver
             android:name=".data.UpdateReceiver"
             android:exported="true">
             <intent-filter>
