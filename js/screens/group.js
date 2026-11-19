@@ -37,7 +37,16 @@ export async function mountMode(root, mode) {
   const base = '#/chats';
   const tabParam = new URLSearchParams(location.hash.split('?')[1] || '').get('tab');
   const tab = TABS.some((x) => x[0] === tabParam) ? tabParam : 'chats';
-  root.innerHTML = '<p class="muted org-wait">لحظة…</p>';
+  const hashQ = new URLSearchParams(location.hash.split('?')[1] || '');
+  if (hashQ.get('view') === 'groups' && !hashQ.get('room')) {
+    // العناوين تظهر فوراً أثناء التحميل، فلا تختفي عند التنقل بين التبويبات
+    root.innerHTML = `<section class="chat chat--wa chat--plain chat--group g-list">
+      <nav class="chats-words" aria-label="أقسام المحادثات">${TABS.map(([id, label]) => (id === tab ? `<b aria-current="page">${label}</b>` : `<a href="#/chats?tab=${id}&view=groups">${label}</a>`)).join('')}</nav>
+      <div class="g-pane"></div>
+    </section>`;
+  } else {
+    root.innerHTML = '<p class="muted org-wait">لحظة…</p>';
+  }
   const s = await session().catch(() => null);
   if (!root.isConnected) return;
   if (!s?.member) {
