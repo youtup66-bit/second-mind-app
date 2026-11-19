@@ -65,7 +65,7 @@ export const hasOrgMind = () => groupMe()?.role === 'manager' || !!groupBranch()
 
 // المجموعات التي تُثري العقل: { id, name, color, kind }
 export function mindRooms(orgName = 'المؤسسة') {
-  const out = [{ id: GENERAL, name: `العامة · ${orgName}`, color: '#00a884', kind: 'general' }];
+  const out = [{ id: GENERAL, name: `العامة · ${orgName}`, color: '#22c55e', kind: 'general' }];
   const b = groupMe()?.role === 'manager' ? null : groupBranch();
   const mine = b ? new Set(b.nodes.map((n) => `n_${n.id}`)) : null;
   for (const [id, r] of groupRooms()) {

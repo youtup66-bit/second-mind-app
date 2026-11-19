@@ -63,7 +63,7 @@ export async function mountMode(root, mode) {
   if (!root.isConnected) return;
   if (!room) return mountList(root, s, syncErr, mode, tab);
   const orgName = s.org?.name || 'المؤسسة';
-  const roomInfo = () => (room === GENERAL ? { name: orgName, color: '#00a884' } : groupRooms().get(room) || pastRoom(room));
+  const roomInfo = () => (room === GENERAL ? { name: orgName, color: '#22c55e' } : groupRooms().get(room) || pastRoom(room));
   let pastName = '';
   const pastRoom = () => ({ name: pastName || roomNameOf(room) || 'مجموعة سابقة', color: '#6b7c85', past: true });
   // الموظف بلا ذكاء: الميكروفون بخدمة المتصفح فقط
@@ -336,7 +336,7 @@ const initial = (name) => String(name || 'م').trim().replace(/^(شعبة|وحد
 const textOn = (hex) => {
   const n = parseInt(String(hex).slice(1), 16);
   const l = (0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) / 255;
-  return l > 0.65 ? '#111b21' : '#fff';
+  return l > 0.65 ? '#06140f' : '#fff';
 };
 const KIND = { division: 'شعبة', unit: 'وحدة', section: 'قسم وحدة', custom: 'كرة', chat: 'محادثة' };
 
@@ -659,7 +659,7 @@ async function mountList(root, s, syncErr, mode, tab = 'chats') {
       return;
     }
     const mineRoom = (id) => (tab === 'sections' ? !isChatRoom(id) : isChatRoom(id));
-    const items = tab === 'sections' ? [{ id: GENERAL, name: orgName, color: '#00a884', kind: 'عامة · الجميع' }] : [];
+    const items = tab === 'sections' ? [{ id: GENERAL, name: orgName, color: '#22c55e', kind: 'عامة · الجميع' }] : [];
     for (const [id, r] of rooms) if (mineRoom(id)) items.push({ id, name: r.name, color: r.color, kind: KIND[r.kind] || '' });
     // مجموعات غادرها (أو حُذفت) وما زالت رسائلها عنده
     for (const id of last.keys()) if (id !== GENERAL && mineRoom(id) && !rooms.has(id)) items.push({ id, name: names.get(id) || roomNameOf(id) || 'مجموعة سابقة', color: '#6b7c85', kind: 'سابقة', past: true });

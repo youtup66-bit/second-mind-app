@@ -19,6 +19,7 @@ import { setOrbVisible } from './orb-float.js';
 import { startGroupSync, groupEvents, unreadCount, groupBranch, waitBranch } from './group.js';
 import { autoSnapshot } from './backup.js';
 import { getSetting } from './storage.js';
+import { setAccent } from './appearance.js';
 import { IS_DEV, IS_BUNDLED } from './env.js';
 import { loadCategories } from './categories.js';
 
@@ -190,10 +191,11 @@ async function refreshBadge() {
 groupEvents.addEventListener('message', refreshBadge);
 groupEvents.addEventListener('seen', refreshBadge);
 
-// المظهر: أخضر واتساب دائماً (لا خيار آخر)
-function applyTheme() {
+// المظهر: ألوان موحّدة من متغيّرات :root، ولون التمييز من الإعدادات (يشمل التطبيق كله)
+async function applyTheme() {
   document.body.classList.add('theme-wa');
-  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', '#202c33');
+  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', '#071a14');
+  setAccent(await getSetting('accentColor', ''));
 }
 function applyNoCompanion() {
   document.body.classList.toggle('no-companion', noCompanion);

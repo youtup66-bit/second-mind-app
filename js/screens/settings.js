@@ -2,6 +2,7 @@
 import { IS_DEV, IS_BUNDLED } from '../env.js';
 import { canUpdateApp, appVersion, startAppUpdate } from '../app-update.js';
 import { getSetting, setSetting, deleteSetting, clearAll, clearMessages } from '../storage.js';
+import { setAccent, clearAccent, isHex } from '../appearance.js';
 import { DEFAULT_MODEL, DEFAULT_LITE_MODEL, testKey, getUsage, ttsCooldownUntil, clearTtsCooldown, economyMode } from '../gemini.js';
 import { canSpeak, canListen, canRecord, canBrowserListen, speak, stopSpeaking, unlockAudio, voicesReady } from '../voice.js';
 import { DEFAULT_SKIN } from '../skins.js';
@@ -119,7 +120,10 @@ export async function mount(root) {
 
     <section class="card" id="look">
       <h2>المظهر</h2>
-      <p class="muted">الألوان ثابتة في الشاشات، ما عدا أيقونات القوائم الجانبية في المحادثات.</p>
+      <p class="muted">لون التمييز والأيقونات والكرة تُضبط من هنا، وتنطبق على كل الشاشات.</p>
+      <h3 class="subhead">لون التمييز في التطبيق كله</h3>
+      <label class="look-row"><span>اللون</span><input type="color" id="app-accent" value="#22c55e"></label>
+      <div class="text-btns"><button class="text-btn text-btn--muted" type="button" id="app-accent-reset">إعادة الافتراضي</button></div>
       <h3 class="subhead">أيقونات القوائم الجانبية</h3>
       <label class="look-row"><span>اللون</span><input type="color" id="ic-color" value="#4ade80"></label>
       <label class="look-row"><span>الشفافية <b id="ic-alpha-out">100%</b></span><input type="range" id="ic-alpha" min="10" max="100" step="5" value="100"></label>
@@ -400,6 +404,7 @@ export async function mount(root) {
   bindAppUpdate(root);
   bindIconStyle(root);
   bindOrbStyle(root);
+  bindAppAccent(root);
   root.querySelector('#ai-check-btn').addEventListener('click', async () => {
     const { aiCheck } = await import('../ai-check.js');
     const out = root.querySelector('#ai-check');
@@ -908,6 +913,23 @@ async function bindIconStyle(root) {
     c.value = '#4ade80';
     a.value = 100;
     out.textContent = '100%';
+  });
+}
+
+// لون التمييز الموحّد: يُطبَّق فوراً على كل التطبيق
+async function bindAppAccent(root) {
+  const c = root.querySelector('#app-accent');
+  if (!c) return;
+  const saved = await getSetting('accentColor', '');
+  c.value = isHex(saved) ? saved : '#22c55e';
+  c.addEventListener('input', async () => {
+    await setSetting('accentColor', c.value);
+    setAccent(c.value);
+  });
+  root.querySelector('#app-accent-reset')?.addEventListener('click', async () => {
+    await deleteSetting('accentColor');
+    clearAccent();
+    c.value = '#22c55e';
   });
 }
 
