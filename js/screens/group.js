@@ -563,7 +563,8 @@ async function mountList(root, s, syncErr, mode, tab = 'chats') {
     }, { passive: true });
     swipeEl.addEventListener('touchmove', (e) => {
       const t = e.touches[0];
-      const dx = t.clientX - sx, dy = t.clientY - sy;
+      // اتجاه اللمس معكوس: السحب لليمين يُعامل كالسحب لليسار والعكس، والحركة كما هي
+      const dx = -(t.clientX - sx), dy = t.clientY - sy;
       if (lock === null && (Math.abs(dx) > 8 || Math.abs(dy) > 8)) lock = Math.abs(dx) > Math.abs(dy) ? 'h' : 'v';
       if (lock !== 'h') return;
       e.preventDefault(); // لا نمرّر الصفحة عمودياً أثناء السحب الأفقي
