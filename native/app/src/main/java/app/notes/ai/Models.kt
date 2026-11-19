@@ -19,7 +19,10 @@ data class ModelInfo(
     val template: Template,
     /** يحتاج قبول الترخيص في HuggingFace ورمز دخول. */
     val gated: Boolean = false,
-)
+) {
+    /** صفحة النموذج في HuggingFace (لقبول الترخيص). */
+    val page: String get() = url.substringBefore("/resolve/")
+}
 
 /** نماذج تعمل على الهاتف عبر MediaPipe LLM Inference (ملفات ‎.task). */
 val MODEL_CATALOG = listOf(

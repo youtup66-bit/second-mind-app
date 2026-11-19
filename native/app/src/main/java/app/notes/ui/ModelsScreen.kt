@@ -247,11 +247,13 @@ fun ModelsScreen(state: AppState) {
         }
 
         if (open["ai"] == true) item { SubTitle("تنزيل نموذج للهاتف (بلا إنترنت)", open["catalog"] == true) { open["catalog"] = open["catalog"] != true } }
-        if (open["ai"] == true && open["catalog"] == true) items(MODEL_CATALOG, key = { it.id }) { m -> CatalogCard(state, m, downloads[m.id], onStart = {
-            message = if (m.gated && token.isBlank()) "هذا النموذج يحتاج رمز HuggingFace (بالأسفل)." else {
-                mm.startDownload(m); tick++; "بدأ التنزيل، ويمكنك متابعته في الإشعارات."
-            }
-        }, onCancel = { mm.cancelDownload(m); tick++ }) }
+        if (open["ai"] == true && open["catalog"] == true) items(MODEL_CATALOG, key = { it.id }) { m -> CatalogCard(
+            state, m, downloads[m.id],
+            token = token, onToken = { token = it; mm.hfToken = it },
+            onStart = { mm.startDownload(m); tick++ },
+            onCancel = { mm.cancelDownload(m); tick++ },
+            onLink = { url -> ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) },
+        ) }
 
         item { SectionTitle("الفهم بالمعنى", open["embed"] == true) { open["embed"] = open["embed"] != true } }
         if (open["embed"] == true) item {
@@ -431,8 +433,22 @@ fun ModelsScreen(state: AppState) {
 }
 
 @Composable
-private fun CatalogCard(state: AppState, m: ModelInfo, dl: DownloadState?, onStart: () -> Unit, onCancel: () -> Unit) {
+private fun CatalogCard(
+    state: AppState, m: ModelInfo, dl: DownloadState?,
+    token: String, onToken: (String) -> Unit,
+    onStart: () -> Unit, onCancel: () -> Unit, onLink: (String) -> Unit,
+) {
     val have = state.installed.any { it.file.name == m.fileName }
+    // النماذج المقيّدة (Gemma) تحتاج رمزاً؛ تظهر الخطوات داخل البطاقة نفسها
+    var askToken by remember { mutableStateOf(false) }
+    val tryStart: () -> Unit = {
+        if (m.gated && token.isBlank()) {
+            askToken = true
+        } else {
+            askToken = false
+            onStart()
+        }
+    }
     Card {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
@@ -442,7 +458,7 @@ private fun CatalogCard(state: AppState, m: ModelInfo, dl: DownloadState?, onSta
             when {
                 have -> Text("✓ مثبّت", color = Accent2)
                 dl?.running == true -> TextButton(onClick = onCancel) { Text("إلغاء") }
-                else -> TextButton(onClick = onStart) { Text(if (dl?.failed == true) "إعادة" else "تنزيل") }
+                else -> TextButton(onClick = tryStart) { Text(if (dl?.failed == true) "إعادة" else "تنزيل") }
             }
         }
         if (dl?.running == true) {
@@ -451,9 +467,33 @@ private fun CatalogCard(state: AppState, m: ModelInfo, dl: DownloadState?, onSta
             Text("${dl.percent}٪", color = TextDim, fontSize = 12.sp)
         }
         if (dl?.failed == true) Text(
-            if (m.gated) "فشل التنزيل. تأكد من قبول الترخيص ومن الرمز." else "فشل التنزيل. تأكد من الإنترنت وأعد المحاولة.",
+            if (m.gated) "فشل التنزيل. غالباً لم يُقبل الترخيص بعد، أو الرمز غير صحيح (راجع الخطوات)." else "فشل التنزيل. تأكد من الإنترنت وأعد المحاولة.",
             color = TextDim, fontSize = 12.sp,
         )
+        if (m.gated && !have && dl?.running != true && (askToken || dl?.failed == true)) {
+            Spacer(Modifier.height(10.dp))
+            Text("هذا النموذج من Google ويحتاج موافقة مرة واحدة:", color = TextMain, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+            Text(
+                "١. افتح صفحة النموذج، وسجّل الدخول في HuggingFace (حساب مجاني)، واضغط قبول الترخيص (Acknowledge license).\n" +
+                    "٢. افتح صفحة الرموز، وأنشئ رمزاً من نوع Read، وانسخه.\n" +
+                    "٣. الصقه هنا واضغط «تنزيل الآن».",
+                color = TextDim, fontSize = 12.sp, lineHeight = 20.sp,
+            )
+            Row {
+                TextButton(onClick = { onLink(m.page) }) { Text("صفحة النموذج ↗", fontSize = 13.sp) }
+                TextButton(onClick = { onLink("https://huggingface.co/settings/tokens") }) { Text("صفحة الرموز ↗", fontSize = 13.sp) }
+            }
+            OutlinedTextField(
+                token, onToken, singleLine = true, placeholder = { Text("hf_…", color = TextDim) },
+                visualTransformation = PasswordVisualTransformation(),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                TextButton(enabled = token.isNotBlank(), onClick = tryStart) { Text("تنزيل الآن") }
+                Text("أو اختر Qwen، لا يحتاج رمزاً.", color = TextDim, fontSize = 12.sp)
+            }
+        }
     }
 }
 
