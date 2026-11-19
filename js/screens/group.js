@@ -526,8 +526,8 @@ async function mountList(root, s, syncErr, mode, tab = 'chats') {
       <p class="wa-note" id="g-note" ${syncErr ? '' : 'hidden'} role="status">${esc(syncErr)}</p>
       <div id="g-decisions"></div>
       <ul class="g-rooms" id="g-rooms" aria-label="${TABS.find((x) => x[0] === tab)?.[1] || ''}"></ul>
-      ${tab === 'chats' ? '<button type="button" class="g-new" id="g-new">مجموعة جديدة</button>' : ''}
       </div>
+      ${tab === 'chats' ? '<button type="button" class="g-new" id="g-new">مجموعة جديدة</button>' : ''}
     </section>`;
   root.querySelector('#g-new')?.addEventListener('click', () => openEditor(root));
   // التنقل بين التبويبات: النقر على الكلمة، أو سحب أفقي تتبعه الشاشة بالإصبع ثم تنزلق للتبويب التالي
