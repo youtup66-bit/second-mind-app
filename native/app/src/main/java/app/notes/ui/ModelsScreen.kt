@@ -173,15 +173,17 @@ fun ModelsScreen(state: AppState) {
             UpdateCard(update)
         }
 
-        // النماذج الموجودة على الهاتف: اختر أحدها
-        item { SectionTitle("المثبّتة على الهاتف", open["installed"] == true) { open["installed"] = open["installed"] != true } }
-        if (open["installed"] == true) item {
+        // الذكاء الصناعي: اختيار من يرد (أساسي، Gemini، أو نموذج على الهاتف)، ثم إعداد Gemini وتنزيل النماذج
+        item { SectionTitle("الذكاء الصناعي", open["ai"] == true) { open["ai"] = open["ai"] != true } }
+        if (open["ai"] == true) item {
+            Text("اختر من يرد عليك:", color = TextDim, fontSize = 13.sp)
+            Spacer(Modifier.height(6.dp))
             Choice(
                 title = "أساسي (بلا نموذج)", sub = "يحفظ ويصنّف ويتذكّر دون ذكاء صناعي",
                 selected = state.engine.name == "أساسي (بلا نموذج)", onClick = { state.useModel(null) },
             )
         }
-        if (open["installed"] == true) items(state.installed, key = { it.file.absolutePath }) { m: InstalledModel ->
+        if (open["ai"] == true) items(state.installed, key = { it.file.absolutePath }) { m: InstalledModel ->
             Choice(
                 title = m.label, sub = "${m.file.length() / 1_000_000} ميجا",
                 selected = mm.activePath == m.file.absolutePath && state.engine.name == m.label,
@@ -190,14 +192,17 @@ fun ModelsScreen(state: AppState) {
             )
         }
 
-        item { SectionTitle("على الإنترنت (Gemini)", open["online"] == true) { open["online"] = open["online"] != true } }
-        if (open["online"] == true) item {
+        if (open["ai"] == true) item {
             Choice(
-                title = "Gemini 🌐", sub = if (gKey.isBlank()) "أدخل المفتاح بالأسفل أولاً" else "ذكاء Google على الإنترنت",
+                title = "Gemini 🌐", sub = if (gKey.isBlank()) "على الإنترنت — أدخل المفتاح في «إعداد Gemini»" else "ذكاء Google على الإنترنت",
                 selected = state.usingGemini,
-                onClick = { if (!state.useGemini()) message = "أدخل مفتاح Gemini أولاً." },
+                onClick = {
+                    if (!state.useGemini()) { message = "أدخل مفتاح Gemini أولاً."; open["gemini"] = true }
+                },
             )
-            Spacer(Modifier.height(12.dp))
+        }
+        if (open["ai"] == true) item { SubTitle("إعداد Gemini", open["gemini"] == true) { open["gemini"] = open["gemini"] != true } }
+        if (open["ai"] == true && open["gemini"] == true) item {
             Card {
                 Text("مفتاح Gemini", color = TextMain)
                 Text("مجاني من Google AI Studio. يُحفظ على هاتفك فقط ويُرسل إلى Google وحدها.", color = TextDim, fontSize = 13.sp)
@@ -238,6 +243,13 @@ fun ModelsScreen(state: AppState) {
             }
         }
 
+        if (open["ai"] == true) item { SubTitle("تنزيل نموذج للهاتف (بلا إنترنت)", open["catalog"] == true) { open["catalog"] = open["catalog"] != true } }
+        if (open["ai"] == true && open["catalog"] == true) items(MODEL_CATALOG, key = { it.id }) { m -> CatalogCard(state, m, downloads[m.id], onStart = {
+            message = if (m.gated && token.isBlank()) "هذا النموذج يحتاج رمز HuggingFace (بالأسفل)." else {
+                mm.startDownload(m); tick++; "بدأ التنزيل، ويمكنك متابعته في الإشعارات."
+            }
+        }, onCancel = { mm.cancelDownload(m); tick++ }) }
+
         item { SectionTitle("الفهم بالمعنى", open["embed"] == true) { open["embed"] = open["embed"] != true } }
         if (open["embed"] == true) item {
             Card {
@@ -268,12 +280,6 @@ fun ModelsScreen(state: AppState) {
             }
         }
 
-        item { SectionTitle("تنزيل نموذج", open["catalog"] == true) { open["catalog"] = open["catalog"] != true } }
-        if (open["catalog"] == true) items(MODEL_CATALOG, key = { it.id }) { m -> CatalogCard(state, m, downloads[m.id], onStart = {
-            message = if (m.gated && token.isBlank()) "هذا النموذج يحتاج رمز HuggingFace (بالأسفل)." else {
-                mm.startDownload(m); tick++; "بدأ التنزيل، ويمكنك متابعته في الإشعارات."
-            }
-        }, onCancel = { mm.cancelDownload(m); tick++ }) }
 
         item { SectionTitle("خيارات أخرى", open["other"] == true) { open["other"] = open["other"] != true } }
         if (open["other"] == true) item {
@@ -444,6 +450,22 @@ private fun CatalogCard(state: AppState, m: ModelInfo, dl: DownloadState?, onSta
         if (dl?.failed == true) Text(
             if (m.gated) "فشل التنزيل. تأكد من قبول الترخيص ومن الرمز." else "فشل التنزيل. تأكد من الإنترنت وأعد المحاولة.",
             color = TextDim, fontSize = 12.sp,
+        )
+    }
+}
+
+/** عنوان فرعي منسدل داخل قائمة. */
+@Composable
+private fun SubTitle(t: String, expanded: Boolean, onToggle: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).clickable(onClick = onToggle)
+            .padding(start = 8.dp, top = 4.dp, bottom = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(t, color = Accent2, fontSize = 14.sp, modifier = Modifier.weight(1f))
+        Icon(
+            Icons.Filled.KeyboardArrowDown, contentDescription = if (expanded) "إغلاق" else "فتح", tint = TextDim,
+            modifier = Modifier.size(22.dp).rotate(if (expanded) 180f else 0f),
         )
     }
 }
