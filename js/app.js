@@ -38,6 +38,24 @@ const officialAllows = (name) => {
 };
 let role = null;
 
+// شاشة الافتتاح تبقى لحظة قصيرة (٩٠٠ ms على الأقل) ثم تتلاشى عند أول شاشة
+const SPLASH_MIN_MS = 900;
+const splashStart = Date.now();
+let splashGone = false;
+function hideSplash() {
+  if (splashGone) return;
+  splashGone = true;
+  const el = document.getElementById('boot-splash');
+  if (!el) return;
+  const wait = Math.max(0, SPLASH_MIN_MS - (Date.now() - splashStart));
+  setTimeout(() => {
+    el.classList.add('is-gone');
+    setTimeout(() => el.remove(), 400);
+  }, wait);
+}
+// احتياط: إن تأخر أول عرض لأي سبب، تختفي الشاشة بعد ٤ ثوانٍ لا تبقى إلى الأبد
+setTimeout(hideSplash, 4000);
+
 async function navigate() {
   const myNav = ++navId;
   // رئيس القسم يبدأ من المحادثات (المساعد كرة فيها)، والموظف من الأعمال
@@ -64,6 +82,7 @@ async function navigate() {
   const view = document.createElement('div');
   view.className = 'view';
   app.replaceChildren(view);
+  hideSplash();
   titleEl.textContent = screen.title;
   document.body.classList.toggle('on-home', screen === home);
   document.body.classList.toggle('on-group', screen === group || screen === chats || screen === tasks);

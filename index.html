@@ -16,8 +16,16 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/style.css">
+  <style>
+    /* شاشة الافتتاح: لمحة بالثيم الأخضر (الخلفية والكرة المتوهجة) ثم تختفي */
+    #boot-splash { position: fixed; inset: 0; z-index: 9999; display: flex; align-items: center; justify-content: center; background: radial-gradient(120% 60% at 50% 0%, #0f3d2c 0%, #071a14 45%, #04100c 100%); transition: opacity .35s ease; }
+    #boot-splash.is-gone { opacity: 0; pointer-events: none; }
+    #boot-splash .boot-orb { width: 150px; height: 150px; border-radius: 50%; background: radial-gradient(circle at 34% 28%, #e6fff3 0%, #4ade80 20%, #16a34a 58%, #063b28 100%); box-shadow: 0 0 60px 14px rgba(74,222,128,.42); animation: boot-breathe 1.2s ease-in-out infinite; }
+    @keyframes boot-breathe { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.06); } }
+  </style>
 </head>
 <body>
+  <div id="boot-splash" aria-hidden="true"><div class="boot-orb"></div></div>
   <header class="topbar">
     <h1 class="topbar__title" id="screen-title">عقلي الثاني</h1>
   </header>
