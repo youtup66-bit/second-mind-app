@@ -28,18 +28,19 @@ class LocalEngine(
             .build(),
     ).also { llm = it }
 
-    override suspend fun reply(history: List<Msg>, memory: List<Note>, input: String, section: Section): String =
+    override suspend fun reply(history: List<Msg>, memory: List<Note>, input: String, section: Section?, overview: String): String =
         withContext(Dispatchers.Default) {
-            val raw = model().generateResponse(buildPrompt(history, memory, input, section))
+            val raw = model().generateResponse(buildPrompt(history, memory, input, section, overview))
             clean(raw).ifBlank { "…" }
         }
 
     fun close() { llm?.close(); llm = null }
 
-    private fun systemText(memory: List<Note>, section: Section): String = buildString {
-        append("أنت «عقلي»، مساعد ملاحظات شخصي على هاتف المستخدم. ")
+    private fun systemText(memory: List<Note>, section: Section?, overview: String): String = buildString {
+        append("أنت «عقلي»، مساعد ملاحظات شخصي على هاتف المستخدم، وترى ملاحظاته المحفوظة في التطبيق. ")
         append("ترد بالعربية بإيجاز ولطف، وتساعده على ترتيب أفكاره، وتقترح خطوة عملية عند الحاجة. ")
-        append("حُفظ كلامه الأخير في قسم «${section.name}».")
+        if (section != null) append("حُفظ كلامه الأخير في قسم «${section.name}».")
+        if (overview.isNotBlank()) append("\nمحتويات عقله (أجب منها بدقة، ولا تخترع ما ليس فيها):\n").append(overview)
         if (memory.isNotEmpty()) {
             append("\nملاحظات سابقة له قد تفيدك (استعن بها إن كانت ذات صلة):")
             memory.forEach { append("\n- ").append(it.text.take(160)) }
@@ -80,10 +81,10 @@ class LocalEngine(
 
     private fun toLatinDigits(s: String) = s.map { c -> if (c in '٠'..'٩') '0' + (c - '٠') else c }.joinToString("")
 
-    private fun buildPrompt(history: List<Msg>, memory: List<Note>, input: String, section: Section): String {
-        // آخر الرسائل قبل الحالية، باختصار لتبقى ضمن حجم النموذج
-        val past = history.dropLast(1).takeLast(6).map { it.role to it.text.take(300) }
-        return format(systemText(memory, section), past + ("user" to input))
+    private fun buildPrompt(history: List<Msg>, memory: List<Note>, input: String, section: Section?, overview: String): String {
+        // آخر الرسائل قبل الحالية، باختصار لتبقى ضمن حجم النموذج الصغير
+        val past = history.dropLast(1).takeLast(if (overview.isBlank()) 6 else 2).map { it.role to it.text.take(200) }
+        return format(systemText(memory, section, overview), past + ("user" to input))
     }
 
     private fun format(sys: String, turns: List<Pair<String, String>>): String {

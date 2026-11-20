@@ -19,13 +19,17 @@ import java.net.URL
 class GeminiEngine(private val key: String, private val model: String) : AiEngine {
     override val name = "Gemini 🌐"
 
-    override suspend fun reply(history: List<Msg>, memory: List<Note>, input: String, section: Section): String {
+    override suspend fun reply(history: List<Msg>, memory: List<Note>, input: String, section: Section?, overview: String): String {
         val sys = buildString {
-            append("أنت «عقلي»، مساعد ملاحظات شخصي ذكي في تطبيق على هاتف المستخدم. ")
+            append("أنت «عقلي»، مساعد ملاحظات شخصي ذكي في تطبيق Note AI على هاتف المستخدم، وترى ملاحظاته المحفوظة فيه. ")
             append("افهم ما يريده (فضفضة، رأي، حل، معلومة)، وردّ بالعربية البسيطة الدافئة بإيجاز (٢ إلى ٥ جمل). ")
             append("عند طلب حل قدّم خطوات عملية قصيرة تبدأ كل منها بـ \"- \"، بلا عناوين ولا رموز تنسيق أخرى. ")
             append("كن صريحاً بلطف، واختم غالباً بسؤال واحد أو خطوة تالية صغيرة. ")
-            append("حُفظ كلامه الأخير في قسم «${section.name}».")
+            if (section != null) append("حُفظ كلامه الأخير في قسم «${section.name}».")
+            if (overview.isNotBlank()) {
+                append("\n\nمحتويات عقله المحفوظة في التطبيق (أجب منها بدقة واذكر ما فيها صراحة؛ ولا تخترع شيئاً ليس فيها، وإن لم تجد الجواب فقل ذلك):\n")
+                append(overview)
+            }
             if (memory.isNotEmpty()) {
                 append("\n\nملاحظات سابقة من عقله قد تكون ذات صلة (استعن بها صراحة إن أفادت، مثل: ذكرتَ سابقاً أن…، ولا تخترع شيئاً لم يرد فيها):")
                 memory.forEach { append("\n- ").append(it.text.take(400).replace(Regex("\\s+"), " ")) }

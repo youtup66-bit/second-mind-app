@@ -14,6 +14,7 @@ import app.notes.ai.ActionPlanner
 import app.notes.ai.AppAction
 import app.notes.ai.Arabic
 import app.notes.ai.Classifier
+import app.notes.ai.MemoryAsk
 import app.notes.data.Backup
 import app.notes.data.path
 import app.notes.ai.Links
@@ -162,6 +163,19 @@ class AppState(private val repo: Repo, val models: ModelManager, private val sco
                     val acts = runCatching { engine.plan(text, sections) }.getOrDefault(emptyList())
                     if (acts.isNotEmpty()) { proposeActions(id, acts); return@launch }
                 }
+                // سؤال عن ملاحظاته؟ يُجاب من محتويات عقله ولا يُحفظ ملاحظةً جديدة
+                if (MemoryAsk.isAsk(text)) {
+                    status = "يقرأ ملاحظاتك…"
+                    val e0 = embedder
+                    val qv0 = if (e0 != null) runCatching { withContext(Dispatchers.Default) { e0.embed(text) } }.getOrNull() else null
+                    val memory0 = io {
+                        val all = repo.notes()
+                        if (qv0 != null) Semantic.recall(repo.vectors(), all, qv0, limit = 6).ifEmpty { Recall.find(all, text, 6) }
+                        else Recall.find(all, text, 6)
+                    }
+                    answer(id, text, null, memory0, overview(text, full = engine is GeminiEngine || engine is BasicEngine))
+                    return@launch
+                }
                 // أي ذكاء صناعي (على الهاتف أو الإنترنت) يصنّف ويرد؛ الأساسي بالكلمات فقط
                 val local = engine !is BasicEngine
                 val where = if (engine is GeminiEngine) "عبر الإنترنت" else "على هاتفك"
@@ -189,19 +203,47 @@ class AppState(private val repo: Repo, val models: ModelManager, private val sco
     }
 
     /** رد الذكاء وحفظه في المحادثة. */
-    private suspend fun answer(convId: Long, text: String, section: Section, memory: List<Note>) {
+    private suspend fun answer(convId: Long, text: String, section: Section?, memory: List<Note>, overview: String = "") {
         val local = engine !is BasicEngine
         val where = if (engine is GeminiEngine) "عبر الإنترنت" else "على هاتفك"
         if (local) status = "يفكر $where…"
         val reply = try {
-            engine.reply(messages.toList(), memory, text, section)
+            engine.reply(messages.toList(), memory, text, section, overview)
         } catch (e: Throwable) {
             // إن فشل النموذج (ذاكرة لا تكفي أو ملف تالف) لا تضيع الملاحظة
-            BasicEngine().reply(messages.toList(), memory, text, section) +
+            BasicEngine().reply(messages.toList(), memory, text, section, overview) +
                 "\n\n⚠️ تعذّر تشغيل النموذج: ${e.message ?: e.javaClass.simpleName}"
         }
-        val tagged = if (local) "$reply\n\n— حُفظت في ${section.icon} ${section.name}" else reply
+        val tagged = if (local && section != null) "$reply\n\n— حُفظت في ${section.icon} ${section.name}" else reply
         messages += io { repo.addMessage(convId, "assistant", tagged) }
+    }
+
+    /**
+     * نظرة على محتويات عقله: الأقسام وعدد ملاحظاتها، ثم الملاحظات (الأحدث أولاً).
+     * إن ذُكر قسم باسمه تُعرض ملاحظاته هو. [full] لـ Gemini (سياق كبير)، وإلا ملخص قصير للنموذج الصغير.
+     */
+    private suspend fun overview(text: String, full: Boolean): String = io {
+        val all = repo.sections()
+        val notes = repo.notes().asReversed()
+        val t = Arabic.normalize(text)
+        val focus = all.filter { Arabic.normalize(it.name).let { n -> n.length >= 2 && t.contains(n) } }
+            .flatMap { f -> all.filter { it.id == f.id || isUnder(it, f, all) } }.map { it.id }.toSet()
+        val shown = if (focus.isEmpty()) notes else notes.filter { it.sectionId in focus }
+        val limit = if (full) 20_000 else 650
+        val per = if (full) 400 else 100
+        val fmt = java.text.SimpleDateFormat("d MMM", java.util.Locale("ar"))
+        buildString {
+            append("عدد الملاحظات: ${notes.size}. الأقسام:\n")
+            all.forEach { append("- ").append(it.path(all)).append(": ").append(it.count).append('\n') }
+            if (shown.isEmpty()) { append("لا ملاحظات بعد."); return@buildString }
+            append(if (focus.isEmpty()) "الملاحظات (الأحدث أولاً):\n" else "ملاحظات القسم المذكور (الأحدث أولاً):\n")
+            for (n in shown) {
+                val sec = all.firstOrNull { it.id == n.sectionId }?.name ?: ""
+                val line = "- [$sec] (${fmt.format(java.util.Date(n.time))}) ${n.text.replace(Regex("\\s+"), " ").take(per)}\n"
+                if (length + line.length > limit) { append("…وملاحظات أقدم لم تُعرض."); break }
+                append(line)
+            }
+        }
     }
 
     // ================= أوامر الذكاء =================

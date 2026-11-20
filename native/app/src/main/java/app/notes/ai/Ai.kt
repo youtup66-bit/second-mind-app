@@ -35,6 +35,16 @@ object Classifier {
     }
 }
 
+/** هل الرسالة سؤال عن ملاحظاته المحفوظة؟ (فيُجاب منها ولا تُحفظ ملاحظةً جديدة) */
+object MemoryAsk {
+    private val about = Regex("(ملاحظ|كتبت|ذكرت|سجلت|دونت|حفظت|كتبي|كتاب|اقسام|قسم|عقلي|ذاكرت)")
+    private val ask = Regex("(^|\\s)(هل|ما|ماذا|اين|كم|متي|اعرض|اذكر|عدد|اخبرني|قل لي|تري|تعرف|وش|شو|ايش|لخص|ابحث|اعطني|هات)(\\s|$)|[؟?]")
+    fun isAsk(text: String): Boolean {
+        val t = Arabic.normalize(text)
+        return about.containsMatchIn(t) && ask.containsMatchIn(t)
+    }
+}
+
 /** الذاكرة: يبحث في كل الملاحظات السابقة (من كل المحادثات) عن الأقرب لما تقوله الآن. */
 object Recall {
     fun find(all: List<Note>, query: String, limit: Int = 3): List<Note> {
@@ -51,7 +61,11 @@ object Recall {
 /** واجهة موحدة لأي ذكاء صناعي (محلي على الهاتف أو غيره)، ليختار المستخدم بينها. */
 interface AiEngine {
     val name: String
-    suspend fun reply(history: List<Msg>, memory: List<Note>, input: String, section: Section): String
+    /**
+     * [section] القسم الذي حُفظ فيه كلامه (null إن كان سؤالاً عن ملاحظاته فلم يُحفظ)،
+     * و[overview] نظرة على محتويات عقله (أقسامه وملاحظاته) ليجيب منها.
+     */
+    suspend fun reply(history: List<Msg>, memory: List<Note>, input: String, section: Section?, overview: String = ""): String
 
     /** تصنيف بالذكاء الصناعي؛ null يعني استخدم التصنيف بالكلمات. */
     suspend fun classify(text: String, sections: List<Section>): Section? = null
@@ -67,7 +81,9 @@ interface AiEngine {
 class BasicEngine : AiEngine {
     override val name = "أساسي (بلا نموذج)"
 
-    override suspend fun reply(history: List<Msg>, memory: List<Note>, input: String, section: Section): String {
+    override suspend fun reply(history: List<Msg>, memory: List<Note>, input: String, section: Section?, overview: String): String {
+        // بلا نموذج: يعرض ما في عقله كما هو عند السؤال عنه
+        if (section == null) return if (overview.isNotBlank()) "هذا ما في عقلك:\n\n$overview" else "لا ملاحظات بعد."
         val sb = StringBuilder("حفظتها في كتاب ${section.icon} ${section.name}.")
         if (memory.isNotEmpty()) {
             sb.append("\n\nتذكّرت أنك كتبت سابقاً:")
