@@ -173,8 +173,13 @@ class AppState(private val repo: Repo, val models: ModelManager, private val sco
                     if (acts.isNotEmpty()) { proposeActions(id, acts); return@launch }
                 }
                 // سؤال عن ملاحظاته؟ يُجاب من محتويات عقله ولا يُحفظ ملاحظةً جديدة
-                if (MemoryAsk.isAsk(text)) {
-                    status = "يقرأ ملاحظاتك…"
+                val ask = MemoryAsk.isAsk(text)
+                if (ask || !saveMode) {
+                    if (!ask && engine is BasicEngine) {
+                        messages += io { repo.addMessage(id, "assistant", "لم أحفظها لأن «حفظ» متوقف. اضغط «＋ حفظ» تحت رسالتك إن أردت حفظها.") }
+                        return@launch
+                    }
+                    status = if (ask) "يقرأ ملاحظاتك…" else "يفكر…"
                     val e0 = embedder
                     val qv0 = if (e0 != null) runCatching { withContext(Dispatchers.Default) { e0.embed(text) } }.getOrNull() else null
                     val memory0 = io {
@@ -200,9 +205,10 @@ class AppState(private val repo: Repo, val models: ModelManager, private val sco
                     if (qv != null) Semantic.recall(repo.vectors(), all, qv).ifEmpty { Recall.find(all, text) }
                     else Recall.find(all, text)
                 }
+                val ov = if (local) overview(text, full = engine is GeminiEngine) else ""
                 val noteId = io { repo.addNote(text, section.id, id) }
                 if (qv != null) io { repo.saveVector(noteId, qv) }
-                answer(id, text, section, memory)
+                answer(id, text, section, memory, ov)
                 relateLater(Note(noteId, text, section.id, id, System.currentTimeMillis()))
             } finally {
                 busy = false
@@ -239,7 +245,7 @@ class AppState(private val repo: Repo, val models: ModelManager, private val sco
         val focus = all.filter { Arabic.normalize(it.name).let { n -> n.length >= 2 && t.contains(n) } }
             .flatMap { f -> all.filter { it.id == f.id || isUnder(it, f, all) } }.map { it.id }.toSet()
         val shown = if (focus.isEmpty()) notes else notes.filter { it.sectionId in focus }
-        val limit = if (full) 20_000 else 650
+        val limit = if (full) 60_000 else 650
         val per = if (full) 400 else 100
         val fmt = java.text.SimpleDateFormat("d MMM", java.util.Locale("ar"))
         buildString {
@@ -253,6 +259,40 @@ class AppState(private val repo: Repo, val models: ModelManager, private val sco
                 if (length + line.length > limit) { append("…وملاحظات أقدم لم تُعرض."); break }
                 append(line)
             }
+        }
+    }
+
+    // ================= الحفظ =================
+
+    private val uiPrefs = models.ctx.getSharedPreferences("ui", android.content.Context.MODE_PRIVATE)
+
+    /** هل تُحفظ رسائلي ملاحظاتٍ تلقائياً؟ (زر «حفظ» في صندوق الكتابة) */
+    var saveMode by mutableStateOf(uiPrefs.getBoolean("save_mode", true))
+        private set
+
+    fun toggleSaveMode() { saveMode = !saveMode; uiPrefs.edit().putBoolean("save_mode", saveMode).apply() }
+
+    /** هل حُفظت هذه الرسالة ملاحظة؟ */
+    fun isSaved(m: Msg) = allNotes.any { it.convId == m.convId && it.text == m.text }
+
+    /** حفظ رسالة لم تُحفظ، أو إلغاء حفظ رسالة محفوظة (تُحذف ملاحظتها فقط، وتبقى الرسالة). */
+    fun toggleSaved(m: Msg) {
+        if (m.role != "user") return
+        scope.launch {
+            val existing = io { repo.findNote(m.convId, m.text) }
+            if (existing != null) {
+                io { repo.deleteNote(existing) }
+            } else {
+                val smart = engine !is BasicEngine
+                val section = (if (smart) runCatching { engine.classify(m.text, sections) }.getOrNull() else null)
+                    ?: Classifier.classify(m.text, sections)
+                val nid = io { repo.addNote(m.text, section.id, m.convId) }
+                embedder?.let { e ->
+                    runCatching { withContext(Dispatchers.Default) { e.embed(m.text) } }.getOrNull()?.let { v -> io { repo.saveVector(nid, v) } }
+                }
+                relateLater(Note(nid, m.text, section.id, m.convId, System.currentTimeMillis()))
+            }
+            refresh()
         }
     }
 

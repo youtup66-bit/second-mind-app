@@ -86,6 +86,7 @@ fun ChatScreen(state: AppState, onModels: () -> Unit) {
                 ) {
                     items(state.messages, key = { it.id }) { m ->
                         MessageRow(m, canEdit = !state.busy && state.isLastUser(m),
+                            saved = m.role == "user" && state.isSaved(m), onToggleSave = { state.toggleSaved(m) },
                             hasActions = state.pending.containsKey(m.id),
                             onRun = { state.runPending(m.id) }, onCancel = { state.cancelPending(m.id) },
                             onEdit = {
@@ -126,6 +127,15 @@ fun ChatScreen(state: AppState, onModels: () -> Unit) {
                 .padding(start = 6.dp, end = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            // زر الحفظ: مفعّل = تُحفظ رسائلك ملاحظات، متوقف = محادثة فقط
+            Text(
+                if (state.saveMode) "✓ حفظ" else "حفظ",
+                color = if (state.saveMode) Color.White else TextDim, fontSize = 12.sp, fontWeight = FontWeight.Bold,
+                modifier = Modifier.clip(RoundedCornerShape(14.dp))
+                    .background(if (state.saveMode) Accent else Panel2)
+                    .clickable { state.toggleSaveMode() }
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
+            )
             TextField(
                 value = input,
                 onValueChange = { input = it },
@@ -189,6 +199,7 @@ private fun TopIcon(glyph: String, onClick: () -> Unit) {
 private fun MessageRow(
     m: Msg, canEdit: Boolean, onEdit: () -> Unit, onPdf: () -> Unit,
     hasActions: Boolean = false, onRun: () -> Unit = {}, onCancel: () -> Unit = {},
+    saved: Boolean = false, onToggleSave: () -> Unit = {},
 ) {
     if (m.role == "user") {
         // رسالة المستخدم: فقاعة في جهة البداية، وتحت آخرها زر تعديل
@@ -196,11 +207,19 @@ private fun MessageRow(
             Surface(shape = RoundedCornerShape(20.dp), color = Panel2, modifier = Modifier.widthIn(max = 300.dp)) {
                 Text(m.text, color = TextMain, fontSize = 16.sp, modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp))
             }
-            if (canEdit) Text(
-                "✎ تعديل", color = TextDim, fontSize = 12.sp,
-                modifier = Modifier.padding(top = 4.dp).clip(RoundedCornerShape(8.dp)).clickable(onClick = onEdit)
-                    .padding(horizontal = 8.dp, vertical = 4.dp),
-            )
+            Row(Modifier.padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                // علامة الحفظ: تضغطها لتحفظ الرسالة ملاحظة أو تلغي حفظها
+                Text(
+                    if (saved) "✓ محفوظة" else "＋ حفظ", color = if (saved) Accent2 else TextDim, fontSize = 12.sp,
+                    modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable(onClick = onToggleSave)
+                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                )
+                if (canEdit) Text(
+                    "✎ تعديل", color = TextDim, fontSize = 12.sp,
+                    modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable(onClick = onEdit)
+                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                )
+            }
         }
     } else {
         // رد الذكاء: نص حر مع شعار صغير، كبرامج الذكاء الصناعي
