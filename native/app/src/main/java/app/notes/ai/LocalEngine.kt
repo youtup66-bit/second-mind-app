@@ -7,6 +7,8 @@ import app.notes.data.Section
 import app.notes.data.path
 import com.google.mediapipe.tasks.genai.llminference.LlmInference
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.io.File
 
@@ -28,10 +30,18 @@ class LocalEngine(
             .build(),
     ).also { llm = it }
 
+    /** النموذج على الهاتف لا يحتمل طلبين في وقت واحد (رد وربط في الخلفية). */
+    private val lock = Mutex()
+
+    override suspend fun relate(note: Note, candidates: List<Note>): List<Relation> =
+        RelatePrompt.parse(generate(RelatePrompt.SYSTEM, RelatePrompt.user(note, candidates)), note, candidates)
+
     override suspend fun reply(history: List<Msg>, memory: List<Note>, input: String, section: Section?, overview: String): String =
-        withContext(Dispatchers.Default) {
-            val raw = model().generateResponse(buildPrompt(history, memory, input, section, overview))
-            clean(raw).ifBlank { "…" }
+        lock.withLock {
+            withContext(Dispatchers.Default) {
+                val raw = model().generateResponse(buildPrompt(history, memory, input, section, overview))
+                clean(raw).ifBlank { "…" }
+            }
         }
 
     fun close() { llm?.close(); llm = null }
@@ -75,8 +85,8 @@ class LocalEngine(
     }
 
     /** طلب واحد بلا سجل محادثة. */
-    private suspend fun generate(system: String, user: String): String = withContext(Dispatchers.Default) {
-        clean(model().generateResponse(format(system, listOf("user" to user))))
+    private suspend fun generate(system: String, user: String): String = lock.withLock {
+        withContext(Dispatchers.Default) { clean(model().generateResponse(format(system, listOf("user" to user)))) }
     }
 
     private fun toLatinDigits(s: String) = s.map { c -> if (c in '٠'..'٩') '0' + (c - '٠') else c }.joinToString("")

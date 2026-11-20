@@ -103,7 +103,7 @@ fun BookScreen(state: AppState, book: Section, startNoteId: Long? = null, onBack
                 modifier = Modifier.fillMaxSize().padding(horizontal = 20.dp, vertical = 12.dp),
             ) {
                 if (page == 0) Cover(state, section, list.size)
-                else NotePage(list[page - 1], page, list.size, onEdit = { editingNote = it; editText = it.text }, onMove = { moving = it }, onDelete = {
+                else NotePage(list[page - 1], page, list.size, related = state.relatedTo(list[page - 1].id), onEdit = { editingNote = it; editText = it.text }, onMove = { moving = it }, onDelete = {
                     state.deleteNote(it.id); reload++
                 })
             }
@@ -204,14 +204,28 @@ private fun Cover(state: AppState, section: Section, count: Int) {
 }
 
 @Composable
-private fun NotePage(note: Note, page: Int, total: Int, onEdit: (Note) -> Unit, onMove: (Note) -> Unit, onDelete: (Note) -> Unit) {
+private fun NotePage(
+    note: Note, page: Int, total: Int, onEdit: (Note) -> Unit, onMove: (Note) -> Unit, onDelete: (Note) -> Unit,
+    related: List<Pair<Note, String>> = emptyList(),
+) {
     Column(Modifier.fillMaxSize().padding(22.dp)) {
         Text(dateFmt.format(Date(note.time)), color = Ink.copy(alpha = 0.6f), fontSize = 13.sp)
         Spacer(Modifier.height(14.dp))
-        Text(
-            note.text, color = Ink, fontSize = 19.sp, lineHeight = 32.sp, fontFamily = FontFamily.Serif,
-            modifier = Modifier.weight(1f).verticalScroll(rememberScrollState()),
-        )
+        Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
+            Text(note.text, color = Ink, fontSize = 19.sp, lineHeight = 32.sp, fontFamily = FontFamily.Serif)
+            // الروابط التي أكدها الذكاء، مع سبب كل منها
+            if (related.isNotEmpty()) {
+                Spacer(Modifier.height(18.dp))
+                Text("مرتبطة بـ", color = Ink.copy(alpha = 0.55f), fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                related.forEach { (other, why) ->
+                    Text(
+                        "• «${other.text.replace('\n', ' ').take(60)}»  —  $why",
+                        color = Ink.copy(alpha = 0.75f), fontSize = 14.sp, lineHeight = 22.sp,
+                        modifier = Modifier.padding(top = 6.dp),
+                    )
+                }
+            }
+        }
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             TextButton(onClick = { onEdit(note) }) { Text("تعديل", color = Accent) }
             TextButton(onClick = { onMove(note) }) { Text("نقل", color = Accent) }

@@ -75,6 +75,9 @@ interface AiEngine {
 
     /** تحويل طلب بلغة المستخدم إلى أوامر للتطبيق؛ قائمة فارغة إن لم يكن أمراً. */
     suspend fun plan(text: String, sections: List<Section>): List<AppAction> = emptyList()
+
+    /** أي الملاحظات المرشحة مرتبطة فعلاً بـ[note]؟ (مع السبب) */
+    suspend fun relate(note: Note, candidates: List<Note>): List<Relation> = emptyList()
 }
 
 /** محرك أساسي بلا نموذج: يؤكد الحفظ ويذكّر بالملاحظات المرتبطة. يُستبدل بنموذج محلي في المرحلة ٢. */

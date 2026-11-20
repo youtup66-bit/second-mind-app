@@ -56,6 +56,12 @@ class GeminiEngine(private val key: String, private val model: String) : AiEngin
             generate(ActionPlanner.prompt(sections), listOf("user" to text.take(1000)), temperature = 0.0, maxTokens = 1024, json = true),
         )
 
+    override suspend fun relate(note: Note, candidates: List<Note>): List<Relation> =
+        RelatePrompt.parse(
+            generate(RelatePrompt.SYSTEM, listOf("user" to RelatePrompt.user(note, candidates)), temperature = 0.0, maxTokens = 512, json = true),
+            note, candidates,
+        )
+
     override suspend fun summarize(section: Section, notes: List<Note>): String? {
         val sb = StringBuilder()
         for (n in notes.asReversed()) {

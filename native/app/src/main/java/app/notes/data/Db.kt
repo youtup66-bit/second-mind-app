@@ -29,13 +29,14 @@ data class Msg(val id: Long, val convId: Long, val role: String, val text: Strin
 data class Conversation(val id: Long, val title: String, val time: Long)
 
 /** كل البيانات محفوظة على الهاتف فقط في قاعدة SQLite. */
-class Db(ctx: Context) : SQLiteOpenHelper(ctx, "notes.db", null, 4) {
+class Db(ctx: Context) : SQLiteOpenHelper(ctx, "notes.db", null, 5) {
 
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL("CREATE TABLE sections(id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, icon TEXT, keywords TEXT, summary TEXT DEFAULT '', summary_count INTEGER DEFAULT 0, parent_id INTEGER DEFAULT 0)")
         db.execSQL("CREATE TABLE notes(id INTEGER PRIMARY KEY AUTOINCREMENT, text TEXT, section_id INTEGER, conv_id INTEGER, time INTEGER)")
         db.execSQL("CREATE TABLE conversations(id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT, time INTEGER)")
         db.execSQL(EMBED_TABLE)
+        db.execSQL(RELATIONS_TABLE); db.execSQL(LINKED_TABLE)
         db.execSQL("CREATE TABLE messages(id INTEGER PRIMARY KEY AUTOINCREMENT, conv_id INTEGER, role TEXT, text TEXT, time INTEGER)")
         DEFAULT_SECTIONS.forEach { (name, icon, kw) ->
             db.insert("sections", null, ContentValues().apply {
@@ -51,6 +52,7 @@ class Db(ctx: Context) : SQLiteOpenHelper(ctx, "notes.db", null, 4) {
         }
         if (oldVersion < 3) db.execSQL(EMBED_TABLE)
         if (oldVersion < 4) db.execSQL("ALTER TABLE sections ADD COLUMN parent_id INTEGER DEFAULT 0")
+        if (oldVersion < 5) { db.execSQL(RELATIONS_TABLE); db.execSQL(LINKED_TABLE) }
     }
 
     companion object {
@@ -62,6 +64,10 @@ class Db(ctx: Context) : SQLiteOpenHelper(ctx, "notes.db", null, 4) {
         }
 
         /** بصمة المعنى لكل ملاحظة (متجه أرقام). */
+        /** علاقات أكدها الذكاء بين الملاحظات، مع سببها (a < b دائماً). */
+        const val RELATIONS_TABLE = "CREATE TABLE relations(a INTEGER, b INTEGER, why TEXT, time INTEGER, PRIMARY KEY(a, b))"
+        /** ملاحظات فحصها الذكاء بحثاً عن روابط. */
+        const val LINKED_TABLE = "CREATE TABLE linked(note_id INTEGER PRIMARY KEY)"
         const val EMBED_TABLE = "CREATE TABLE embeddings(note_id INTEGER PRIMARY KEY, vec BLOB)"
 
         /** الأقسام الافتراضية: الاسم، الأيقونة، كلمات دالة (للتصنيف المبدئي قبل الذكاء الصناعي). */
@@ -133,10 +139,47 @@ class Repo(private val helper: Db) {
     fun deleteNote(noteId: Long) {
         db.delete("notes", "id = ?", arrayOf(noteId.toString()))
         db.delete("embeddings", "note_id = ?", arrayOf(noteId.toString()))
+        clearRelations(noteId)
     }
 
     /** تعديل نص ملاحظة (وقسمها اختيارياً)؛ تُحذف بصمة المعنى القديمة لتُحسب من جديد. */
+    // ---- روابط الذكاء ----
+    fun addRelation(r: app.notes.ai.Relation) {
+        val (a, b) = if (r.a < r.b) r.a to r.b else r.b to r.a
+        db.insertWithOnConflict("relations", null, ContentValues().apply {
+            put("a", a); put("b", b); put("why", r.why); put("time", System.currentTimeMillis())
+        }, SQLiteDatabase.CONFLICT_REPLACE)
+    }
+
+    fun relations(): List<app.notes.ai.Relation> {
+        val out = mutableListOf<app.notes.ai.Relation>()
+        db.rawQuery("SELECT a, b, why FROM relations", null).use { c ->
+            while (c.moveToNext()) out += app.notes.ai.Relation(c.getLong(0), c.getLong(1), c.getString(2) ?: "")
+        }
+        return out
+    }
+
+    fun clearRelations(noteId: Long) {
+        db.delete("relations", "a = ? OR b = ?", arrayOf(noteId.toString(), noteId.toString()))
+        db.delete("linked", "note_id = ?", arrayOf(noteId.toString()))
+    }
+
+    fun markLinked(noteId: Long) {
+        db.insertWithOnConflict("linked", null, ContentValues().apply { put("note_id", noteId) }, SQLiteDatabase.CONFLICT_IGNORE)
+    }
+
+    /** ملاحظات لم يفحصها الذكاء بعد (الأحدث أولاً). */
+    fun unlinkedNotes(): List<Note> {
+        val out = mutableListOf<Note>()
+        db.rawQuery(
+            "SELECT id, text, section_id, conv_id, time FROM notes WHERE id NOT IN (SELECT note_id FROM linked) ORDER BY time DESC",
+            null,
+        ).use { c -> while (c.moveToNext()) out += Note(c.getLong(0), c.getString(1), c.getLong(2), c.getLong(3), c.getLong(4)) }
+        return out
+    }
+
     fun updateNote(noteId: Long, text: String, sectionId: Long? = null) {
+        clearRelations(noteId)
         db.update("notes", ContentValues().apply {
             put("text", text); if (sectionId != null) put("section_id", sectionId)
         }, "id = ?", arrayOf(noteId.toString()))

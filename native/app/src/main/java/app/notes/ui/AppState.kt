@@ -14,6 +14,7 @@ import app.notes.ai.ActionPlanner
 import app.notes.ai.AppAction
 import app.notes.ai.Arabic
 import app.notes.ai.Classifier
+import app.notes.ai.Relation
 import app.notes.ai.MemoryAsk
 import app.notes.data.Backup
 import app.notes.data.path
@@ -34,6 +35,7 @@ import app.notes.data.Repo
 import app.notes.data.Section
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -47,6 +49,13 @@ class AppState(private val repo: Repo, val models: ModelManager, private val sco
         private set
     var sectionLinks by mutableStateOf(listOf<SectionLink>())
         private set
+    /** علاقات أكدها الذكاء بين الملاحظات (مع السبب). */
+    var relations by mutableStateOf(listOf<Relation>())
+        private set
+    /** حالة ربط الملاحظات القديمة. */
+    var linkStatus by mutableStateOf("")
+        private set
+    private var linkJob: Job? = null
     var conversations by mutableStateOf(listOf<Conversation>())
     val messages = mutableStateListOf<Msg>()
     var convId by mutableStateOf(0L)
@@ -134,11 +143,11 @@ class AppState(private val repo: Repo, val models: ModelManager, private val sco
         val (s, c) = io { repo.sections() to repo.conversations() }
         sections = s; conversations = c
         val notes = io { repo.notes() }
-        val vectors = io { repo.vectors() }
-        val (l, sl) = withContext(Dispatchers.Default) {
-            Semantic.merge(Links.suggest(notes), Semantic.links(vectors, notes)).let { it to Links.bySection(it, notes) }
-        }
-        allNotes = notes; links = l; sectionLinks = sl
+        // الخطوط: علاقات أكدها الذكاء فقط (لا تشابه كلمات عشوائي)
+        val rel = io { repo.relations() }
+        val l = rel.map { SuggestedLink(it.a, it.b, listOf(it.why)) }
+        val sl = withContext(Dispatchers.Default) { Links.bySection(l, notes) }
+        allNotes = notes; links = l; sectionLinks = sl; relations = rel
     }
 
     fun newChat() { convId = 0L; messages.clear() }
@@ -194,6 +203,7 @@ class AppState(private val repo: Repo, val models: ModelManager, private val sco
                 val noteId = io { repo.addNote(text, section.id, id) }
                 if (qv != null) io { repo.saveVector(noteId, qv) }
                 answer(id, text, section, memory)
+                relateLater(Note(noteId, text, section.id, id, System.currentTimeMillis()))
             } finally {
                 busy = false
                 status = ""
@@ -244,6 +254,68 @@ class AppState(private val repo: Repo, val models: ModelManager, private val sco
                 append(line)
             }
         }
+    }
+
+    // ================= ربط الملاحظات بالذكاء =================
+
+    /** أقرب الملاحظات للملاحظة (بالمعنى إن أمكن، وإلا بالكلمات، وإلا الأحدث من قسمها). */
+    private suspend fun candidatesFor(note: Note): List<Note> = io {
+        val others = repo.notes().filter { it.id != note.id }
+        if (others.isEmpty()) return@io emptyList()
+        val vectors = repo.vectors()
+        val v = vectors[note.id]
+        val byMeaning = if (v != null) Semantic.recall(vectors, others, v, limit = 8, min = 0.3f) else emptyList()
+        byMeaning.ifEmpty { Recall.find(others, note.text, 8) }
+            .ifEmpty { others.filter { it.sectionId == note.sectionId }.takeLast(6) }
+    }
+
+    /** يسأل الذكاء عن روابط الملاحظة ويحفظ ما أكده. */
+    private suspend fun relateNote(note: Note): Int {
+        val cands = candidatesFor(note)
+        val found = if (cands.isEmpty()) emptyList() else engine.relate(note, cands)
+        io {
+            found.forEach { repo.addRelation(it) }
+            repo.markLinked(note.id)
+        }
+        return found.size
+    }
+
+    /** ربط الملاحظة الجديدة في الخلفية بعد ظهور الرد (لا يؤخر المحادثة). */
+    private fun relateLater(note: Note) {
+        if (engine is BasicEngine) return
+        scope.launch {
+            runCatching { relateNote(note) }
+            refresh()
+        }
+    }
+
+    /** يمر على الملاحظات التي لم يفحصها الذكاء بعد ويربطها. */
+    fun linkOld() {
+        if (linkJob?.isActive == true) return
+        if (engine is BasicEngine) { linkStatus = "اختر ذكاءً (Gemini أو نموذجاً على الهاتف) أولاً."; return }
+        linkJob = scope.launch {
+            val todo = io { repo.unlinkedNotes() }.take(300)
+            if (todo.isEmpty()) { linkStatus = "كل الملاحظات مربوطة ✓"; return@launch }
+            var made = 0
+            for ((i, n) in todo.withIndex()) {
+                linkStatus = "يربط ملاحظاتك ${i + 1} من ${todo.size}… (وُجد $made رابطاً)"
+                try { made += relateNote(n) } catch (e: Throwable) {
+                    linkStatus = "توقف الربط: ${e.message ?: "خطأ"}. اضغط مرة أخرى لتكمل من حيث توقف."
+                    refresh(); return@launch
+                }
+                if (i % 5 == 4) refresh()
+            }
+            refresh()
+            linkStatus = "انتهى الربط ✓ (وُجد $made رابطاً)"
+        }
+    }
+
+    fun stopLinking() { linkJob?.cancel(); linkStatus = "أُوقف الربط. اضغط مرة أخرى لتكمل." }
+
+    /** الملاحظات المرتبطة بملاحظة، مع سبب كل ربط. */
+    fun relatedTo(noteId: Long): List<Pair<Note, String>> = relations.mapNotNull { r ->
+        val other = when (noteId) { r.a -> r.b; r.b -> r.a; else -> return@mapNotNull null }
+        allNotes.firstOrNull { it.id == other }?.let { it to r.why }
     }
 
     // ================= أوامر الذكاء =================
@@ -512,6 +584,7 @@ class AppState(private val repo: Repo, val models: ModelManager, private val sco
                 else io { repo.addNote(text, section.id, old.convId) }
                 if (qv != null) io { repo.saveVector(nid, qv) }
                 answer(old.convId, text, section, memory)
+                relateLater(Note(nid, text, section.id, old.convId, System.currentTimeMillis()))
             } finally {
                 busy = false
                 status = ""
@@ -530,6 +603,7 @@ class AppState(private val repo: Repo, val models: ModelManager, private val sco
                 runCatching { withContext(Dispatchers.Default) { e.embed(text) } }.getOrNull()?.let { v -> io { repo.saveVector(noteId, v) } }
             }
             refresh()
+            allNotes.firstOrNull { it.id == noteId }?.let { relateLater(it) }
         }
     }
 

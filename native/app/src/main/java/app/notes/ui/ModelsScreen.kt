@@ -286,6 +286,23 @@ fun ModelsScreen(state: AppState) {
         }
 
 
+        item { SectionTitle("ربط الملاحظات بالذكاء", open["link"] == true) { open["link"] = open["link"] != true } }
+        if (open["link"] == true) item {
+            Card {
+                Text(
+                    "الذكاء يقرأ كل ملاحظة جديدة مع أقرب ملاحظاتك إليها، ويربط فقط ما بينها علاقة حقيقية (نفس المشروع أو الشخص، سبب ونتيجة…) ويحفظ السبب. " +
+                        "هذه الروابط هي خطوط شاشة العقل، وتراها مع أسبابها تحت كل ملاحظة في كتابها.",
+                    color = TextDim, fontSize = 13.sp,
+                )
+                Text("الروابط الحالية: ${state.relations.size}", color = TextMain, fontSize = 13.sp, modifier = Modifier.padding(top = 6.dp))
+                Row {
+                    TextButton(onClick = { state.linkOld() }) { Text("اربط ملاحظاتي القديمة") }
+                    if (state.linkStatus.startsWith("يربط")) TextButton(onClick = { state.stopLinking() }) { Text("إيقاف", color = TextDim) }
+                }
+                if (state.linkStatus.isNotEmpty()) Text(state.linkStatus, color = Accent2, fontSize = 13.sp)
+            }
+        }
+
         item { SectionTitle("خيارات أخرى", open["other"] == true) { open["other"] = open["other"] != true } }
         if (open["other"] == true) item {
             Card {
