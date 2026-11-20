@@ -9,6 +9,8 @@ import androidx.compose.foundation.gestures.calculateCentroid
 import androidx.compose.foundation.gestures.calculatePan
 import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -32,6 +34,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.AbsoluteAlignment
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
@@ -54,36 +58,24 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import app.notes.data.Section
 import app.notes.data.path
 
-/** شاشة العقل: كرات تتحرك بحرية، العقل في الوسط، والخطوط تربط ما بينها أمور مشتركة. */
+/** شاشة العقل: العقل في الوسط، ولكل قسم جهة ولون، وملاحظاته نقاط منتظمة بلونه. */
 @Composable
 fun MindScreen(state: AppState, onOpen: (Section, Long?) -> Unit) {
     var adding by remember { mutableStateOf(false) }
-    var graph by remember { mutableStateOf<MindGraph?>(null) }
-    var frame by remember { mutableLongStateOf(0L) }
-    var scale by remember { mutableFloatStateOf(1f) }
+    val layout = remember(state.sections, state.allNotes, state.links, state.sectionLinks) {
+        if (state.sections.isEmpty()) null else MindLayout(state.sections, state.allNotes, state.links, state.sectionLinks)
+    }
+    // ‎-1 = لم يُضبط بعد على حجم الشاشة
+    var zoom by remember { mutableFloatStateOf(-1f) }
     var pan by remember { mutableStateOf(Offset.Zero) }
     val measurer = rememberTextMeasurer()
     val u = LocalDensity.current.density
-
-    // إعادة بناء الشبكة عند تغيّر البيانات، مع إبقاء مواضع الكرات القديمة
-    LaunchedEffect(state.sections, state.allNotes, state.links, state.sectionLinks) {
-        if (state.sections.isNotEmpty()) graph = MindGraph(state.sections, state.allNotes, state.links, state.sectionLinks, graph)
-    }
-    // حلقة الحركة: خطوة لكل إطار ما دامت الشاشة ظاهرة
-    LaunchedEffect(graph) {
-        val g = graph ?: return@LaunchedEffect
-        g.reheat(0.3f)
-        while (true) {
-            withFrameNanos { frame = it }
-            g.step()
-        }
-    }
 
     Column(Modifier.fillMaxSize().background(Bg)) {
         Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text("العقل", color = TextMain, fontSize = 22.sp, fontWeight = FontWeight.Bold)
-                Text("اسحب الكرات، وكبّر بإصبعين، واضغط قسماً لتفتح كتابه", color = TextDim, fontSize = 12.sp)
+                Text("قرّب لترى أسماء الملاحظات وروابطها، واضغط قسماً لتفتح كتابه", color = TextDim, fontSize = 12.sp)
             }
             Box(
                 Modifier.clip(CircleShape).background(Panel2).clickable { adding = true }
@@ -91,104 +83,125 @@ fun MindScreen(state: AppState, onOpen: (Section, Long?) -> Unit) {
             ) { Text("＋ قسم", color = TextMain) }
         }
 
-        Box(Modifier.weight(1f).fillMaxWidth()) {
+        BoxWithConstraints(Modifier.weight(1f).fillMaxWidth().background(MindBg)) {
+            val minSide = minOf(constraints.maxWidth, constraints.maxHeight).toFloat()
+            val fit = ((minSide / 2f - 20 * u) / (((layout?.extent ?: 200f) + 24f) * u)).coerceIn(0.3f, 1.3f)
+            LaunchedEffect(fit) { if (zoom < 0f) zoom = fit }
+
             Canvas(
-                Modifier.fillMaxSize().pointerInput(graph) {
-                    val g = graph ?: return@pointerInput
+                Modifier.fillMaxSize().pointerInput(layout) {
+                    val g = layout ?: return@pointerInput
                     fun toWorld(p: Offset) = Offset(
-                        (p.x - size.width / 2f - pan.x) / (scale * u),
-                        (p.y - size.height / 2f - pan.y) / (scale * u),
+                        (p.x - size.width / 2f - pan.x) / (zoom * u),
+                        (p.y - size.height / 2f - pan.y) / (zoom * u),
                     )
                     awaitEachGesture {
                         val down = awaitFirstDown(requireUnconsumed = false)
-                        val w0 = toWorld(down.position)
-                        val hit = g.hit(w0.x, w0.y, 16f / scale)
                         var moved = false
-                        var multi = false
                         while (true) {
                             val ev = awaitPointerEvent()
                             val pressed = ev.changes.filter { it.pressed }
                             if (pressed.isEmpty()) break
                             if (pressed.size >= 2) {
                                 // تكبير وتحريك بإصبعين حول نقطة المنتصف
-                                multi = true; moved = true; g.dragged = -1
-                                val zoom = ev.calculateZoom()
+                                moved = true
                                 val c = ev.calculateCentroid() - Offset(size.width / 2f, size.height / 2f)
-                                val ns = (scale * zoom).coerceIn(0.3f, 3f)
-                                pan = (pan - c) * (ns / scale) + c + ev.calculatePan()
-                                scale = ns
-                            } else if (!multi) {
+                                val nz = (zoom * ev.calculateZoom()).coerceIn(0.25f, 5f)
+                                pan = (pan - c) * (nz / zoom) + c + ev.calculatePan()
+                                zoom = nz
+                            } else {
                                 val ch = pressed[0]
-                                if (!moved && (ch.position - down.position).getDistance() > viewConfiguration.touchSlop) {
-                                    moved = true
-                                    if (hit > 0) g.dragged = hit
-                                }
-                                if (moved) {
-                                    if (g.dragged > 0) toWorld(ch.position).let { g.move(g.dragged, it.x, it.y) }
-                                    else pan += ch.position - ch.previousPosition
-                                }
+                                if (!moved && (ch.position - down.position).getDistance() > viewConfiguration.touchSlop) moved = true
+                                if (moved) pan += ch.position - ch.previousPosition
                             }
                             ev.changes.forEach { it.consume() }
                         }
-                        g.dragged = -1
-                        if (!moved && hit >= 0) {
-                            val n = g.nodes[hit]
-                            when (n.kind) {
-                                GKind.BRAIN -> { scale = 1f; pan = Offset.Zero; g.reheat() }
-                                GKind.SECTION -> n.section?.let { onOpen(it, null) }
-                                GKind.NOTE -> n.section?.let { onOpen(it, n.note?.id) }
+                        if (!moved) {
+                            val w = toWorld(down.position)
+                            val hit = g.hit(w.x, w.y, 14f / zoom)
+                            if (hit >= 0) {
+                                val n = g.nodes[hit]
+                                when (n.kind) {
+                                    GKind.BRAIN -> { zoom = fit; pan = Offset.Zero }
+                                    GKind.SECTION -> n.section?.let { onOpen(it, null) }
+                                    GKind.NOTE -> n.section?.let { onOpen(it, n.note?.id) }
+                                }
                             }
                         }
                     }
                 },
             ) {
-                frame // قراءة الإطار تعيد الرسم كل مرة
-                val g = graph ?: return@Canvas
-                val k = scale * u
+                val g = layout ?: return@Canvas
+                if (zoom < 0f) return@Canvas
+                val k = zoom * u
                 val cx = size.width / 2f + pan.x
                 val cy = size.height / 2f + pan.y
                 fun pos(n: GNode) = Offset(cx + n.x * k, cy + n.y * k)
+                val detail = zoom >= DETAIL_ZOOM
 
-                // الخطوط
+                // خطوط وصل بيضاء خافتة بسماكة ١ بكسل؛ روابط الأمور المشتركة عند التقريب فقط
                 for (e in g.edges) {
-                    val a = g.nodes[e.a]; val b = g.nodes[e.b]
-                    val color = when {
-                        e.kind == GEdge.Kind.SHARED -> SharedLine.copy(alpha = (0.3f + 0.12f * minOf(e.weight, 4)).coerceAtMost(0.8f))
-                        e.a == 0 -> Color.White.copy(alpha = 0.12f)
-                        else -> b.color.copy(alpha = 0.22f)
-                    }
-                    drawLine(color, pos(a), pos(b), strokeWidth = (if (e.kind == GEdge.Kind.SHARED) 1.4f else 1f) * u)
+                    if (!e.always && !detail) continue
+                    drawLine(Color.White.copy(alpha = if (e.always) 0.28f else 0.18f), pos(g.nodes[e.a]), pos(g.nodes[e.b]), strokeWidth = 1f)
                 }
 
-                // الكرات وعناوينها
-                val showNoteLabels = scale >= 0.75f
                 for (n in g.nodes) {
                     val p = pos(n)
-                    val r = n.radius * k
-                    drawCircle(n.color, r, p)
-                    if (n.kind == GKind.NOTE && !showNoteLabels) continue
-                    val layout = n.label0 ?: measurer.measure(
+                    val r = (n.radius * k).coerceAtLeast(1.5f)
+                    when (n.kind) {
+                        GKind.BRAIN -> {
+                            drawCircle(Brush.radialGradient(listOf(Color.White.copy(alpha = 0.45f), Color.Transparent), center = p, radius = r * 3f), r * 3f, p)
+                            drawCircle(Brush.radialGradient(listOf(Color.White, Color(0xFFDCD6F5)), center = p, radius = r), r, p)
+                        }
+                        else -> {
+                            drawCircle(Brush.radialGradient(listOf(n.color.copy(alpha = 0.35f), Color.Transparent), center = p, radius = r * 2.6f), r * 2.6f, p)
+                            drawCircle(n.color, r, p)
+                        }
+                    }
+                    // أسماء الأقسام دائماً، وأسماء الملاحظات عند التقريب
+                    if (n.kind == GKind.BRAIN || (n.kind == GKind.NOTE && !detail)) continue
+                    val layoutText = n.label0 ?: measurer.measure(
                         n.label,
                         style = TextStyle(
                             color = if (n.kind == GKind.NOTE) LabelDim else LabelMain,
-                            fontSize = when (n.kind) { GKind.BRAIN -> 14.sp; GKind.SECTION -> 13.sp; GKind.NOTE -> 11.sp },
-                            fontWeight = if (n.kind == GKind.NOTE) FontWeight.Normal else FontWeight.Bold,
+                            fontSize = if (n.kind == GKind.NOTE) 10.sp else 13.sp,
                             textAlign = TextAlign.Center,
                         ),
                         overflow = TextOverflow.Ellipsis,
                         maxLines = 2,
-                        constraints = Constraints(maxWidth = (130 * u).toInt()),
+                        constraints = Constraints(maxWidth = (120 * u).toInt()),
                     ).also { n.label0 = it }
-                    drawText(layout, topLeft = Offset(p.x - layout.size.width / 2f, p.y + r + 3 * u))
+                    // الاسم بعيداً عن المركز: فوق الكرات العليا وتحت السفلى
+                    val above = n.y < 0 && n.kind == GKind.SECTION
+                    val top = if (above) p.y - r - 4 * u - layoutText.size.height else p.y + r + 3 * u
+                    drawText(layoutText, topLeft = Offset(p.x - layoutText.size.width / 2f, top))
                 }
             }
 
             // زر التوسيط
             Box(
                 Modifier.align(Alignment.TopEnd).padding(12.dp).clip(CircleShape).background(Panel2)
-                    .clickable { scale = 1f; pan = Offset.Zero; graph?.reheat() }
+                    .clickable { zoom = fit; pan = Offset.Zero }
                     .padding(horizontal = 12.dp, vertical = 6.dp),
             ) { Text("⌖ توسيط", color = TextMain, fontSize = 13.sp) }
+
+            // أزرار التكبير والتصغير
+            Column(
+                Modifier.align(AbsoluteAlignment.BottomRight).padding(12.dp)
+                    .clip(RoundedCornerShape(14.dp)).background(Panel2.copy(alpha = 0.9f)),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                listOf("＋" to 1.4f, "－" to 1f / 1.4f).forEach { (t, f) ->
+                    Box(
+                        Modifier.size(44.dp).clickable {
+                            val nz = (zoom * f).coerceIn(0.25f, 5f)
+                            pan *= nz / zoom
+                            zoom = nz
+                        },
+                        contentAlignment = Alignment.Center,
+                    ) { Text(t, color = TextMain, fontSize = 20.sp) }
+                }
+            }
         }
     }
 
@@ -236,6 +249,7 @@ private fun ParentRow(label: String, selected: Boolean, onClick: () -> Unit) {
     }
 }
 
-private val SharedLine = Color(0xFF8FE3D3)
+private val MindBg = Color(0xFF07070C)
+private const val DETAIL_ZOOM = 1.4f
 private val LabelMain = Color(0xFFECE9FF)
 private val LabelDim = Color(0xFFB4AFD6)
