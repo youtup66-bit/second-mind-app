@@ -85,7 +85,10 @@ fun ChatScreen(state: AppState, onModels: () -> Unit) {
                     contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
                 ) {
                     items(state.messages, key = { it.id }) { m ->
-                        MessageRow(m, canEdit = !state.busy && state.isLastUser(m), onEdit = {
+                        MessageRow(m, canEdit = !state.busy && state.isLastUser(m),
+                            hasActions = state.pending.containsKey(m.id),
+                            onRun = { state.runPending(m.id) }, onCancel = { state.cancelPending(m.id) },
+                            onEdit = {
                             input = m.text; editing = true
                         }, onPdf = {
                             // التقرير: سؤالك (الرسالة السابقة) ثم رد الذكاء
@@ -183,7 +186,10 @@ private fun TopIcon(glyph: String, onClick: () -> Unit) {
 }
 
 @Composable
-private fun MessageRow(m: Msg, canEdit: Boolean, onEdit: () -> Unit, onPdf: () -> Unit) {
+private fun MessageRow(
+    m: Msg, canEdit: Boolean, onEdit: () -> Unit, onPdf: () -> Unit,
+    hasActions: Boolean = false, onRun: () -> Unit = {}, onCancel: () -> Unit = {},
+) {
     if (m.role == "user") {
         // رسالة المستخدم: فقاعة في جهة البداية، وتحت آخرها زر تعديل
         Column(Modifier.fillMaxWidth()) {
@@ -208,7 +214,22 @@ private fun MessageRow(m: Msg, canEdit: Boolean, onEdit: () -> Unit, onPdf: () -
             Column(Modifier.weight(1f)) {
                 Text(m.text, color = TextMain, fontSize = 16.sp, lineHeight = 24.sp)
                 Spacer(Modifier.height(6.dp))
-                PdfChip(onPdf)
+                if (hasActions) {
+                    // بطاقة التأكيد: لا يتغير شيء قبل الضغط على «تنفيذ»
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            "تنفيذ", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold,
+                            modifier = Modifier.clip(RoundedCornerShape(12.dp)).background(Accent).clickable(onClick = onRun)
+                                .padding(horizontal = 18.dp, vertical = 8.dp),
+                        )
+                        Spacer(Modifier.width(10.dp))
+                        Text(
+                            "إلغاء", color = TextMain, fontSize = 14.sp,
+                            modifier = Modifier.clip(RoundedCornerShape(12.dp)).background(Panel2).clickable(onClick = onCancel)
+                                .padding(horizontal = 18.dp, vertical = 8.dp),
+                        )
+                    }
+                } else PdfChip(onPdf)
             }
         }
     }

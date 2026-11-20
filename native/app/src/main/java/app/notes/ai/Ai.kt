@@ -58,6 +58,9 @@ interface AiEngine {
 
     /** تلخيص كتاب؛ null يعني أن المحرك لا يلخّص. */
     suspend fun summarize(section: Section, notes: List<Note>): String? = null
+
+    /** تحويل طلب بلغة المستخدم إلى أوامر للتطبيق؛ قائمة فارغة إن لم يكن أمراً. */
+    suspend fun plan(text: String, sections: List<Section>): List<AppAction> = emptyList()
 }
 
 /** محرك أساسي بلا نموذج: يؤكد الحفظ ويذكّر بالملاحظات المرتبطة. يُستبدل بنموذج محلي في المرحلة ٢. */

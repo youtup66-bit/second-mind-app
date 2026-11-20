@@ -56,6 +56,9 @@ class LocalEngine(
         return sections.getOrNull(n - 1)
     }
 
+    override suspend fun plan(text: String, sections: List<Section>): List<AppAction> =
+        ActionPlanner.parse(generate(ActionPlanner.prompt(sections), text.take(400)))
+
     override suspend fun summarize(section: Section, notes: List<Note>): String? {
         // الأحدث أولاً حتى يتسع النص لحجم النموذج
         val sb = StringBuilder()

@@ -1,12 +1,21 @@
 package app.notes.ui
 
 import androidx.compose.runtime.getValue
+import android.provider.Settings
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import app.notes.ai.AiEngine
 import app.notes.ai.BasicEngine
+import app.notes.BubblePrefs
+import app.notes.FloatingService
+import app.notes.ai.ActionPlanner
+import app.notes.ai.AppAction
+import app.notes.ai.Arabic
 import app.notes.ai.Classifier
+import app.notes.data.Backup
+import app.notes.data.path
 import app.notes.ai.Links
 import app.notes.ai.SectionLink
 import app.notes.ai.SuggestedLink
@@ -147,6 +156,12 @@ class AppState(private val repo: Repo, val models: ModelManager, private val sco
                 if (convId == 0L) convId = io { repo.newConversation(text.take(40)) }
                 val id = convId
                 messages += io { repo.addMessage(id, "user", text) }
+                // أمر للتطبيق؟ يُعرض للموافقة ولا يُحفظ ملاحظة
+                if (engine !is BasicEngine && ActionPlanner.looksLikeCommand(text)) {
+                    status = "يفهم طلبك…"
+                    val acts = runCatching { engine.plan(text, sections) }.getOrDefault(emptyList())
+                    if (acts.isNotEmpty()) { proposeActions(id, acts); return@launch }
+                }
                 // أي ذكاء صناعي (على الهاتف أو الإنترنت) يصنّف ويرد؛ الأساسي بالكلمات فقط
                 val local = engine !is BasicEngine
                 val where = if (engine is GeminiEngine) "عبر الإنترنت" else "على هاتفك"
@@ -187,6 +202,235 @@ class AppState(private val repo: Repo, val models: ModelManager, private val sco
         }
         val tagged = if (local) "$reply\n\n— حُفظت في ${section.icon} ${section.name}" else reply
         messages += io { repo.addMessage(convId, "assistant", tagged) }
+    }
+
+    // ================= أوامر الذكاء =================
+
+    /** أوامر تنتظر موافقة المستخدم، مربوطة برسالة الذكاء التي تعرضها. */
+    val pending = mutableStateMapOf<Long, List<Planned>>()
+
+    /** طلب فتح كتاب (من أمر «افتح كتاب…»). */
+    var openBookRequest by mutableStateOf<Long?>(null)
+
+    private suspend fun proposeActions(convId: Long, acts: List<AppAction>) {
+        val all = sections
+        val notes = io { repo.notes() }
+        val planned = mutableListOf<Planned>()
+        val problems = mutableListOf<String>()
+        for (a in acts) {
+            try {
+                resolve(a, all, notes)?.let { planned += it } ?: problems.add("لم أفهم أحد الأوامر (${a.type}).")
+            } catch (e: IllegalArgumentException) { problems += e.message ?: "أمر غير صالح." }
+        }
+        val body = buildString {
+            if (planned.isNotEmpty()) {
+                append("سأنفّذ ما يلي بعد موافقتك:")
+                planned.forEach { append("\n• ").append(it.describe) }
+            }
+            if (problems.isNotEmpty()) {
+                if (isNotEmpty()) append("\n\n")
+                append("⚠️ ").append(problems.joinToString("\n⚠️ "))
+            }
+        }
+        val msg = io { repo.addMessage(convId, "assistant", body) }
+        messages += msg
+        if (planned.isNotEmpty()) pending[msg.id] = planned
+    }
+
+    fun runPending(msgId: Long) {
+        if (busy) return
+        val list = pending.remove(msgId) ?: return
+        busy = true
+        scope.launch {
+            try {
+                val results = list.map { p ->
+                    try { "✓ " + p.run() } catch (e: Throwable) { "✗ ${p.describe}: ${e.message ?: "تعذّر التنفيذ"}" }
+                }
+                val cid = messages.firstOrNull { it.id == msgId }?.convId ?: convId
+                messages += io { repo.addMessage(cid, "assistant", results.joinToString("\n")) }
+            } finally {
+                busy = false
+                status = ""
+                refresh()
+            }
+        }
+    }
+
+    fun cancelPending(msgId: Long) {
+        if (pending.remove(msgId) == null) return
+        val cid = messages.firstOrNull { it.id == msgId }?.convId ?: convId
+        scope.launch { messages += io { repo.addMessage(cid, "assistant", "أُلغي، لم يتغير شيء.") } }
+    }
+
+    private fun fail(msg: String): Nothing = throw IllegalArgumentException(msg)
+
+    private fun findSection(name: String, all: List<Section>): Section? {
+        val q = Arabic.normalize(name.substringAfterLast("←").substringAfterLast(">").trim())
+        if (q.isEmpty()) return null
+        fun n(s: Section) = Arabic.normalize(s.name)
+        return all.firstOrNull { n(it) == q }
+            ?: all.firstOrNull { n(it).removePrefix("ال") == q.removePrefix("ال") }
+            ?: all.firstOrNull { n(it).length >= 2 && (n(it).contains(q) || q.contains(n(it))) }
+    }
+
+    private fun need(name: String, all: List<Section>): Section =
+        findSection(name, all) ?: fail("لم أجد قسماً اسمه «$name».")
+
+    private fun isUnder(s: Section, ancestor: Section, all: List<Section>): Boolean {
+        var p = s.parentId
+        var guard = 0
+        while (p != 0L && guard++ < 20) {
+            if (p == ancestor.id) return true
+            p = all.firstOrNull { it.id == p }?.parentId ?: return false
+        }
+        return false
+    }
+
+    private fun matchNotes(query: String, notes: List<Note>): List<Note> {
+        val q = Arabic.normalize(query.trim())
+        if (q.isEmpty()) return notes
+        val q2 = q.removePrefix("ال")
+        return notes.filter { Arabic.normalize(it.text).let { t -> t.contains(q) || (q2.length >= 2 && t.contains(q2)) } }
+    }
+
+    /** يتحقق من الأمر ويجهّز وصفه وتنفيذه؛ يرمي رسالة عربية إن كان غير صالح. */
+    private fun resolve(a: AppAction, all: List<Section>, notes: List<Note>): Planned? {
+        val ctx = models.ctx
+        return when (a.type) {
+            "create_section" -> {
+                val name = a["name"].ifBlank { fail("لم يُذكر اسم القسم الجديد.") }
+                val parent = a["parent"].takeIf { it.isNotBlank() }?.let { need(it, all) }
+                if (all.any { Arabic.normalize(it.name) == Arabic.normalize(name) && it.parentId == (parent?.id ?: 0L) })
+                    fail("يوجد قسم اسمه «$name» في المكان نفسه.")
+                Planned("إنشاء قسم «$name»" + (parent?.let { " تحت «${it.path(all)}»" } ?: "")) {
+                    io { repo.addSection(name, "📘", parent?.id ?: 0L) }; "أُنشئ قسم «$name»"
+                }
+            }
+            "rename_section" -> {
+                val s = need(a["section"], all)
+                val new = a["new_name"].ifBlank { fail("لم يُذكر الاسم الجديد.") }
+                Planned("تغيير اسم «${s.path(all)}» إلى «$new»") { io { repo.renameSection(s.id, new) }; "صار اسمه «$new»" }
+            }
+            "delete_section" -> {
+                val s = need(a["section"], all)
+                if (all.size <= 1) fail("لا يمكن حذف القسم الوحيد.")
+                val target = a["move_to"].takeIf { it.isNotBlank() }?.let { need(it, all) }
+                    ?: all.firstOrNull { it.id == s.parentId }
+                    ?: all.firstOrNull { it.name == "تفكير" && it.id != s.id }
+                    ?: all.first { it.id != s.id }
+                if (target.id == s.id) fail("لا يمكن نقل ملاحظات القسم إليه نفسه.")
+                val count = notes.count { it.sectionId == s.id }
+                val kids = all.count { it.parentId == s.id }
+                Planned(
+                    "حذف قسم «${s.path(all)}»، وتنتقل ملاحظاته ($count) إلى «${target.path(all)}»" +
+                        (if (kids > 0) "، وأقسامه الفرعية ($kids) إلى القسم الأعلى" else ""),
+                ) { io { repo.deleteSection(s.id, target.id, s.parentId) }; "حُذف قسم «${s.name}»" }
+            }
+            "move_section" -> {
+                val s = need(a["section"], all)
+                val parent = a["parent"].takeIf { it.isNotBlank() }?.let { need(it, all) }
+                if (parent != null && (parent.id == s.id || isUnder(parent, s, all))) fail("لا يمكن وضع قسم تحت نفسه أو تحت أحد فروعه.")
+                Planned(if (parent == null) "جعل «${s.name}» قسماً رئيسياً" else "نقل قسم «${s.name}» تحت «${parent.path(all)}»") {
+                    io { repo.setParent(s.id, parent?.id ?: 0L) }; "نُقل قسم «${s.name}»"
+                }
+            }
+            "move_notes" -> {
+                val to = need(a["to"], all)
+                val from = a["from"].takeIf { it.isNotBlank() }?.let { need(it, all) }
+                if (a["query"].isBlank() && from == null) fail("حدّد أي الملاحظات تُنقل (كلمة فيها أو قسمها).")
+                val ns = matchNotes(a["query"], notes.filter { (from == null || it.sectionId == from.id) && it.sectionId != to.id })
+                if (ns.isEmpty()) fail("لم أجد ملاحظات تطابق «${a["query"].ifBlank { from?.name.orEmpty() }}».")
+                Planned("نقل ${ns.size} ملاحظة" + (if (a["query"].isNotBlank()) " فيها «${a["query"]}»" else "") +
+                    (from?.let { " من «${it.name}»" } ?: "") + " إلى «${to.path(all)}»") {
+                    io { repo.moveNotes(ns.map { it.id }, to.id) }; "نُقلت ${ns.size} ملاحظة إلى «${to.name}»"
+                }
+            }
+            "delete_notes" -> {
+                // لا حذف جماعي بلا كلمة محددة، حمايةً للملاحظات
+                val q = a["query"].ifBlank { fail("حدّد كلمة في الملاحظات التي تريد حذفها.") }
+                val sec = a["section"].takeIf { it.isNotBlank() }?.let { need(it, all) }
+                val ns = matchNotes(q, notes.filter { sec == null || it.sectionId == sec.id })
+                if (ns.isEmpty()) fail("لم أجد ملاحظات فيها «$q».")
+                val preview = ns.take(2).joinToString("، ") { "«${it.text.take(30)}»" }
+                Planned("حذف ${ns.size} ملاحظة نهائياً فيها «$q» (مثل $preview)") {
+                    io { repo.deleteNotes(ns.map { it.id }) }; "حُذفت ${ns.size} ملاحظة"
+                }
+            }
+            "summarize_section" -> {
+                val s = need(a["section"], all)
+                Planned("تلخيص كتاب «${s.path(all)}»") { summarize(s) ?: "لُخّص كتاب «${s.name}»، افتحه لترى الملخص على غلافه" }
+            }
+            "open_book" -> {
+                val s = need(a["section"], all)
+                Planned("فتح كتاب «${s.path(all)}»") { openBookRequest = s.id; "فُتح كتاب «${s.name}»" }
+            }
+            "backup_now" -> Planned("حفظ نسخة احتياطية الآن") {
+                io { Backup(ctx).runNow() }; "حُفظت النسخة الاحتياطية في مجلدها"
+            }
+            "bubble" -> {
+                val on = when (a["on"].lowercase()) { "true", "نعم" -> true; "false", "لا" -> false; else -> null }
+                val color = bubbleColor(a["color"])
+                val size = when {
+                    a["size"].isBlank() -> null
+                    Arabic.normalize(a["size"]).contains("صغير") -> 24f
+                    Arabic.normalize(a["size"]).contains("كبير") -> 64f
+                    Arabic.normalize(a["size"]).contains("متوسط") -> 40f
+                    else -> a["size"].filter { it.isDigit() }.toFloatOrNull()?.coerceIn(20f, 80f)
+                }
+                if (on == null && color == null && size == null) fail("لم أفهم ما تريد تغييره في الكرة.")
+                val parts = listOfNotNull(
+                    on?.let { if (it) "تشغيل الكرة العائمة" else "إيقاف الكرة العائمة" },
+                    color?.let { "لونها ${a["color"]}" }, size?.let { "حجمها ${a["size"]}" },
+                )
+                Planned(parts.joinToString("، ")) {
+                    val bp = BubblePrefs(ctx)
+                    color?.let { bp.color = it }
+                    size?.let { bp.size = it }
+                    when (on) {
+                        true -> if (!Settings.canDrawOverlays(ctx)) return@Planned "الكرة تحتاج إذن «الظهور فوق التطبيقات»؛ فعّلها مرة من صفحة النماذج"
+                            else { bp.enabled = true; FloatingService.start(ctx) }
+                        false -> { bp.enabled = false; FloatingService.stop(ctx) }
+                        null -> if (bp.enabled && Settings.canDrawOverlays(ctx)) FloatingService.start(ctx)
+                    }
+                    "عُدّلت الكرة العائمة"
+                }
+            }
+            "switch_ai" -> {
+                val t = Arabic.normalize(a["target"])
+                when {
+                    t.contains("gemini") || t.contains("جيمين") || t.contains("جمني") -> {
+                        if (models.geminiKey.isBlank()) fail("أضف مفتاح Gemini أولاً من صفحة النماذج.")
+                        Planned("استخدام Gemini 🌐 للرد") { useGemini(); "صار Gemini هو من يرد" }
+                    }
+                    t.contains("basic") || t.contains("اساسي") || t.contains("بلا") ->
+                        Planned("استخدام الوضع الأساسي (بلا نموذج)") { useModel(null); "صار الوضع الأساسي" }
+                    else -> {
+                        val m = installed.firstOrNull { Arabic.normalize(it.label).contains(t) || t.contains(Arabic.normalize(it.label)) }
+                            ?: installed.firstOrNull { t.isNotEmpty() && Arabic.normalize(it.label).replace(" ", "").contains(t.replace(" ", "")) }
+                            ?: fail("لم أجد نموذجاً مثبّتاً اسمه «${a["target"]}».")
+                        Planned("استخدام ${m.label} للرد") { useModel(m); "صار ${m.label} هو من يرد" }
+                    }
+                }
+            }
+            else -> null
+        }
+    }
+
+    private fun bubbleColor(name: String): Int? {
+        val n = Arabic.normalize(name)
+        if (n.isBlank()) return null
+        return when {
+            n.contains("بنفسج") -> 0xFF8B6CFF.toInt()
+            n.contains("زرق") -> 0xFF4FA3FF.toInt()
+            n.contains("فيروز") -> 0xFF38A89A.toInt()
+            n.contains("خضر") -> 0xFF4CD17F.toInt()
+            n.contains("برتقال") -> 0xFFFFB547.toInt()
+            n.contains("حمر") || n.contains("مرجان") -> 0xFFFF7A6B.toInt()
+            n.contains("ورد") -> 0xFFFF7AB6.toInt()
+            n.contains("بيض") -> 0xFFD7DCEB.toInt()
+            n.contains("رماد") -> 0xFF5E6A85.toInt()
+            else -> null
+        }
     }
 
     /** هل يمكن تعديل هذه الرسالة؟ (آخر رسالة كتبها المستخدم فقط) */
@@ -274,3 +518,6 @@ class AppState(private val repo: Repo, val models: ModelManager, private val sco
 
     companion object { const val GEMINI = "gemini" }
 }
+
+/** أمر جاهز للتنفيذ بعد موافقة المستخدم: وصفه بالعربية، وتنفيذه (يعيد نص النتيجة). */
+class Planned(val describe: String, val run: suspend () -> String)

@@ -47,6 +47,11 @@ class GeminiEngine(private val key: String, private val model: String) : AiEngin
         return sections.getOrNull(n - 1)
     }
 
+    override suspend fun plan(text: String, sections: List<Section>): List<AppAction> =
+        ActionPlanner.parse(
+            generate(ActionPlanner.prompt(sections), listOf("user" to text.take(1000)), temperature = 0.0, maxTokens = 1024, json = true),
+        )
+
     override suspend fun summarize(section: Section, notes: List<Note>): String? {
         val sb = StringBuilder()
         for (n in notes.asReversed()) {
@@ -61,7 +66,9 @@ class GeminiEngine(private val key: String, private val model: String) : AiEngin
         ).ifBlank { null }
     }
 
-    private suspend fun generate(system: String, turns: List<Pair<String, String>>, temperature: Double, maxTokens: Int): String =
+    private suspend fun generate(
+        system: String, turns: List<Pair<String, String>>, temperature: Double, maxTokens: Int, json: Boolean = false,
+    ): String =
         withContext(Dispatchers.IO) {
             val body = JSONObject()
                 .put("systemInstruction", JSONObject().put("parts", JSONArray().put(JSONObject().put("text", system))))
@@ -72,7 +79,9 @@ class GeminiEngine(private val key: String, private val model: String) : AiEngin
                             .put("parts", JSONArray().put(JSONObject().put("text", text))))
                     }
                 })
-                .put("generationConfig", JSONObject().put("temperature", temperature).put("maxOutputTokens", maxTokens))
+                .put("generationConfig", JSONObject().put("temperature", temperature).put("maxOutputTokens", maxTokens).apply {
+                    if (json) put("responseMimeType", "application/json")
+                })
 
             val conn = (URL("$API/models/$model:generateContent").openConnection() as HttpURLConnection).apply {
                 requestMethod = "POST"

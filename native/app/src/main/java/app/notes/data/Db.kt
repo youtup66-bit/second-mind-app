@@ -95,6 +95,29 @@ class Repo(private val helper: Db) {
         put("name", name); put("icon", icon); put("keywords", ""); put("parent_id", parentId)
     })
 
+    fun renameSection(id: Long, name: String) {
+        db.update("sections", ContentValues().apply { put("name", name) }, "id = ?", arrayOf(id.toString()))
+    }
+
+    fun setParent(id: Long, parentId: Long) {
+        db.update("sections", ContentValues().apply { put("parent_id", parentId) }, "id = ?", arrayOf(id.toString()))
+    }
+
+    /** حذف قسم: تنتقل ملاحظاته إلى [moveTo]، وأقسامه الفرعية إلى أبيه. لا تُحذف أي ملاحظة. */
+    fun deleteSection(id: Long, moveTo: Long, parentOfDeleted: Long) {
+        db.beginTransaction()
+        try {
+            db.update("notes", ContentValues().apply { put("section_id", moveTo) }, "section_id = ?", arrayOf(id.toString()))
+            db.update("sections", ContentValues().apply { put("parent_id", parentOfDeleted) }, "parent_id = ?", arrayOf(id.toString()))
+            db.delete("sections", "id = ?", arrayOf(id.toString()))
+            db.setTransactionSuccessful()
+        } finally { db.endTransaction() }
+    }
+
+    fun moveNotes(ids: List<Long>, to: Long) = ids.forEach { moveNote(it, to) }
+
+    fun deleteNotes(ids: List<Long>) = ids.forEach { deleteNote(it) }
+
     fun setSummary(sectionId: Long, summary: String, count: Int) {
         db.update("sections", ContentValues().apply { put("summary", summary); put("summary_count", count) }, "id = ?", arrayOf(sectionId.toString()))
     }

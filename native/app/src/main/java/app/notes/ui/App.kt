@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -41,6 +42,13 @@ fun App(repo: Repo) {
     var tab by rememberSaveable { mutableIntStateOf(0) }
     var openBook by remember { mutableStateOf<Section?>(null) }
     var openNote by remember { mutableStateOf<Long?>(null) }
+
+    // أمر «افتح كتاب…» من المحادثة
+    LaunchedEffect(state.openBookRequest) {
+        val id = state.openBookRequest ?: return@LaunchedEffect
+        state.sections.firstOrNull { it.id == id }?.let { openNote = null; openBook = it }
+        state.openBookRequest = null
+    }
 
     val book = openBook
     if (book != null) {
