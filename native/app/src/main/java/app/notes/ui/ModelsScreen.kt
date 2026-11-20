@@ -293,17 +293,6 @@ fun ModelsScreen(state: AppState) {
                 Text("إن نزّلته من المتصفح أو من تطبيق آخر.", color = TextDim, fontSize = 13.sp)
                 TextButton(onClick = { picker.launch(arrayOf("*/*")) }) { Text("اختر ملفاً") }
             }
-            Spacer(Modifier.height(12.dp))
-            Card {
-                Text("رمز HuggingFace (لنماذج Gemma)", color = TextMain)
-                Text("اقبل ترخيص Gemma في صفحة النموذج على huggingface.co ثم أنشئ رمز قراءة. يُحفظ على الهاتف فقط.", color = TextDim, fontSize = 13.sp)
-                OutlinedTextField(
-                    token, { token = it; mm.hfToken = it }, singleLine = true,
-                    visualTransformation = PasswordVisualTransformation(),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                    modifier = Modifier.fillMaxWidth(),
-                )
-            }
         }
         item { SectionTitle("الكرة العائمة", open["bubble"] == true) { open["bubble"] = open["bubble"] != true } }
         if (open["bubble"] == true) item {

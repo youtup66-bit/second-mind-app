@@ -27,11 +27,6 @@ data class ModelInfo(
 /** نماذج تعمل على الهاتف عبر MediaPipe LLM Inference (ملفات ‎.task). */
 val MODEL_CATALOG = listOf(
     ModelInfo(
-        "gemma3-1b", "Gemma 3 (1B)", "خفيف ومتوازن وعربيته جيدة. يحتاج رمز HuggingFace بعد قبول ترخيص Gemma.",
-        560, "https://huggingface.co/litert-community/Gemma3-1B-IT/resolve/main/gemma3-1b-it-int4.task",
-        "gemma3-1b-it-int4.task", Template.GEMMA, gated = true,
-    ),
-    ModelInfo(
         "qwen25-05b", "Qwen 2.5 (0.5B)", "الأصغر والأسرع، ردوده أبسط.",
         550, "https://huggingface.co/litert-community/Qwen2.5-0.5B-Instruct/resolve/main/Qwen2.5-0.5B-Instruct_multi-prefill-seq_q8_ekv1280.task",
         "Qwen2.5-0.5B-Instruct_multi-prefill-seq_q8_ekv1280.task", Template.CHATML,
