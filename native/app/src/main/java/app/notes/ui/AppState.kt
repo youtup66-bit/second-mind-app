@@ -187,7 +187,7 @@ class AppState(private val repo: Repo, val models: ModelManager, private val sco
                         if (qv0 != null) Semantic.recall(repo.vectors(), all, qv0, limit = 6).ifEmpty { Recall.find(all, text, 6) }
                         else Recall.find(all, text, 6)
                     }
-                    answer(id, text, null, memory0, overview(text, full = engine is GeminiEngine || engine is BasicEngine))
+                    answer(id, text, null, memory0, overview(text, searchK()))
                     return@launch
                 }
                 // أي ذكاء صناعي (على الهاتف أو الإنترنت) يصنّف ويرد؛ الأساسي بالكلمات فقط
@@ -205,7 +205,9 @@ class AppState(private val repo: Repo, val models: ModelManager, private val sco
                     if (qv != null) Semantic.recall(repo.vectors(), all, qv).ifEmpty { Recall.find(all, text) }
                     else Recall.find(all, text)
                 }
-                val ov = if (local) overview(text, full = engine is GeminiEngine) else ""
+                // عند السؤال يبحث في ملاحظاته؛ الرسائل العادية تكفيها أقرب الملاحظات (memory)
+                val question = text.contains('؟') || text.contains('?')
+                val ov = if (local && question) overview(text, searchK()) else ""
                 val noteId = io { repo.addNote(text, section.id, id) }
                 if (qv != null) io { repo.saveVector(noteId, qv) }
                 answer(id, text, section, memory, ov)
@@ -234,33 +236,60 @@ class AppState(private val repo: Repo, val models: ModelManager, private val sco
         messages += io { repo.addMessage(convId, "assistant", tagged) }
     }
 
+    /** بحث في كل الملاحظات: بالمعنى (إن توفر نموذج الفهم) وبالكلمات معاً، الأقرب أولاً. */
+    private suspend fun searchNotes(text: String, k: Int): List<Note> {
+        val all = io { repo.notes() }
+        val e = embedder
+        val qv = if (e != null) runCatching { withContext(Dispatchers.Default) { e.embed(text) } }.getOrNull() else null
+        val byMeaning = if (qv != null) io { Semantic.recall(repo.vectors(), all, qv, limit = k, min = 0.25f) } else emptyList()
+        val byWords = Recall.find(all, text, k)
+        return (byMeaning + byWords).distinctBy { it.id }.take(k)
+    }
+
     /**
-     * نظرة على محتويات عقله: الأقسام وعدد ملاحظاتها، ثم الملاحظات (الأحدث أولاً).
-     * إن ذُكر قسم باسمه تُعرض ملاحظاته هو. [full] لـ Gemini (سياق كبير)، وإلا ملخص قصير للنموذج الصغير.
+     * ما يُعطى للذكاء عند السؤال: عدد الملاحظات في كل قسم، ثم نتائج البحث في ملاحظاته
+     * (أو ملاحظات القسم إن ذُكر باسمه). [k] عدد النتائج: كبير لـ Gemini، وصغير للنموذج على الهاتف.
      */
-    private suspend fun overview(text: String, full: Boolean): String = io {
-        val all = repo.sections()
-        val notes = repo.notes().asReversed()
-        val t = Arabic.normalize(text)
-        val focus = all.filter { Arabic.normalize(it.name).let { n -> n.length >= 2 && t.contains(n) } }
-            .flatMap { f -> all.filter { it.id == f.id || isUnder(it, f, all) } }.map { it.id }.toSet()
-        val shown = if (focus.isEmpty()) notes else notes.filter { it.sectionId in focus }
-        val limit = if (full) 60_000 else 650
-        val per = if (full) 400 else 100
-        val fmt = java.text.SimpleDateFormat("d MMM", java.util.Locale("ar"))
-        buildString {
-            append("عدد الملاحظات: ${notes.size}. الأقسام:\n")
-            all.forEach { append("- ").append(it.path(all)).append(": ").append(it.count).append('\n') }
-            if (shown.isEmpty()) { append("لا ملاحظات بعد."); return@buildString }
-            append(if (focus.isEmpty()) "الملاحظات (الأحدث أولاً):\n" else "ملاحظات القسم المذكور (الأحدث أولاً):\n")
-            for (n in shown) {
-                val sec = all.firstOrNull { it.id == n.sectionId }?.name ?: ""
-                val line = "- [$sec] (${fmt.format(java.util.Date(n.time))}) ${n.text.replace(Regex("\\s+"), " ").take(per)}\n"
-                if (length + line.length > limit) { append("…وملاحظات أقدم لم تُعرض."); break }
-                append(line)
+    private suspend fun overview(text: String, k: Int): String {
+        val found = searchNotes(text, k)
+        return io {
+            val all = repo.sections()
+            val notes = repo.notes().asReversed()
+            val t = Arabic.normalize(text)
+            val focus = all.filter { Arabic.normalize(it.name).let { n -> n.length >= 2 && t.contains(n) } }
+                .flatMap { f -> all.filter { it.id == f.id || isUnder(it, f, all) } }.map { it.id }.toSet()
+            val shown = when {
+                focus.isNotEmpty() -> notes.filter { it.sectionId in focus }.take(k * 2)
+                found.isNotEmpty() -> found
+                else -> notes.take(k)
+            }
+            val big = k >= 10
+            val limit = if (big) 20_000 else 650
+            val per = if (big) 400 else 100
+            val fmt = java.text.SimpleDateFormat("d MMM", java.util.Locale("ar"))
+            buildString {
+                append("عدد الملاحظات: ${notes.size}. الأقسام:\n")
+                all.forEach { append("- ").append(it.path(all)).append(": ").append(it.count).append('\n') }
+                if (shown.isEmpty()) { append("لا ملاحظات بعد."); return@buildString }
+                append(
+                    when {
+                        focus.isNotEmpty() -> "ملاحظات القسم المذكور (الأحدث أولاً):\n"
+                        found.isNotEmpty() -> "أقرب الملاحظات لكلامه (من بحث في كل ملاحظاته):\n"
+                        else -> "أحدث الملاحظات:\n"
+                    },
+                )
+                for (n in shown) {
+                    val sec = all.firstOrNull { it.id == n.sectionId }?.name ?: ""
+                    val line = "- [$sec] (${fmt.format(java.util.Date(n.time))}) ${n.text.replace(Regex("\\s+"), " ").take(per)}\n"
+                    if (length + line.length > limit) { append("…ونتائج أخرى لم تُعرض."); break }
+                    append(line)
+                }
             }
         }
     }
+
+    /** عدد نتائج البحث بحسب الذكاء: Gemini يتسع لكثير، والنموذج على الهاتف لقليل. */
+    private fun searchK() = if (engine is GeminiEngine || engine is BasicEngine) 25 else 5
 
     // ================= الحفظ =================
 
