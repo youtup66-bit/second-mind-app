@@ -31,7 +31,7 @@ export function bandMarkup(level) {
     const w = 26 + (i % 3) * 9;
     const d = ((i * 0.37) % 1.2).toFixed(2);
     const dur = (s.speed * (0.8 + (i % 4) * 0.12)).toFixed(2);
-    return `<i class="ab-line" style="top:${t}px;height:${i % 2 ? 1 : 2}px;opacity:${(0.55 + (i % 3) * 0.15).toFixed(2)};background:linear-gradient(90deg,transparent 0%,var(--ab-color) ${w}%,transparent ${w + 22}%);animation-duration:${dur}s;animation-delay:-${d}s"></i>`;
+    return `<i class="ab-line" style="top:${t}px;height:1px;opacity:${(0.55 + (i % 3) * 0.15).toFixed(2)};background:linear-gradient(90deg,transparent 0%,var(--ab-color) ${w}%,transparent ${w + 22}%);animation-duration:${dur}s;animation-delay:-${d}s"></i>`;
   }).join('');
   const sparks = SPARKS.slice(0, s.sparks).map(([x, y], i) => {
     const sz = 3 + (i % 3);
