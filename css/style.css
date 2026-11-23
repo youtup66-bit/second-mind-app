@@ -1421,3 +1421,6 @@ body.on-group .tasks .wa-head { padding-top: calc(env(safe-area-inset-top) + 8px
 @keyframes daily-ripple { 0% { transform: translate(-50%, -50%) scale(0); opacity: .9; } 100% { transform: translate(-50%, -50%) scale(10); opacity: 0; } }
 .chats-main--home .daily-side { position: fixed; }
 .chats-main--home .daily-side .daily-title { padding-top: 14px; }
+
+/* الشاشة الرئيسية تملأ الشاشة حتى أسفلها: أُلغي الفراغ الأخضر السفلي (58px من حاوية المحادثات) */
+.chats-main--home { height: calc(100dvh - var(--tabbar-h) - env(safe-area-inset-bottom)); }
