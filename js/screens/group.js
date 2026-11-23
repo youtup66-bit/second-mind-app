@@ -518,6 +518,8 @@ async function mountList(root, s, syncErr, mode, tab = 'chats') {
       };
       const typeIco = (t) => `<svg class="side-ico" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">${TYPE_ICO[t] || TYPE_ICO.section}</svg>`;
       const dailyBox = root.querySelector('#daily-list');
+      // نقرات التقرير اليومي لا تصل إلى الحلقة (وإلا فتحت قائمة العناوين مع كل لمسة)
+      root.querySelector('#daily-side')?.addEventListener('click', (e) => e.stopPropagation());
       const paintBars = () => {
         dailyBox.innerHTML = bars.length
           ? bars.map((b) => `<button type="button" class="daily-row daily-row--link" data-id="${esc(b.id)}"><div class="daily-name">${typeIco(b.type)}<span>${esc(b.name)}</span></div><div class="daily-line"><div class="daily-bar"><div class="daily-fill" style="width:${Math.round(b.ratio * 100)}%"></div></div><span class="daily-pts">${b.points}</span></div></button>`).join('')
