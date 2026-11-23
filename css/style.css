@@ -1471,3 +1471,6 @@ body.on-group .tasks .wa-head { padding-top: calc(env(safe-area-inset-top) + 8px
 .msg-item__body b { font-size: .92rem; }
 .msg-item__body small { color: var(--muted); font-size: .8rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .msg-item time { flex: none; font-size: .72rem; color: var(--muted); }
+
+/* رابط الإعدادات في قائمة المحادثات: يبقى ظاهراً قبل التسجيل ليُفتح منه الدخول إلى المؤسسة */
+.conv-settings { display: block; padding: 14px 16px; text-align: center; color: var(--accent); text-decoration: none; font-weight: 700; border-top: 1px solid var(--border); }

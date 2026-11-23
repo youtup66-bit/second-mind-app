@@ -80,7 +80,7 @@ export async function mount(root) {
         <span class="conv-bar__title" id="conv-title"></span>
         <button type="button" class="conv-bar__btn" id="conv-menu" aria-label="المحادثات السابقة"><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>
       </div>
-      <div class="conv-sheet" id="conv-sheet" hidden><ul class="conv-list" id="conv-list"></ul></div>
+      <div class="conv-sheet" id="conv-sheet" hidden><ul class="conv-list" id="conv-list"></ul><a class="conv-settings" href="#/settings">⚙ الإعدادات والدخول إلى المؤسسة</a></div>
       <header class="wa-head" id="wa-head" hidden>
         <button type="button" class="wa-head__who" id="wa-who" aria-label="أظهر المساعد">
           <span class="wa-avatar" id="wa-avatar" aria-hidden="true"></span>
