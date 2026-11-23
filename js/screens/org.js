@@ -208,6 +208,13 @@ async function renderLogin(root, err) {
       if (s?.member?.role === 'manager') {
         await setSetting('managerUser', user);
         if (keyField.value.trim()) await setSetting('geminiApiKey', keyField.value.trim());
+        // حساب المدير بلا مفتاح على هذا الجهاز: لا نفتح الشاشات قبل أن يُدخله
+        if (!(await getSetting('geminiApiKey', ''))) {
+          keyWrap.hidden = false;
+          keyField.required = true;
+          setMsg(root.querySelector('#li-msg'), 'أدخل مفتاح Gemini لحساب المدير لتكمل. يُحفظ على هذا الجهاز فقط.');
+          return;
+        }
       }
       location.hash = s?.member?.role === 'manager' ? '#/structure' : '#/group';
     } catch (e) { setMsg(root.querySelector('#li-msg'), e.message); }
