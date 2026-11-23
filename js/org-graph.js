@@ -6,6 +6,8 @@ const EDGE_HI = '#5aa7ff';
 const LABEL = '#9aa4b2';
 const LABEL_HI = '#7fb8ff';
 const LABEL_ZOOM = 1.15; // أسماء كل الكرات من هذا التقريب فأكثر
+const MIN_SEP = 58; // أقل مسافة بين كرتين (بالوحدات قبل التكبير)
+const CENTER_MIN = 135; // أقل بعد للكرة عن قسم المركز
 
 export function createOrgGraph(canvas, { onSelect } = {}) {
   const ctx = canvas.getContext('2d');
@@ -44,11 +46,22 @@ export function createOrgGraph(canvas, { onSelect } = {}) {
         let dx = a.x - b.x, dy = a.y - b.y;
         let d2 = dx * dx + dy * dy;
         if (d2 < 1) { dx = Math.random() - 0.5; dy = Math.random() - 0.5; d2 = 1; }
-        if (d2 > 160000) continue;
-        const f = 1500 / d2;
+        if (d2 > 360000) continue;
         const d = Math.sqrt(d2);
+        // تنافر أقوى، ودفعة إضافية عند التلاصق لتبقى المسافات متساوية
+        let f = 4200 / d2;
+        if (d < MIN_SEP) f += (MIN_SEP - d) * 0.6;
         a.vx += (dx / d) * f; a.vy += (dy / d) * f;
         b.vx -= (dx / d) * f; b.vy -= (dy / d) * f;
+      }
+    }
+    // الكرات تبتعد عن المركز: دفعة للخارج إذا اقتربت من القسم
+    for (const n of nodes) {
+      if (n === root) continue;
+      const d = Math.sqrt(n.x * n.x + n.y * n.y) || 1;
+      if (d < CENTER_MIN) {
+        const f = (CENTER_MIN - d) * 0.12;
+        n.vx += (n.x / d) * f; n.vy += (n.y / d) * f;
       }
     }
     for (const [ia, ib, len] of edges) {
