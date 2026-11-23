@@ -899,7 +899,7 @@ async function bindLook(root) {
   const paintRoles = async () => {
     const rows = await Promise.all(ROLES.map(async (r) => {
       const v = await colorOf(r);
-      return `<label class="pal-row"><span class="pal-row__sw" style="background:${v}"></span><span class="pal-row__txt"><b>${r.label}</b><small>${r.hint}</small></span><span class="pal-row__hex" dir="ltr">${v.toUpperCase()}</span><input type="color" data-role="${r.key}" value="${v}" aria-label="لون ${r.label}"></label>`;
+      return `<label class="pal-row"><span class="pal-row__sw" style="background:${v}"></span><span class="pal-row__txt"><b>${r.label}</b><small>${r.hint}</small></span><span class="pal-row__hex" dir="ltr">${v.toUpperCase()}</span><input type="color" dir="ltr" data-role="${r.key}" value="${v}" aria-label="لون ${r.label}"></label>`;
     }));
     wrap.innerHTML = rows.join('');
   };
