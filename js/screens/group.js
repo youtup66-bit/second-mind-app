@@ -6,6 +6,7 @@ import {
 } from '../group.js';
 import { PALETTE } from '../org-structure.js';
 import { getGroupMessages, getSetting } from '../storage.js';
+import { alertLevel, bandMarkup } from '../alert-band.js';
 import { sendObjection, listObjections } from '../objections.js';
 import { session, cloudConfig } from '../cloud.js';
 import { attachHoldMic } from '../hold-mic.js';
@@ -480,6 +481,8 @@ async function mountList(root, s, syncErr, mode, tab = 'chats') {
       daily: '<rect x="3" y="13" width="4" height="8" rx="1"/><rect x="10" y="8" width="4" height="13" rx="1"/><rect x="17" y="3" width="4" height="18" rx="1"/>',
     };
     const ico = (k) => `<svg class="side-ico" width="24" height="24" viewBox="0 0 24 24" ${k === 'daily' ? 'fill="currentColor" stroke="none"' : 'fill="none" stroke="currentColor" stroke-width="1.8"'} aria-hidden="true">${IC[k]}</svg>`;
+    // شريط الحالة حسب أعلى أهمية في الرسائل (الافتراضي: أخضر)
+    const level = await alertLevel().catch(() => 'normal');
     // الكرة الوسطى: حلقات من النقاط تتحرك من المركز داخل الدائرة، وكتابة AI
     const core = '<span class="ring-home__wave" aria-hidden="true"><i></i><i></i><i></i></span><b class="ring-home__ai">AI</b>';
     const manager = s.member.role === 'manager';
@@ -492,6 +495,7 @@ async function mountList(root, s, syncErr, mode, tab = 'chats') {
     ];
     root.innerHTML = `
       <section class="chat chat--wa chat--plain chat--group g-list chats-main chats-main--home" style="${iconStyle};${orbStyle}">
+        ${bandMarkup(level)}
         <div class="ring-home">
           <span class="ring-home__halo" aria-hidden="true"></span>
           <span class="ring-home__arc ring-home__arc--1" aria-hidden="true"></span>
