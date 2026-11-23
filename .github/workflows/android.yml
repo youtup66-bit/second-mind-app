@@ -48,6 +48,17 @@ jobs:
           echo "$KS" | base64 -d > "$RUNNER_TEMP/aqli.jks"
           echo "APK_KEYSTORE_PATH=$RUNNER_TEMP/aqli.jks" >> "$GITHUB_ENV"
 
+      - name: نسخة التجربة (فرع dev) — معرّف مستقل، واسم OMT، وتحديث من /dev/، وأيقونة الذكاء
+        if: github.ref_name == 'dev'
+        run: |
+          KT=android/app/src/main/java/app/aqli/WebUpdater.kt
+          sed -i 's#const val BASE = "https://youtup66-bit.github.io/second-mind-app/"#const val BASE = "https://youtup66-bit.github.io/second-mind-app/dev/"#' "$KT"
+          grep -q 'second-mind-app/dev/' "$KT" || { echo "تعذّر ضبط عنوان التحديث لنسخة التجربة"; exit 1; }
+          sed -i 's/app\.aqli\.files/app.aqli.dev.files/g' android/app/src/main/AndroidManifest.xml android/app/src/main/java/app/aqli/FileBridge.kt
+          sed -i 's/android:label="OM"/android:label="OMT"/' android/app/src/main/AndroidManifest.xml
+          sed -i 's/applicationId = "app.aqli"/applicationId = "app.aqli.dev"/' android/app/build.gradle.kts
+          cp -r android/dev-icons/mipmap-* android/app/src/main/res/
+
       - name: بناء APK
         working-directory: android
         env:
