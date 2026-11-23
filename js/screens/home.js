@@ -7,7 +7,7 @@ import { transcribe } from '../gemini.js';
 import { smartChat } from '../ai.js';
 import { exportChatFile } from '../backup.js';
 import { editLastReport, reportFile, textReportFile, reportsContext } from '../report-build.js';
-import { initConvs, activeConvId, listConvs, createConv, openConv, renameConv, deleteConv, touchConv } from '../storage.js';
+import { initConvs, activeConvId, listConvs, createConv, openConv, renameConv, deleteConv, touchConv, activeConvIsEmpty, pruneEmptyConvs } from '../storage.js';
 import { chatTitle } from '../gemini.js';
 import { saveFile, shareFile } from '../native-files.js';
 import { executeActions } from '../actions.js';
@@ -428,6 +428,7 @@ export async function mount(root) {
     if (!convSheet.hidden) await renderConvList();
   }
   async function renderConvList() {
+    await pruneEmptyConvs();
     const list = (await listConvs()).slice().sort((a, b) => b.updatedAt - a.updatedAt);
     const active = activeConvId();
     convList.innerHTML = list.map((c) => `<li class="conv-item${c.id === active ? ' is-active' : ''}" data-id="${escapeHtml(c.id)}">
@@ -446,8 +447,11 @@ export async function mount(root) {
   root.querySelector('#conv-menu').addEventListener('click', () => toggleConvList());
   root.querySelector('#conv-new').addEventListener('click', async () => {
     if (busy) { say('لحظة، ما زلت أفكر في رسالتك السابقة…'); return; }
-    await createConv();
-    await reloadConversation();
+    // المحادثة المفتوحة فارغة؟ نبقى عليها بدل إنشاء محادثة أخرى فارغة
+    if (!(await activeConvIsEmpty())) {
+      await createConv();
+      await reloadConversation();
+    }
     await toggleConvList(false);
   });
 

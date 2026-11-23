@@ -76,6 +76,11 @@ async function navigate() {
     name = 'chats';
     history.replaceState(null, '', '#/chats');
   }
+  // الإعدادات لا تُفتح قبل التسجيل بالمؤسسة: تُفتح شاشة الدخول بدلاً منها
+  if (name === 'settings' && !role) {
+    name = 'org';
+    history.replaceState(null, '', '#/org');
+  }
   const screen = routes[name] || home;
 
   current?.unmount?.();

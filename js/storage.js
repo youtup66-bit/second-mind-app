@@ -172,6 +172,22 @@ export async function listConvs() {
 }
 const saveConvs = (list) => setSetting('convs', list);
 
+// هل المحادثة المفتوحة فارغة (بلا رسائل)؟
+export async function activeConvIsEmpty() {
+  const all = await run('messages', 'readonly', (s) => s.getAll());
+  return !all.some((m) => (m.conv || DEFAULT_CONV) === activeConv);
+}
+
+// يحذف المحادثات الفارغة الأخرى (المفتوحة لا تُحذف)
+export async function pruneEmptyConvs() {
+  const list = await listConvs();
+  const all = await run('messages', 'readonly', (s) => s.getAll());
+  const used = new Set(all.map((m) => m.conv || DEFAULT_CONV));
+  const keep = list.filter((c) => c.id === activeConv || used.has(c.id));
+  if (keep.length !== list.length) await saveConvs(keep);
+  return keep;
+}
+
 // يستعيد المحادثة المفتوحة عند فتح التطبيق
 export async function initConvs() {
   setActiveConv(await getSetting('activeConv', DEFAULT_CONV));
