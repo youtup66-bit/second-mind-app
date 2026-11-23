@@ -480,47 +480,57 @@ async function mountList(root, s, syncErr, mode, tab = 'chats') {
       daily: '<rect x="3" y="13" width="4" height="8" rx="1"/><rect x="10" y="8" width="4" height="13" rx="1"/><rect x="17" y="3" width="4" height="18" rx="1"/>',
     };
     const ico = (k) => `<svg class="side-ico" width="24" height="24" viewBox="0 0 24 24" ${k === 'daily' ? 'fill="currentColor" stroke="none"' : 'fill="none" stroke="currentColor" stroke-width="1.8"'} aria-hidden="true">${IC[k]}</svg>`;
+    const manager = s.member.role === 'manager';
+    const ringItems = [
+      ['مجموعات', '#/chats?tab=chats&view=groups', 'groups', true, '0px', '-165px'],
+      ['المهام', '#/tasks', 'tasks', true, '157px', '-51px'],
+      ['المنتسبين', '#/staff', 'staff', manager, '97px', '134px'],
+      ['الإعدادات', '#/settings', 'settings', true, '-97px', '134px'],
+      ['البيانات المركزية', '#/mind', 'data', manager, '-157px', '-51px'],
+    ];
     root.innerHTML = `
       <section class="chat chat--wa chat--plain chat--group g-list chats-main chats-main--home" style="${iconStyle};${orbStyle}">
-        ${showOrb ? `<a class="chats-orb" href="#/home" aria-label="المساعد"><span class="chats-orb__ball" aria-hidden="true"></span></a>` : ''}
-        <div class="chats-side" id="chats-side">
-          <a class="chats-groups-side" href="#/chats?tab=chats&view=groups">${ico('groups')}<span>مجموعات</span></a>
-          ${s.member.role === 'manager' ? `<a class="chats-mind-side" href="#/mind">${ico('data')}<span>البيانات المركزية</span></a>` : ''}
-          <a class="chats-nav-side" href="#/tasks">${ico('tasks')}<span>المهام</span></a>
-          ${s.member.role === 'manager' ? `<a class="chats-nav-side" href="#/staff">${ico('staff')}<span>المنتسبين</span></a>` : ''}
-          <a class="chats-nav-side" href="#/settings">${ico('settings')}<span>الإعدادات</span></a>
+        <div class="ring-home">
+          <span class="ring-home__halo" aria-hidden="true"></span>
+          <span class="ring-home__arc ring-home__arc--1" aria-hidden="true"></span>
+          <span class="ring-home__arc ring-home__arc--2" aria-hidden="true"></span>
+          <span class="ring-home__arc ring-home__arc--3" aria-hidden="true"></span>
+          ${showOrb ? '<a class="ring-home__core" href="#/home" aria-label="المساعد">عقلي</a>' : '<span class="ring-home__core">عقلي</span>'}
+          <nav class="ring-menu" aria-label="الأقسام">
+            ${ringItems.filter((m) => m[3]).map(([label, href, icon, , x, y]) => `<a class="ring-item" href="${href}" style="--x:${x};--y:${y}">${ico(icon)}<span>${label}</span></a>`).join('')}
+          </nav>
         </div>
-        ${s.member.role === 'manager' ? `<div class="daily-side" id="daily-side"><div class="daily-title">${ico('daily')}<span>تقرير يومي</span></div><div class="daily-list" id="daily-list"><p class="muted">لحظة…</p></div></div>` : ''}
+        ${manager ? `<div class="daily-side" id="daily-side"><div class="daily-title">${ico('daily')}<span>تقرير يومي</span></div><div class="daily-list" id="daily-list"><p class="muted">لحظة…</p></div></div>` : ''}
       </section>`;
-    if (s.member.role === 'manager') {
+    if (manager) {
       const { dailyBars } = await import('../daily-report.js');
       const bars = await dailyBars().catch(() => []);
       root.querySelector('#daily-list').innerHTML = bars.length
         ? bars.map((b) => `<div class="daily-row"><div class="daily-name">${esc(b.name)}</div><div class="daily-line"><div class="daily-bar"><div class="daily-fill" style="width:${Math.round(b.ratio * 100)}%"></div></div><span class="daily-pts">${b.points}</span></div></div>`).join('')
         : '<p class="muted">لا نقاط اليوم بعد.</p>';
     }
-    // الضغط في وسط الشاشة يُخرج كلمة «مجموعات» من الجانب ويُعيدها
-    root.querySelector('.chats-main')?.addEventListener('click', (e) => {
+    const main = root.querySelector('.chats-main');
+    // النقر على الحلقة يفتح العناوين أو يغلقها، والكرة الوسطى تفتح المساعد مباشرة
+    main?.addEventListener('click', (e) => {
       if (e.target.closest('a')) return;
-      root.querySelector('#chats-side')?.classList.toggle('is-open');
-      root.querySelector('#daily-side')?.classList.toggle('is-open');
+      main.classList.toggle('is-menu-open');
     });
-    // سحب إصبع من أسفل الشاشة للأعلى يفتح نافذة المساعد
-    {
-      let sx = 0, sy = 0, startMid = false;
-      const main = root.querySelector('.chats-main');
-      main?.addEventListener('touchstart', (e) => {
-        const t = e.touches[0];
-        sx = t.clientX; sy = t.clientY;
-        startMid = t.clientY > window.innerHeight * 0.6; // نصف الشاشة السفلي
-      }, { passive: true });
-      main?.addEventListener('touchend', (e) => {
-        if (!startMid) return;
-        const t = e.changedTouches[0];
-        const dx = t.clientX - sx, dy = t.clientY - sy;
-        if (dy < -90 && Math.abs(dx) < 90) location.hash = '#/home';
-      }, { passive: true });
-    }
+    // سحب من أسفل الشاشة للأعلى يفتح المساعد، ومن الحافة اليسرى يفتح التقرير اليومي
+    let sx = 0, sy = 0, startMid = false, startEdge = false;
+    main?.addEventListener('touchstart', (e) => {
+      const t = e.touches[0];
+      sx = t.clientX; sy = t.clientY;
+      startMid = t.clientY > window.innerHeight * 0.6;
+      startEdge = t.clientX < 24;
+    }, { passive: true });
+    main?.addEventListener('touchend', (e) => {
+      const t = e.changedTouches[0];
+      const dx = t.clientX - sx, dy = t.clientY - sy;
+      const daily = root.querySelector('#daily-side');
+      if (startMid && dy < -90 && Math.abs(dx) < 90) { location.hash = '#/home'; return; }
+      if (daily && startEdge && dx > 70 && Math.abs(dy) < 60) daily.classList.add('is-open');
+      if (daily && dx < -70 && Math.abs(dy) < 60) daily.classList.remove('is-open');
+    }, { passive: true });
     return;
   }
   root.innerHTML = `

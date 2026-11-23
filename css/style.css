@@ -1327,6 +1327,30 @@ body.on-group .tasks .wa-head { padding-top: calc(env(safe-area-inset-top) + 8px
 .chats-main--home .chats-side a, .chats-main--home .chats-side a:hover { background: transparent; }
 .chats-main--home .daily-side { border-right: 1px solid rgba(74,222,128,.35); box-shadow: none; }
 
+/* ---- الشاشة الرئيسية كحلقة: كرة مركزية، حلقات دوّارة، والعناوين تنفتح حولها ---- */
+.chats-main--home { min-height: 100dvh; }
+.ring-home { position: absolute; left: 50%; top: 50%; width: 0; height: 0; }
+.ring-home__halo { position: absolute; left: -240px; top: -240px; width: 480px; height: 480px; border-radius: 50%; background: radial-gradient(circle, color-mix(in srgb, var(--orb, #22c55e) 30%, transparent) 0%, transparent 62%); animation: ring-halo 4s ease-in-out infinite; pointer-events: none; }
+.ring-home__arc { position: absolute; border-radius: 50%; border: 2px solid transparent; pointer-events: none; }
+.ring-home__arc--1 { left: -130px; top: -130px; width: 260px; height: 260px; border-top-color: var(--orb, var(--accent)); border-right-color: color-mix(in srgb, var(--orb, var(--accent)) 35%, transparent); animation: ring-spin 9s linear infinite; }
+.ring-home__arc--2 { left: -145px; top: -145px; width: 290px; height: 290px; border-width: 1px; border-bottom-color: color-mix(in srgb, var(--orb, var(--accent)) 80%, white); border-left-color: color-mix(in srgb, var(--orb, var(--accent)) 25%, transparent); animation: ring-spin-rev 14s linear infinite; }
+.ring-home__arc--3 { left: -160px; top: -160px; width: 320px; height: 320px; border: 1px dashed color-mix(in srgb, var(--orb, var(--accent)) 22%, transparent); animation: ring-spin 30s linear infinite; }
+.ring-home__core { position: absolute; left: -95px; top: -95px; width: 190px; height: 190px; border-radius: 50%; display: grid; place-items: center; text-decoration: none; color: var(--text); font-size: 20px; font-weight: 800; letter-spacing: 4px; background: radial-gradient(circle at 36% 30%, color-mix(in srgb, var(--orb, #4ade80) 22%, #05140f) 0%, #05140f 70%); border: 2px solid var(--orb, #4ade80); animation: ring-breathe 4s ease-in-out infinite; cursor: pointer; }
+.ring-menu { position: absolute; left: 0; top: 0; width: 0; height: 0; }
+.ring-item { position: absolute; left: -36px; top: -36px; width: 72px; display: flex; flex-direction: column; align-items: center; gap: 6px; text-decoration: none; color: var(--text); font-size: 12px; font-weight: 700; white-space: nowrap; opacity: 0; transform: translate(0, 0) scale(.4); pointer-events: none; transition: transform .45s cubic-bezier(.2,.9,.3,1.2), opacity .3s ease; }
+.ring-item > span:last-child { margin-top: 0; }
+.ring-item .side-ico { width: 72px; height: 72px; padding: 22px; box-sizing: border-box; border-radius: 50%; background: rgba(9,36,28,.85); border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent); box-shadow: 0 0 18px color-mix(in srgb, var(--accent) 25%, transparent); }
+.chats-main--home.is-menu-open .ring-item { opacity: 1; transform: translate(var(--x), var(--y)) scale(1); pointer-events: auto; }
+.chats-main--home.is-menu-open .ring-item:nth-child(2) { transition-delay: .05s; }
+.chats-main--home.is-menu-open .ring-item:nth-child(3) { transition-delay: .1s; }
+.chats-main--home.is-menu-open .ring-item:nth-child(4) { transition-delay: .15s; }
+.chats-main--home.is-menu-open .ring-item:nth-child(5) { transition-delay: .2s; }
+@keyframes ring-spin { to { transform: rotate(360deg); } }
+@keyframes ring-spin-rev { to { transform: rotate(-360deg); } }
+@keyframes ring-breathe { 0%, 100% { transform: scale(1); box-shadow: 0 0 44px 10px color-mix(in srgb, var(--orb, #4ade80) 42%, transparent); } 50% { transform: scale(1.06); box-shadow: 0 0 70px 20px color-mix(in srgb, var(--orb, #4ade80) 60%, transparent); } }
+@keyframes ring-halo { 0%, 100% { opacity: .5; transform: scale(1); } 50% { opacity: .9; transform: scale(1.08); } }
+@media (prefers-reduced-motion: reduce) { .ring-home__arc, .ring-home__core, .ring-home__halo { animation: none; } }
+
 /* الشريط السفلي أُلغي: تنقله الكلمات الجانبية في المحادثات */
 .tabbar { display: none !important; }
 :root { --tabbar-h: 0px; }
