@@ -1440,3 +1440,6 @@ body.on-group .tasks .wa-head { padding-top: calc(env(safe-area-inset-top) + 8px
 .pal-chip__go { border: 0; background: none; color: var(--text); font: inherit; padding: 6px 12px; cursor: pointer; }
 .pal-chip__del { border: 0; border-inline-start: 1px solid var(--border); background: none; color: var(--muted); font: inherit; padding: 6px 10px; cursor: pointer; }
 .pal-chip__go:active, .pal-chip__del:active { background: color-mix(in srgb, var(--accent) 18%, transparent); }
+
+/* الشاشة الرئيسية تغطي الشاشة كلها (في المتصفح أيضاً): لا يبقى شريط بلون الخلفية أسفلها */
+.chats-main--home { position: fixed; inset: 0; height: auto; margin: 0; z-index: 1; overflow: hidden; }
