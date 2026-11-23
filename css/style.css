@@ -1354,7 +1354,14 @@ body.on-group .tasks .wa-head { padding-top: calc(env(safe-area-inset-top) + 8px
 @keyframes ring-spin-rev { to { transform: rotate(-360deg); } }
 @keyframes ring-breathe { 0%, 100% { transform: scale(1); box-shadow: 0 0 44px 10px color-mix(in srgb, var(--orb, #4ade80) 42%, transparent); } 50% { transform: scale(1.06); box-shadow: 0 0 70px 20px color-mix(in srgb, var(--orb, #4ade80) 60%, transparent); } }
 @keyframes ring-halo { 0%, 100% { opacity: .5; transform: scale(1); } 50% { opacity: .9; transform: scale(1.08); } }
-@media (prefers-reduced-motion: reduce) { .ring-home__arc, .ring-home__core, .ring-home__halo { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .ring-home__arc, .ring-home__core, .ring-home__halo { animation: none; } .ring-home__wave i { animation: none; opacity: 0; } }
+.ring-home__wave { position: absolute; inset: 0; border-radius: 50%; overflow: hidden; pointer-events: none; }
+.ring-home__wave i { position: absolute; inset: 0; background: radial-gradient(circle, color-mix(in srgb, var(--accent) 55%, white) 1.2px, transparent 1.8px) 0 0 / 9px 9px; -webkit-mask: radial-gradient(circle closest-side, transparent 20%, #000 60%, transparent 100%); mask: radial-gradient(circle closest-side, transparent 20%, #000 60%, transparent 100%); animation: ring-wave 3.6s ease-out infinite; opacity: 0; }
+.ring-home__wave i:nth-child(2) { animation-delay: 1.2s; }
+.ring-home__wave i:nth-child(3) { animation-delay: 2.4s; }
+.ring-home__ai { position: relative; font-size: 44px; font-weight: 800; letter-spacing: 6px; color: var(--text); padding: 0 10px; border-radius: 10px; background: color-mix(in srgb, var(--bg) 85%, transparent); text-shadow: 0 0 16px color-mix(in srgb, var(--accent) 60%, transparent); }
+@keyframes ring-wave { 0% { transform: scale(.3); opacity: 0; } 20% { opacity: .9; } 100% { transform: scale(1.3); opacity: 0; } }
+
 
 /* الشريط السفلي أُلغي: تنقله الكلمات الجانبية في المحادثات */
 .tabbar { display: none !important; }

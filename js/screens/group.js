@@ -480,6 +480,8 @@ async function mountList(root, s, syncErr, mode, tab = 'chats') {
       daily: '<rect x="3" y="13" width="4" height="8" rx="1"/><rect x="10" y="8" width="4" height="13" rx="1"/><rect x="17" y="3" width="4" height="18" rx="1"/>',
     };
     const ico = (k) => `<svg class="side-ico" width="24" height="24" viewBox="0 0 24 24" ${k === 'daily' ? 'fill="currentColor" stroke="none"' : 'fill="none" stroke="currentColor" stroke-width="1.8"'} aria-hidden="true">${IC[k]}</svg>`;
+    // الكرة الوسطى: حلقات من النقاط تتحرك من المركز داخل الدائرة، وكتابة AI
+    const core = '<span class="ring-home__wave" aria-hidden="true"><i></i><i></i><i></i></span><b class="ring-home__ai">AI</b>';
     const manager = s.member.role === 'manager';
     const ringItems = [
       ['مجموعات', '#/chats?tab=chats&view=groups', 'groups', true, '0px', '-165px'],
@@ -495,7 +497,7 @@ async function mountList(root, s, syncErr, mode, tab = 'chats') {
           <span class="ring-home__arc ring-home__arc--1" aria-hidden="true"></span>
           <span class="ring-home__arc ring-home__arc--2" aria-hidden="true"></span>
           <span class="ring-home__arc ring-home__arc--3" aria-hidden="true"></span>
-          ${showOrb ? '<a class="ring-home__core" href="#/home" aria-label="المساعد">عقلي</a>' : '<span class="ring-home__core">عقلي</span>'}
+          ${showOrb ? `<a class="ring-home__core" href="#/home" aria-label="المساعد">${core}</a>` : `<span class="ring-home__core">${core}</span>`}
           <nav class="ring-menu" aria-label="الأقسام">
             ${ringItems.filter((m) => m[3]).map(([label, href, icon, , x, y]) => `<a class="ring-item" href="${href}" style="--x:${x};--y:${y}">${ico(icon)}<span>${label}</span></a>`).join('')}
           </nav>
