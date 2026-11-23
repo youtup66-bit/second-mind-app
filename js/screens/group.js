@@ -498,6 +498,9 @@ async function mountList(root, s, syncErr, mode, tab = 'chats') {
           <span class="ring-home__arc ring-home__arc--2" aria-hidden="true"></span>
           <span class="ring-home__arc ring-home__arc--3" aria-hidden="true"></span>
           ${showOrb ? `<a class="ring-home__core" href="#/home" aria-label="المساعد">${core}</a>` : `<span class="ring-home__core">${core}</span>`}
+          ${manager ? `<svg class="ring-daily" id="ring-daily" viewBox="0 0 400 400" aria-label="تقرير اليوم"></svg>
+          <div class="ring-daily-info" id="ring-info" hidden></div>
+          <button type="button" class="ring-daily-total" id="ring-total">نقاط اليوم <b id="ring-total-n">0</b></button>` : ""}
           <nav class="ring-menu" aria-label="الأقسام">
             ${ringItems.filter((m) => m[3]).map(([label, href, icon, , x, y]) => `<a class="ring-item" href="${href}" style="--x:${x};--y:${y}">${ico(icon)}<span>${label}</span></a>`).join('')}
           </nav>
@@ -510,11 +513,38 @@ async function mountList(root, s, syncErr, mode, tab = 'chats') {
       root.querySelector('#daily-list').innerHTML = bars.length
         ? bars.map((b) => `<div class="daily-row"><div class="daily-name">${esc(b.name)}</div><div class="daily-line"><div class="daily-bar"><div class="daily-fill" style="width:${Math.round(b.ratio * 100)}%"></div></div><span class="daily-pts">${b.points}</span></div></div>`).join('')
         : '<p class="muted">لا نقاط اليوم بعد.</p>';
+      // أقواس الحلقة: كل شعبة قوس طوله بقدر حصتها من نقاط اليوم
+      const rd = root.querySelector('#ring-daily');
+      const info = root.querySelector('#ring-info');
+      const divs = bars.filter((b) => b.type === 'division' && b.points > 0);
+      const sum = divs.reduce((a, b) => a + b.points, 0);
+      root.querySelector('#ring-total-n').textContent = sum;
+      const R = 175, C = 2 * Math.PI * R, GAP = 6;
+      const avail = 360 - GAP * divs.length;
+      let start = -90;
+      rd.innerHTML = divs.map((b, i) => {
+        const span = (b.points / sum) * avail;
+        const len = (span / 360) * C;
+        const rot = start; start += span + GAP;
+        const pct = i === 0 ? 100 : Math.max(35, 75 - i * 20);
+        return `<circle class="ring-daily__arc" data-i="${i}" cx="200" cy="200" r="${R}" fill="none" stroke="color-mix(in srgb, var(--accent) ${pct}%, transparent)" stroke-width="8" stroke-linecap="round" stroke-dasharray="${len.toFixed(1)} ${C.toFixed(1)}" transform="rotate(${rot.toFixed(1)} 200 200)"></circle>`;
+      }).join('');
+      rd.addEventListener('click', (e) => {
+        const c = e.target.closest('.ring-daily__arc');
+        if (!c) return;
+        const b = divs[Number(c.dataset.i)];
+        info.textContent = `${b.name} · ${b.points} نقطة (${Math.round((b.points / sum) * 100)}٪)`;
+        info.hidden = false;
+      });
+      root.querySelector('#ring-total').addEventListener('click', (e) => {
+        e.stopPropagation();
+        root.querySelector('#daily-side')?.classList.toggle('is-open');
+      });
     }
     const main = root.querySelector('.chats-main');
     // النقر على الحلقة يفتح العناوين أو يغلقها، والكرة الوسطى تفتح المساعد مباشرة
     main?.addEventListener('click', (e) => {
-      if (e.target.closest('a')) return;
+      if (e.target.closest('a') || e.target.closest('.ring-daily, .ring-daily-total, .daily-side')) return;
       main.classList.toggle('is-menu-open');
     });
     // سحب من أسفل الشاشة للأعلى يفتح المساعد، ومن الحافة اليسرى يفتح التقرير اليومي

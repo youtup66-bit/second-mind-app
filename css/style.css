@@ -1360,6 +1360,14 @@ body.on-group .tasks .wa-head { padding-top: calc(env(safe-area-inset-top) + 8px
 .ring-home__wave i:nth-child(2) { animation-delay: 1.2s; }
 .ring-home__wave i:nth-child(3) { animation-delay: 2.4s; }
 .ring-home__ai { position: relative; font-size: 44px; font-weight: 800; letter-spacing: 6px; color: var(--text); padding: 0 10px; border-radius: 10px; background: color-mix(in srgb, var(--bg) 85%, transparent); text-shadow: 0 0 16px color-mix(in srgb, var(--accent) 60%, transparent); }
+/* تقرير اليوم على الحلقة: أقواس الشعب، ونقاط اليوم تحت الكرة */
+.ring-daily { position: absolute; left: -200px; top: -200px; width: 400px; height: 400px; overflow: visible; pointer-events: none; transition: opacity .3s ease; }
+.ring-daily__arc { pointer-events: stroke; cursor: pointer; }
+.chats-main--home.is-menu-open .ring-daily { opacity: .25; }
+.ring-daily-total { position: absolute; left: -60px; top: 108px; width: 120px; height: 28px; display: flex; align-items: center; justify-content: center; gap: 4px; border: 0; background: none; color: var(--muted); font: inherit; font-size: 12px; cursor: pointer; }
+.ring-daily-total b { color: var(--accent); font-size: 15px; }
+.ring-daily-info { position: absolute; left: -130px; top: -252px; width: 260px; padding: 8px 12px; border-radius: 12px; text-align: center; font-size: 13px; font-weight: 700; color: var(--text); background: color-mix(in srgb, var(--bg-2) 90%, transparent); border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent); pointer-events: none; }
+.ring-daily-info[hidden] { display: none; }
 @keyframes ring-wave { 0% { transform: scale(.3); opacity: 0; } 20% { opacity: .9; } 100% { transform: scale(1.3); opacity: 0; } }
 
 
