@@ -559,9 +559,10 @@ async function mountList(root, s, syncErr, mode, tab = 'chats') {
       const t = e.changedTouches[0];
       const dx = t.clientX - sx, dy = t.clientY - sy;
       const daily = root.querySelector('#daily-side');
-      if (startMid && dy < -90 && Math.abs(dx) < 90) { location.hash = '#/home'; return; }
-      if (daily && startEdge && dx > 70 && Math.abs(dy) < 60) daily.classList.add('is-open');
-      if (daily && dx < -70 && Math.abs(dy) < 60) daily.classList.remove('is-open');
+      // سحب للأعلى: يظهر التقرير اليومي من الأسفل (للمدير)، وإلا يفتح المساعد
+      if (daily && dy < -90 && Math.abs(dx) < 90) { daily.classList.add('is-open'); return; }
+      if (daily && dy > 90 && Math.abs(dx) < 90) { daily.classList.remove('is-open'); return; }
+      if (!daily && startMid && dy < -90 && Math.abs(dx) < 90) location.hash = '#/home';
     }, { passive: true });
     return;
   }
