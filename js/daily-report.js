@@ -44,3 +44,29 @@ export async function dailyBars() {
   const max = Math.max(0, ...rows.map((r) => r.points));
   return rows.map((r) => ({ ...r, ratio: max ? r.points / max : 0 }));
 }
+
+// تقرير كرة واحدة (قسم أو شعبة أو وحدة أو قسم وحدة) بالتفصيل: نقاط اليوم، ومن فيها ونقاط كل واحد
+export async function nodeDetail(nodeId) {
+  const { listMembers } = await import('./cloud.js');
+  const st = await loadStructure();
+  const node = st.nodes.find((n) => n.id === nodeId);
+  if (!node) return null;
+  const ids = branchIds(st, nodeId);
+  const start = new Date();
+  start.setHours(0, 0, 0, 0);
+  const from = start.getTime();
+  const people = [];
+  let points = 0;
+  for (const [user, t] of await totals('all')) {
+    if (!(st.people[user]?.places || []).some((pl) => ids.has(pl.node))) continue;
+    const p = t.items.reduce((sum, it) => sum + (it.at >= from ? it.points : 0), 0);
+    points += p;
+    if (p) people.push({ user, points: p });
+  }
+  people.sort((a, b) => b.points - a.points);
+  const names = new Map((await listMembers().catch(() => [])).map((m) => [m.user_id, m.display_name]));
+  return {
+    id: node.id, name: node.name, type: node.type, points,
+    people: people.map((p) => ({ name: names.get(p.user) || 'موظف', points: p.points })),
+  };
+}

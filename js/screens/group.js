@@ -510,9 +510,34 @@ async function mountList(root, s, syncErr, mode, tab = 'chats') {
     if (manager) {
       const { dailyBars } = await import('../daily-report.js');
       const bars = await dailyBars().catch(() => []);
-      root.querySelector('#daily-list').innerHTML = bars.length
-        ? bars.map((b) => `<div class="daily-row"><div class="daily-name">${esc(b.name)}</div><div class="daily-line"><div class="daily-bar"><div class="daily-fill" style="width:${Math.round(b.ratio * 100)}%"></div></div><span class="daily-pts">${b.points}</span></div></div>`).join('')
-        : '<p class="muted">لا نقاط اليوم بعد.</p>';
+      // أيقونة لكل نوع كرة
+      const TYPE_ICO = {
+        division: '<rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/>',
+        unit: '<circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2.5"/>',
+        section: '<circle cx="12" cy="12" r="3.5"/>',
+      };
+      const typeIco = (t) => `<svg class="side-ico" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">${TYPE_ICO[t] || TYPE_ICO.section}</svg>`;
+      const dailyBox = root.querySelector('#daily-list');
+      const paintBars = () => {
+        dailyBox.innerHTML = bars.length
+          ? bars.map((b) => `<button type="button" class="daily-row daily-row--link" data-id="${esc(b.id)}"><div class="daily-name">${typeIco(b.type)}<span>${esc(b.name)}</span></div><div class="daily-line"><div class="daily-bar"><div class="daily-fill" style="width:${Math.round(b.ratio * 100)}%"></div></div><span class="daily-pts">${b.points}</span></div></button>`).join('')
+          : '<p class="muted">لا نقاط اليوم بعد.</p>';
+      };
+      paintBars();
+      // لمس كرة يفتح تقريرها التفصيلي، والرجوع يعيد القائمة
+      dailyBox.addEventListener('click', async (e) => {
+        const row = e.target.closest('[data-id]');
+        if (!row) return;
+        const { nodeDetail } = await import('../daily-report.js');
+        const d = await nodeDetail(row.dataset.id);
+        if (!d) return;
+        dailyBox.innerHTML = `<button type="button" class="daily-back" id="daily-back">→ التقرير اليومي</button>
+          <div class="daily-detail"><div class="daily-detail__head">${typeIco(d.type)}<b>${esc(d.name)}</b></div>
+          <p class="muted">نقاط اليوم: <b>${d.points}</b></p>
+          ${d.people.length ? d.people.map((p) => `<div class="daily-row"><div class="daily-name">${esc(p.name)}</div><span class="daily-pts">${p.points}</span></div>`).join('') : '<p class="muted">لا نقاط لهذه الكرة اليوم.</p>'}
+          </div>`;
+        dailyBox.querySelector('#daily-back').addEventListener('click', paintBars);
+      });
       // أقواس الحلقة: كل شعبة قوس طوله بقدر حصتها من نقاط اليوم
       const rd = root.querySelector('#ring-daily');
       const info = root.querySelector('#ring-info');
