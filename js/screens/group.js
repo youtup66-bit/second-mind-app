@@ -573,6 +573,9 @@ async function mountList(root, s, syncErr, mode, tab = 'chats') {
     const main = root.querySelector('.chats-main');
     // النقر على الحلقة يفتح العناوين أو يغلقها، والكرة الوسطى تفتح المساعد مباشرة
     main?.addEventListener('click', (e) => {
+      // لمس خارج التقرير اليومي وهو مفتوح يُنزله، ولا يفتح قائمة العناوين
+      const daily = root.querySelector('#daily-side');
+      if (daily?.classList.contains('is-open')) { daily.classList.remove('is-open'); return; }
       if (e.target.closest('a') || e.target.closest('.ring-daily, .ring-daily-total, .daily-side')) return;
       main.classList.toggle('is-menu-open');
     });
