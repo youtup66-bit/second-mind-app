@@ -1410,3 +1410,14 @@ body.on-group .tasks .wa-head { padding-top: calc(env(safe-area-inset-top) + 8px
 .daily-back { background: none; border: 0; color: var(--accent); font: inherit; font-weight: 700; padding: 4px 0; cursor: pointer; }
 .daily-detail__head { display: flex; align-items: center; gap: 8px; font-size: 1.05rem; margin-bottom: 4px; }
 .daily-detail .daily-row { display: flex; justify-content: space-between; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--border); }
+
+/* سهم إخفاء التقرير اليومي: في منتصف أعلى اللوحة، مع موجة صغيرة عند الضغط */
+.daily-close { position: absolute; left: 50%; top: 4px; transform: translateX(-50%); width: 44px; height: 26px; display: grid; place-items: center; border: 0; border-radius: 13px; background: none; color: var(--accent); cursor: pointer; overflow: hidden; -webkit-tap-highlight-color: transparent; transition: transform .2s ease; }
+.daily-close:active { transform: translateX(-50%) scale(.92); }
+.daily-close::after { content: ""; position: absolute; left: 50%; top: 50%; width: 6px; height: 6px; border-radius: 50%; background: color-mix(in srgb, var(--accent) 45%, transparent); transform: translate(-50%, -50%) scale(0); opacity: 0; pointer-events: none; }
+.daily-close:active::after { animation: daily-ripple .55s ease-out; }
+.daily-close svg { transition: transform .3s ease; }
+.daily-close:active svg { transform: translateY(2px); }
+@keyframes daily-ripple { 0% { transform: translate(-50%, -50%) scale(0); opacity: .9; } 100% { transform: translate(-50%, -50%) scale(10); opacity: 0; } }
+.chats-main--home .daily-side { position: fixed; }
+.chats-main--home .daily-side .daily-title { padding-top: 14px; }

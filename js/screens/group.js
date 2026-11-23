@@ -505,7 +505,7 @@ async function mountList(root, s, syncErr, mode, tab = 'chats') {
             ${ringItems.filter((m) => m[3]).map(([label, href, icon, , x, y]) => `<a class="ring-item" href="${href}" style="--x:${x};--y:${y}">${ico(icon)}<span>${label}</span></a>`).join('')}
           </nav>
         </div>
-        ${manager ? `<div class="daily-side" id="daily-side"><div class="daily-title">${ico('daily')}<span>تقرير يومي</span></div><div class="daily-list" id="daily-list"><p class="muted">لحظة…</p></div></div>` : ''}
+        ${manager ? `<div class="daily-side" id="daily-side"><button type="button" class="daily-close" aria-label="إخفاء التقرير اليومي"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></button><div class="daily-title">${ico('daily')}<span>تقرير يومي</span></div><div class="daily-list" id="daily-list"><p class="muted">لحظة…</p></div></div>` : ''}
       </section>`;
     if (manager) {
       const { dailyBars } = await import('../daily-report.js');
@@ -520,6 +520,8 @@ async function mountList(root, s, syncErr, mode, tab = 'chats') {
       const dailyBox = root.querySelector('#daily-list');
       // نقرات التقرير اليومي لا تصل إلى الحلقة (وإلا فتحت قائمة العناوين مع كل لمسة)
       root.querySelector('#daily-side')?.addEventListener('click', (e) => e.stopPropagation());
+      // السهم يُخفي التقرير بتأثير موجة صغيرة عند الضغط
+      root.querySelector('.daily-close')?.addEventListener('click', () => root.querySelector('#daily-side')?.classList.remove('is-open'));
       const paintBars = () => {
         dailyBox.innerHTML = bars.length
           ? bars.map((b) => `<button type="button" class="daily-row daily-row--link" data-id="${esc(b.id)}"><div class="daily-name">${typeIco(b.type)}<span>${esc(b.name)}</span></div><div class="daily-line"><div class="daily-bar"><div class="daily-fill" style="width:${Math.round(b.ratio * 100)}%"></div></div><span class="daily-pts">${b.points}</span></div></button>`).join('')
