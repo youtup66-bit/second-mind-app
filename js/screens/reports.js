@@ -92,12 +92,17 @@ export async function mount(root) {
       ? `<ul class="rep-list">${al.map((a) => `<li><a href="${a.link}">${esc(a.text)}</a></li>`).join('')}</ul>`
       : '<p class="muted">لا تنبيهات. كل شيء على ما يرام.</p>'}`;
 
+    // اسم الموظف في التقرير يفتح نافذته إن طابق عضواً في المؤسسة
+    const who = (name) => {
+      const m = (members || []).find((x) => x.display_name === name);
+      return m ? `<a href="#/staff?id=${encodeURIComponent(m.user_id)}">${esc(name)}</a>` : esc(name);
+    };
     $('#reports').innerHTML = reps.map((r) => `
       <details class="rep-item">
         <summary><b>${esc(r.headline)}</b><small>${esc(r.label || REPORT_PERIODS[r.period] || '')} · ${fmtDay.format(r.createdAt)}</small></summary>
         <p>${esc(r.overview)}</p>
         ${list('أبرز الأعمال', r.highlights)}
-        ${r.people?.length ? `<h4>الموظفون</h4><ul>${r.people.map((p) => `<li><b>${esc(p.name)}:</b> ${esc(p.summary)}</li>`).join('')}</ul>` : ''}
+        ${r.people?.length ? `<h4>الموظفون</h4><ul>${r.people.map((p) => `<li><b>${who(p.name)}:</b> ${esc(p.summary)}</li>`).join('')}</ul>` : ''}
         ${list('مشاكل ومتابعات', r.problems)}
         ${list('مقترحات', r.suggestions)}
         <div class="text-btns">
