@@ -856,7 +856,7 @@ async function renderDevTools(box) {
   const s = await session().catch(() => null);
   const acc = await devAccounts();
   const me = s?.member?.username;
-  const all = acc ? [{ ...acc.manager, role: 'المدير' }, ...acc.people.map((p) => ({ ...p, role: 'موظف' }))] : [];
+  const all = acc ? [{ ...acc.manager, role: 'المدير' }, ...acc.people.map((p) => ({ ...p, role: p.label || 'موظف' }))] : [];
   box.innerHTML = `
     <p class="muted">هذه الأدوات في نسخة التجربة وحدها، وحساباتها وهمية في مشروع Firebase التجريبي.</p>
     <h3 class="subhead">الدخول كـ</h3>

@@ -175,7 +175,7 @@ async function renderLogin(root, err) {
       if (!list.hidden) { list.hidden = true; return; }
       const { devAccounts, switchTo } = await import('../dev-tools.js');
       const acc = await devAccounts();
-      const all = acc ? [{ ...acc.manager, role: 'المدير' }, ...acc.people.map((p) => ({ ...p, role: 'موظف' }))] : [];
+      const all = acc ? [{ ...acc.manager, role: 'المدير' }, ...acc.people.map((p) => ({ ...p, role: p.label || 'موظف' }))] : [];
       list.innerHTML = all.length
         ? all.map((a, i) => `<button type="button" class="dev-login__who" data-i="${i}"><span class="dev-login__av" aria-hidden="true">${esc(String(a.name || '؟').trim().charAt(0))}</span><span class="dev-login__txt"><b>${esc(a.name)}</b><small dir="ltr">${esc(a.username)} · ${a.role}</small></span></button>`).join('')
         : '<p class="muted">أنشئ المؤسسة التجريبية أولاً من إعدادات نسخة التجربة.</p>';

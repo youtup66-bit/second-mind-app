@@ -6,19 +6,31 @@ import {
   session, signIn, signOut, createInvite, secondaryApi, usernameEmail, listMembers,
 } from './cloud.js';
 import {
-  loadStructure, saveStructure, addNode, addCustom, placePerson, toggleLink, setHead, setProject,
+  loadStructure, saveStructure, addNode, addCustom, placePerson, toggleLink, setHead, setProject, addPersonnel,
 } from './org-structure.js';
 import { getWorks, addWork } from './points.js';
 import { publishRooms, roomIdOf, startGroupSync } from './group.js';
 
 const KEY = 'devAccounts'; // { manager: { username, password, name }, people: [{ name, username, password, uid }] }
 const DEMO_PASSWORD = 'demo12345';
+// الأدوار المتدرجة: معاون ومنتسب وذاتية لكل مستوى، ومسؤول الشعبة. (مسؤول القسم = حساب المدير، ومسؤول الوحدة = أحمد)
+const ROLE_PEOPLE = [
+  { name: 'خالد الناصر', username: 'demo.khaled', label: 'معاون القسم' },
+  { name: 'نور الهدى', username: 'demo.noor', label: 'منتسب القسم' },
+  { name: 'فاطمة السعدي', username: 'demo.fatima', label: 'ذاتية القسم' },
+  { name: 'رامي الجبوري', username: 'demo.rami', label: 'مسؤول شعبة الصيانة' },
+  { name: 'ليث المالكي', username: 'demo.laith', label: 'معاون الصيانة' },
+  { name: 'ياسمين الزيدي', username: 'demo.yasmin', label: 'منتسب الصيانة' },
+  { name: 'عمر التميمي', username: 'demo.omar', label: 'ذاتية الصيانة' },
+  { name: 'هدى الخفاجي', username: 'demo.huda', label: 'معاون الوحدة' },
+  { name: 'كرار الشمري', username: 'demo.karar', label: 'ذاتية الوحدة' },
+];
 const DEMO_PEOPLE = [
-  { name: 'أحمد علي', username: 'demo.ahmed' },
-  { name: 'سارة محمد', username: 'demo.sara' },
-  { name: 'حسين كريم', username: 'demo.hussein' },
-  { name: 'زينب جاسم', username: 'demo.zainab' },
-  { name: 'مصطفى عادل', username: 'demo.mustafa' },
+  { name: 'أحمد علي', username: 'demo.ahmed', label: 'مسؤول وحدة الكاميرات' },
+  { name: 'سارة محمد', username: 'demo.sara', label: 'منتسب' },
+  { name: 'حسين كريم', username: 'demo.hussein', label: 'منتسب' },
+  { name: 'زينب جاسم', username: 'demo.zainab', label: 'منتسب' },
+  { name: 'مصطفى عادل', username: 'demo.mustafa', label: 'مسؤول شبكات' },
 ];
 // [موظف، نص، قبل كم يوم]؛ منشورات العامة (تصل للمدير) ثم منشورات مجموعات الكرات
 const DEMO_POSTS = [
@@ -88,7 +100,7 @@ export async function seedDemoOrg({ managerPassword }, onStep = () => {}) {
   const existing = new Map((await listMembers()).map((m) => [m.username, m]));
   const sec = await secondaryApi('seed');
   const people = [];
-  for (const p of DEMO_PEOPLE) {
+  for (const p of [...DEMO_PEOPLE, ...ROLE_PEOPLE]) {
     onStep(`أنشئ حساب ${p.name}…`);
     let uid = existing.get(p.username)?.user_id;
     if (!uid) uid = await createDemoEmployee(p, managerUid, sec);
@@ -124,6 +136,18 @@ export async function seedDemoOrg({ managerPassword }, onStep = () => {}) {
     placePerson(st, hussein, install.id);
     placePerson(st, zainab, cables.id); placePerson(st, zainab, project.id);
     placePerson(st, mustafa, power.id); placePerson(st, mustafa, net.id, true);
+    // الأدوار المتدرجة لكل مستوى: القسم، ثم الشعبة، ثم الوحدة
+    const U = Object.fromEntries(people.map((x) => [x.username, x.uid]));
+    const personnel = addPersonnel(st);
+    placePerson(st, U['demo.khaled'], 'root', true);
+    placePerson(st, U['demo.noor'], 'root');
+    placePerson(st, U['demo.fatima'], personnel.id);
+    placePerson(st, U['demo.rami'], maint.id); setHead(st, U['demo.rami'], maint.id, true);
+    placePerson(st, U['demo.laith'], maint.id, true);
+    placePerson(st, U['demo.yasmin'], maint.id);
+    placePerson(st, U['demo.omar'], personnel.id);
+    placePerson(st, U['demo.huda'], cams.id, true);
+    placePerson(st, U['demo.karar'], personnel.id);
     await saveStructure(st);
   }
 
