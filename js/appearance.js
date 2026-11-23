@@ -12,3 +12,13 @@ export function setAccent(hex) {
 export function clearAccent() {
   ACCENT_VARS.forEach((p) => document.documentElement.style.removeProperty(p));
 }
+
+// لون الخلفية مستقل عن لون التمييز: يلوّن التدرج الخلفي للتطبيق كله
+export function setBackdrop(hex) {
+  if (!isHex(hex)) return clearBackdrop();
+  document.documentElement.style.setProperty('--backdrop', hex);
+}
+
+export function clearBackdrop() {
+  document.documentElement.style.removeProperty('--backdrop');
+}
