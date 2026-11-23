@@ -60,7 +60,7 @@ setTimeout(hideSplash, 4000);
 async function navigate() {
   const myNav = ++navId;
   // رئيس القسم يبدأ من المحادثات (المساعد كرة فيها)، والموظف من الأعمال
-  let name = location.hash.replace(/^#\//, '').split('?')[0] || (role === 'employee' ? 'chats' : role === 'manager' ? 'chats' : 'home');
+  let name = location.hash.replace(/^#\//, '').split('?')[0] || (role === 'employee' ? 'chats' : role === 'manager' ? 'chats' : 'org');
   // «الأعمال» صارت جزءاً من المحادثات: الروابط القديمة تُحوَّل إليها مع المجموعة المفتوحة
   if (name === 'group') {
     const q = location.hash.split('?')[1];

@@ -1,5 +1,6 @@
 // شاشة المؤسسة: الدخول، وإنشاء المؤسسة (المدير)، والانضمام بدعوة (الموظف)
 import { PUBLIC_BASE, IS_DEV } from '../env.js';
+import { getSetting, setSetting } from '../storage.js';
 import {
   cloudConfig, setCloudConfig, clearCloudConfig, session, signIn, signOut, createOrg,
   readInvite, joinWithInvite, orgExists, sendReset,
@@ -146,6 +147,7 @@ async function renderLogin(root, err) {
         ${exists ? '<h3 class="auth-h">تسجيل الدخول</h3>' : ''}
         ${userField('li-user', 'البريد (لرئيس القسم بعد ربطه) أو اسم المستخدم')}
         ${field('li-pass', 'كلمة المرور', 'type="password" autocomplete="current-password" dir="ltr" required')}
+        <div id="li-key-wrap" hidden>${field('li-key', 'مفتاح Gemini (للمدير فقط، يُحفظ على هذا الجهاز)', 'type="password" autocomplete="off" dir="ltr"')}</div>
         <button class="btn" id="li-go" type="submit">دخول</button>
         <button type="button" class="auth-bio" id="li-bio">الدخول بالبصمة</button>
         <p class="status" id="li-msg" role="status"></p>
@@ -187,9 +189,26 @@ async function renderLogin(root, err) {
     });
   }
   root.querySelector('#li-bio')?.addEventListener('click', () => setMsg(root.querySelector('#li-msg'), 'الدخول بالبصمة يُفعَّل مع الحاسوب المركزي.'));
+  // حقل المفتاح يظهر فقط عندما يكتب المدير اسم حسابه (يُعرف الحساب من هذا الجهاز بعد أول دخول للمدير)
+  const liUser = root.querySelector('#li-user');
+  const keyWrap = root.querySelector('#li-key-wrap');
+  const syncKey = async () => {
+    const mgr = await getSetting('managerUser', '');
+    keyWrap.hidden = !(mgr && liUser.value.trim() === mgr);
+  };
+  liUser.addEventListener('input', syncKey);
+  syncKey();
   root.querySelector('#login-form').addEventListener('submit', busyButton(liBtn, async () => {
+    const user = liUser.value.trim();
+    const keyField = root.querySelector('#li-key');
+    const keyShown = !keyWrap.hidden;
+    if (keyShown && !keyField.value.trim()) { setMsg(root.querySelector('#li-msg'), 'حساب المدير يحتاج مفتاح Gemini مع الاسم وكلمة المرور.'); return; }
     try {
-      const s = await signIn(root.querySelector('#li-user').value, root.querySelector('#li-pass').value);
+      const s = await signIn(user, root.querySelector('#li-pass').value);
+      if (s?.member?.role === 'manager') {
+        await setSetting('managerUser', user);
+        if (keyField.value.trim()) await setSetting('geminiApiKey', keyField.value.trim());
+      }
       location.hash = s?.member?.role === 'manager' ? '#/structure' : '#/group';
     } catch (e) { setMsg(root.querySelector('#li-msg'), e.message); }
   }));
