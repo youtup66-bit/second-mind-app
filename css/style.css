@@ -1447,7 +1447,7 @@ body.on-group .tasks .wa-head { padding-top: calc(env(safe-area-inset-top) + 8px
 /* شريط الحالة في الشاشة الرئيسية: خطوط أفقية متحركة وومضات بيضاء */
 @keyframes ab-streak { from { transform: translateX(-50%); } to { transform: translateX(0); } }
 @keyframes ab-twinkle { 0%, 100% { opacity: 0; transform: scale(.4); } 50% { opacity: 1; transform: scale(1); } }
-.alert-band { position: absolute; top: 0; left: 0; right: 0; height: 56px; overflow: hidden; z-index: 0; pointer-events: auto; display: block; -webkit-mask: linear-gradient(180deg, #000 60%, transparent); mask: linear-gradient(180deg, #000 60%, transparent); text-decoration: none; }
-.ab-line { position: absolute; left: 0; width: 200%; display: block; box-shadow: 0 0 2px var(--ab-glow); animation-name: ab-streak; animation-timing-function: linear; animation-iteration-count: infinite; }
+.alert-band { position: absolute; top: 0; left: 0; right: 0; height: 56px; overflow: hidden; z-index: 0; pointer-events: auto; display: block; text-decoration: none; }
+.ab-line { position: absolute; left: 0; width: 200%; height: 1.5px; display: block; animation-name: ab-streak; animation-timing-function: linear; animation-iteration-count: infinite; }
 .ab-spark { position: absolute; display: block; border-radius: 50%; background: #fff; animation-name: ab-twinkle; animation-timing-function: ease-in-out; animation-iteration-count: infinite; opacity: 0; }
 .chats-main--home > .ring-home { z-index: 1; }

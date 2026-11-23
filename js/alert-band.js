@@ -1,4 +1,4 @@
-// شريط الحالة في الشاشة الرئيسية: خطوط متحركة تعكس أعلى أهمية في الرسائل الأخيرة.
+// شريط الحالة في الشاشة الرئيسية: عشرة خطوط متدرجة السطوع داخل شريط نحيف قرب الحافة العليا.
 // طارئة = أحمر سريع، تسترعي الانتباه = أصفر أبطأ، عادية = أخضر هادئ (الافتراضي).
 import { getGroupMessages } from './storage.js';
 
@@ -17,26 +17,30 @@ export async function alertLevel() {
   return best;
 }
 
+// كل الحالات: ١٠ خطوط متدرجة السطوع داخل ٥٦ نقطة (نحو ٧٪ من الشاشة)
+const TOPS = Array.from({ length: 10 }, (_, i) => 4 + i * 5);
+const BRIGHT = [0.35, 0.55, 0.9, 0.45, 1.0, 0.6, 0.8, 0.3, 0.95, 0.7];
+const SPARKS = [[14, 10], [170, 26], [300, 38], [240, 14], [70, 44], [330, 20]];
+
 const SETUP = {
-  urgent: { color: '#ef4444', glow: 'rgba(239,68,68,.9)', speed: 1.1, lines: [2, 6.5, 11, 15.5, 20, 24.5, 29, 33.5, 38, 42.5, 47, 51.5], sparks: 7, dim: 1, label: 'رسالة طارئة' },
-  attention: { color: '#f59e0b', glow: 'rgba(245,158,11,.85)', speed: 2.4, lines: [2, 6.5, 11, 15.5, 20, 24.5, 29, 33.5, 38], sparks: 5, dim: 1, label: 'تسترعي الانتباه' },
-  normal: { color: '#22c55e', glow: 'rgba(34,197,94,.7)', speed: 5, lines: [2, 6.5, 11, 15.5, 20, 24.5], sparks: 3, dim: 0.55, label: 'لا رسائل مهمة' },
+  urgent: { color: '#ef4444', glow: 'rgba(239,68,68,.9)', speed: 1.1, label: 'رسالة طارئة' },
+  attention: { color: '#f59e0b', glow: 'rgba(245,158,11,.85)', speed: 2.4, label: 'تسترعي الانتباه' },
+  normal: { color: '#22c55e', glow: 'rgba(34,197,94,.7)', speed: 5, label: 'لا رسائل مهمة' },
 };
-const SPARKS = [[14, 8], [170, 24], [300, 40], [240, 14], [70, 46], [330, 18], [120, 30], [200, 36], [40, 28], [280, 44]];
 
 // الشريط نفسه: يُعرض أعلى الشاشة الرئيسية، ويفتح قائمة المجموعات عند اللمس
 export function bandMarkup(level) {
   const s = SETUP[level] || SETUP.normal;
-  const lines = s.lines.map((t, i) => {
-    const w = 26 + (i % 3) * 9;
-    const d = ((i * 0.37) % 1.2).toFixed(2);
-    const dur = (s.speed * (0.8 + (i % 4) * 0.12)).toFixed(2);
-    return `<i class="ab-line" style="top:${t}px;height:1px;opacity:${(0.55 + (i % 3) * 0.15).toFixed(2)};background:linear-gradient(90deg,transparent 0%,var(--ab-color) ${w}%,transparent ${w + 22}%);animation-duration:${dur}s;animation-delay:-${d}s"></i>`;
+  const lines = TOPS.map((t, i) => {
+    const b = BRIGHT[i];
+    const w = 22 + (i % 4) * 6;
+    const dur = (s.speed * (0.7 + ((i * 41) % 11) * 0.06)).toFixed(2);
+    const d = ((i * 0.4) % 4).toFixed(2);
+    return `<i class="ab-line" style="top:${t}px;background:linear-gradient(90deg,transparent 0%,color-mix(in srgb,var(--ab-color) ${Math.round(b * 100)}%,transparent) ${w}%,transparent ${w + 22}%);box-shadow:0 0 4px color-mix(in srgb,var(--ab-color) ${Math.round(b * 80)}%,transparent);animation-duration:${dur}s;animation-delay:-${d}s"></i>`;
   }).join('');
-  const sparks = SPARKS.slice(0, s.sparks).map(([x, y], i) => {
-    const sz = 3 + (i % 3);
-    const dur = (s.speed * (1.1 + (i % 5) * 0.2)).toFixed(2);
-    return `<i class="ab-spark" style="left:${x}px;top:${y}px;width:${sz}px;height:${sz}px;box-shadow:0 0 ${sz * 3}px var(--ab-glow);animation-duration:${dur}s;animation-delay:${((i * 0.31) % 2).toFixed(2)}s"></i>`;
+  const sparks = SPARKS.map(([x, y], i) => {
+    const dur = (s.speed * (0.8 + (i % 5) * 0.15)).toFixed(2);
+    return `<i class="ab-spark" style="left:${x}px;top:${y}px;animation-duration:${dur}s;animation-delay:${((i * 0.7) % 3).toFixed(2)}s"></i>`;
   }).join('');
-  return `<a class="alert-band" href="#/chats?tab=chats&view=groups" aria-label="${s.label}" style="--ab-color:${s.color};--ab-glow:${s.glow};opacity:${s.dim}">${lines}${sparks}</a>`;
+  return `<a class="alert-band" href="#/chats?tab=chats&view=groups" aria-label="${s.label}" style="--ab-color:${s.color};--ab-glow:${s.glow}">${lines}${sparks}</a>`;
 }
