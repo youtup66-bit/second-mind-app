@@ -496,6 +496,11 @@ async function mountList(root, s, syncErr, mode, tab = 'chats') {
     root.innerHTML = `
       <section class="chat chat--wa chat--plain chat--group g-list chats-main chats-main--home" style="${iconStyle};${orbStyle}">
         ${bandMarkup(level)}
+        <div class="msg-sheet" id="msg-sheet" aria-label="الرسائل مرتبة من الطارئ إلى العادي">
+          <div class="msg-sheet__grip" aria-hidden="true"></div>
+          <div class="msg-sheet__head"><b>الرسائل</b><small id="msg-count"></small></div>
+          <div class="msg-sheet__list" id="msg-list"></div>
+        </div>
         <div class="ring-home">
           <span class="ring-home__halo" aria-hidden="true"></span>
           <span class="ring-home__arc ring-home__arc--1" aria-hidden="true"></span>
@@ -578,6 +583,8 @@ async function mountList(root, s, syncErr, mode, tab = 'chats') {
     // النقر على الحلقة يفتح العناوين أو يغلقها، والكرة الوسطى تفتح المساعد مباشرة
     main?.addEventListener('click', (e) => {
       // لمس خارج التقرير اليومي وهو مفتوح يُنزله، ولا يفتح قائمة العناوين
+      const msgSheet = root.querySelector('#msg-sheet');
+      if (msgSheet?.classList.contains('is-open')) { msgSheet.classList.remove('is-open'); return; }
       const daily = root.querySelector('#daily-side');
       if (daily?.classList.contains('is-open')) { daily.classList.remove('is-open'); return; }
       if (e.target.closest('a') || e.target.closest('.ring-daily, .ring-daily-total, .daily-side')) return;
@@ -594,6 +601,9 @@ async function mountList(root, s, syncErr, mode, tab = 'chats') {
     main?.addEventListener('touchend', (e) => {
       const t = e.changedTouches[0];
       const dx = t.clientX - sx, dy = t.clientY - sy;
+      const msgSheet = root.querySelector('#msg-sheet');
+      if (msgSheet && !msgSheet.classList.contains('is-open') && dy > 90 && Math.abs(dx) < 90) { paintUrgentSheet(root).then(() => msgSheet.classList.add('is-open')); return; }
+      if (msgSheet && msgSheet.classList.contains('is-open') && dy < -70 && Math.abs(dx) < 90) { msgSheet.classList.remove('is-open'); return; }
       const daily = root.querySelector('#daily-side');
       // سحب للأعلى: يظهر التقرير اليومي من الأسفل (للمدير)، وإلا يفتح المساعد
       if (daily && dy < -90 && Math.abs(dx) < 90) { daily.classList.add('is-open'); return; }
@@ -803,4 +813,25 @@ const listTime = (t) => {
 export function unmount() {
   cleanup.forEach((f) => f());
   cleanup = [];
+}
+
+// الرسائل مرتبة من الطارئة إلى العادية، ثم الأحدث داخل كل فئة (الافتراضي: عادية)
+const MSG_RANK = { urgent: 0, attention: 1, normal: 2 };
+const MSG_LABEL = { urgent: 'طارئة', attention: 'انتباه', normal: 'عادية' };
+export async function paintUrgentSheet(root) {
+  const list = root.querySelector('#msg-list');
+  const cnt = root.querySelector('#msg-count');
+  if (!list) return;
+  const since = Date.now() - 7 * 86400000;
+  const pr = (m) => (Object.prototype.hasOwnProperty.call(MSG_RANK, m.priority) ? m.priority : 'normal');
+  const msgs = (await getGroupMessages().catch(() => [])).filter((m) => (m.sentAt || 0) >= since);
+  msgs.sort((a, b) => MSG_RANK[pr(a)] - MSG_RANK[pr(b)] || (b.sentAt || 0) - (a.sentAt || 0));
+  cnt.textContent = msgs.length ? `${msgs.length} رسالة` : '';
+  list.innerHTML = msgs.length
+    ? msgs.slice(0, 60).map((m) => {
+      const p = pr(m);
+      const time = new Date(m.sentAt || 0).toLocaleTimeString('ar', { hour: 'numeric', minute: '2-digit' });
+      return `<a class="msg-item msg-item--${p}" href="#/chats?tab=chats&view=groups"><span class="msg-item__tag">${MSG_LABEL[p]}</span><span class="msg-item__body"><b>${esc(m.fromName || m.name || 'موظف')}</b><small>${esc(String(m.text || (m.image ? 'صورة' : '')).slice(0, 140))}</small></span><time>${time}</time></a>`;
+    }).join('')
+    : '<p class="muted">لا رسائل بعد.</p>';
 }
