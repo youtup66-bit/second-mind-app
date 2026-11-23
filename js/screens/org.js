@@ -1,5 +1,5 @@
 // شاشة المؤسسة: الدخول، وإنشاء المؤسسة (المدير)، والانضمام بدعوة (الموظف)
-import { PUBLIC_BASE } from '../env.js';
+import { PUBLIC_BASE, IS_DEV } from '../env.js';
 import {
   cloudConfig, setCloudConfig, clearCloudConfig, session, signIn, signOut, createOrg,
   readInvite, joinWithInvite, orgExists, sendReset,
@@ -152,6 +152,7 @@ async function renderLogin(root, err) {
         <p class="status" id="li-hint" role="status" hidden></p>
         <div class="row"><button type="button" class="link-btn" id="li-forgot">نسيت كلمة المرور؟</button><button type="button" class="link-btn" id="li-hintbtn">تلميح كلمة المرور</button></div>
       </form>
+      ${exists && IS_DEV ? '<div class="dev-login"><button type="button" class="dev-login__btn" id="dev-btn" aria-label="أدوات المطوّر: الدخول بحساب تجريبي">DEV</button><div class="dev-login__list" id="dev-list" hidden></div></div>' : ''}
       <form class="card org-form" id="new-form" ${exists ? 'hidden' : ''}>
         ${field('no-org', 'اسم المؤسسة', 'type="text" required maxlength="80"')}
         ${field('no-name', 'اسمك (يظهر للموظفين)', 'type="text" required maxlength="60"')}
@@ -166,6 +167,25 @@ async function renderLogin(root, err) {
     </div>`;
 
   const liBtn = root.querySelector('#li-go');
+  // مبدّل الأدوار (نسخة التجربة فقط): الأيقونة تعرض الحسابات التجريبية، والضغط على أحدها يدخل مباشرة
+  if (IS_DEV) {
+    const btn = root.querySelector('#dev-btn');
+    const list = root.querySelector('#dev-list');
+    btn?.addEventListener('click', async () => {
+      if (!list.hidden) { list.hidden = true; return; }
+      const { devAccounts, switchTo } = await import('../dev-tools.js');
+      const acc = await devAccounts();
+      const all = acc ? [{ ...acc.manager, role: 'المدير' }, ...acc.people.map((p) => ({ ...p, role: 'موظف' }))] : [];
+      list.innerHTML = all.length
+        ? all.map((a, i) => `<button type="button" class="dev-login__who" data-i="${i}"><span class="dev-login__av" aria-hidden="true">${esc(String(a.name || '؟').trim().charAt(0))}</span><span class="dev-login__txt"><b>${esc(a.name)}</b><small dir="ltr">${esc(a.username)} · ${a.role}</small></span></button>`).join('')
+        : '<p class="muted">أنشئ المؤسسة التجريبية أولاً من إعدادات نسخة التجربة.</p>';
+      list.hidden = false;
+      list.querySelectorAll('[data-i]').forEach((b) => b.addEventListener('click', async () => {
+        b.disabled = true;
+        try { await switchTo(all[Number(b.dataset.i)]); } catch (e) { setMsg(root.querySelector('#li-msg'), e.message); b.disabled = false; }
+      }));
+    });
+  }
   root.querySelector('#li-bio')?.addEventListener('click', () => setMsg(root.querySelector('#li-msg'), 'الدخول بالبصمة يُفعَّل مع الحاسوب المركزي.'));
   root.querySelector('#login-form').addEventListener('submit', busyButton(liBtn, async () => {
     try {

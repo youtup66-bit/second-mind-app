@@ -1385,3 +1385,17 @@ body.on-group .tasks .wa-head { padding-top: calc(env(safe-area-inset-top) + 8px
 .daily-bar { width: 110px; height: 2px; border-radius: 2px; background: var(--surface-2, var(--surface-2)); overflow: hidden; }
 .daily-fill { height: 100%; background: var(--wa-green, var(--accent)); }
 .daily-pts { font-size: .8rem; font-weight: 700; color: var(--muted, var(--muted)); }
+
+/* ---- مبدّل الأدوار في نسخة التجربة: أيقونة تحت الدخول، وقائمة الحسابات التجريبية ---- */
+.dev-login { display: grid; justify-items: center; gap: 10px; margin: 6px 0 14px; }
+.dev-login__btn { width: 44px; height: 44px; border-radius: 50%; border: 1px dashed color-mix(in srgb, var(--accent) 60%, transparent); background: color-mix(in srgb, var(--accent) 12%, var(--bg-2)); color: var(--accent); font: inherit; font-size: 11px; font-weight: 800; letter-spacing: 1px; cursor: pointer; transition: transform .2s ease, box-shadow .2s ease; }
+.dev-login__btn:hover { box-shadow: 0 0 14px color-mix(in srgb, var(--accent) 40%, transparent); }
+.dev-login__btn:active { transform: scale(.94); }
+.dev-login__list { width: 100%; display: grid; gap: 8px; animation: auth-rise .35s ease both; }
+.dev-login__who { display: flex; align-items: center; gap: 10px; width: 100%; padding: 10px 12px; border-radius: 14px; border: 1px solid var(--border); background: var(--bg-2); color: var(--text); font: inherit; text-align: start; cursor: pointer; transition: transform .2s ease, border-color .2s ease; }
+.dev-login__who:hover { border-color: var(--accent); }
+.dev-login__who:active { transform: scale(.98); }
+.dev-login__who:disabled { opacity: .6; }
+.dev-login__av { width: 36px; height: 36px; flex: none; border-radius: 50%; display: grid; place-items: center; background: color-mix(in srgb, var(--accent) 22%, var(--surface)); color: var(--accent); font-weight: 800; }
+.dev-login__txt { display: grid; gap: 2px; min-width: 0; }
+.dev-login__txt small { color: var(--muted); font-size: .78rem; }
