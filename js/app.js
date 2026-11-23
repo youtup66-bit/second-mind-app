@@ -19,7 +19,7 @@ import { setOrbVisible } from './orb-float.js';
 import { startGroupSync, groupEvents, unreadCount, groupBranch, waitBranch } from './group.js';
 import { autoSnapshot } from './backup.js';
 import { getSetting } from './storage.js';
-import { setAccent, setBackdrop } from './appearance.js';
+import { applyPalette } from './appearance.js';
 import { IS_DEV, IS_BUNDLED } from './env.js';
 import { loadCategories } from './categories.js';
 
@@ -195,8 +195,7 @@ groupEvents.addEventListener('seen', refreshBadge);
 async function applyTheme() {
   document.body.classList.add('theme-wa');
   document.querySelector('meta[name="theme-color"]')?.setAttribute('content', '#071a14');
-  setAccent(await getSetting('accentColor', ''));
-  setBackdrop(await getSetting('backdropColor', ''));
+  await applyPalette(getSetting);
 }
 function applyNoCompanion() {
   document.body.classList.toggle('no-companion', noCompanion);

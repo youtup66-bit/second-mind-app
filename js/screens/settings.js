@@ -2,7 +2,7 @@
 import { IS_DEV, IS_BUNDLED } from '../env.js';
 import { canUpdateApp, appVersion, startAppUpdate } from '../app-update.js';
 import { getSetting, setSetting, deleteSetting, clearAll, clearMessages } from '../storage.js';
-import { setAccent, clearAccent, setBackdrop, clearBackdrop, isHex } from '../appearance.js';
+import { ROLES, roleOf, applyRole, clearRole, isHex } from '../appearance.js';
 import { DEFAULT_MODEL, DEFAULT_LITE_MODEL, testKey, getUsage, ttsCooldownUntil, clearTtsCooldown, economyMode } from '../gemini.js';
 import { canSpeak, canListen, canRecord, canBrowserListen, speak, stopSpeaking, unlockAudio, voicesReady } from '../voice.js';
 import { DEFAULT_SKIN } from '../skins.js';
@@ -120,21 +120,18 @@ export async function mount(root) {
 
     <section class="card" id="look">
       <h2>المظهر</h2>
-      <p class="muted">لون التمييز والأيقونات والكرة تُضبط من هنا، وتنطبق على كل الشاشات.</p>
-      <h3 class="subhead">لون التمييز في التطبيق كله</h3>
-      <label class="look-row"><span>اللون</span><input type="color" id="app-accent" value="#22c55e"></label>
-      <div class="text-btns"><button class="text-btn text-btn--muted" type="button" id="app-accent-reset">إعادة الافتراضي</button></div>
-      <h3 class="subhead">لون الخلفية</h3>
-      <label class="look-row"><span>اللون</span><input type="color" id="app-backdrop" value="#22c55e"></label>
-      <div class="text-btns"><button class="text-btn text-btn--muted" type="button" id="app-backdrop-reset">إعادة الافتراضي</button></div>
-      <h3 class="subhead">أيقونات القوائم الجانبية</h3>
-      <label class="look-row"><span>اللون</span><input type="color" id="ic-color" value="#4ade80"></label>
-      <label class="look-row"><span>الشفافية <b id="ic-alpha-out">100%</b></span><input type="range" id="ic-alpha" min="10" max="100" step="5" value="100"></label>
-      <div class="text-btns"><button class="text-btn text-btn--muted" type="button" id="ic-reset">إعادة الافتراضي</button></div>
-      <h3 class="subhead">الكرة الرئيسية</h3>
-      <label class="look-row"><span>اللون</span><input type="color" id="orb-color" value="#4ade80"></label>
-      <label class="look-row"><span>التوهج <b id="orb-glow-out">100%</b></span><input type="range" id="orb-glow" min="0" max="100" step="5" value="100"></label>
-      <div class="text-btns"><button class="text-btn text-btn--muted" type="button" id="orb-reset">إعادة الافتراضي</button></div>
+      <p class="muted">كل لون قابل للتعديل على حدة. اجمع ألوانك في مجموعة باسم، واستعدها بنقرة.</p>
+      <h3 class="subhead">الأدوار اللونية</h3>
+      <div class="pal-roles" id="palette-roles"></div>
+      <div class="text-btns"><button class="text-btn text-btn--muted" type="button" id="pal-reset">إعادة كل الألوان للافتراضي</button></div>
+      <h3 class="subhead">مجموعاتي</h3>
+      <div class="pal-saved" id="palette-saved"></div>
+      <label class="look-row"><span>اسم المجموعة</span><input type="text" id="pal-name" maxlength="24" placeholder="مثال: الصيفية"></label>
+      <div class="text-btns"><button class="text-btn" type="button" id="pal-save">حفظ الألوان الحالية</button></div>
+      <h3 class="subhead">الشفافية والتوهج</h3>
+      <label class="look-row"><span>شفافية الأيقونات <b id="ic-alpha-out">100%</b></span><input type="range" id="ic-alpha" min="10" max="100" step="5" value="100"></label>
+      <label class="look-row"><span>توهج الكرة <b id="orb-glow-out">100%</b></span><input type="range" id="orb-glow" min="0" max="100" step="5" value="100"></label>
+      <div class="text-btns"><button class="text-btn text-btn--muted" type="button" id="ic-reset">إعادة الشفافية والتوهج</button></div>
     </section>
 
     <section class="card" id="voice">
@@ -405,10 +402,7 @@ export async function mount(root) {
 
 
   bindAppUpdate(root);
-  bindIconStyle(root);
-  bindOrbStyle(root);
-  bindAppAccent(root);
-  bindBackdrop(root);
+  bindLook(root);
   root.querySelector('#ai-check-btn').addEventListener('click', async () => {
     const { aiCheck } = await import('../ai-check.js');
     const out = root.querySelector('#ai-check');
@@ -895,87 +889,88 @@ async function renderDevTools(box) {
   });
 }
 
-// لون أيقونات القوائم الجانبية وشفافيتها (تُقرأ في شاشة المحادثات)
-async function bindIconStyle(root) {
-  const c = root.querySelector('#ic-color');
+// المظهر: كل دور لونه، والمجموعات المحفوظة، والشفافية والتوهج
+async function bindLook(root) {
+  const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const wrap = root.querySelector('#palette-roles');
+  const saved = root.querySelector('#palette-saved');
+  if (!wrap || !saved) return;
+  const colorOf = async (r) => { const s = await getSetting(r.setting, ''); return isHex(s) ? s : r.def; };
+  const paintRoles = async () => {
+    const rows = await Promise.all(ROLES.map(async (r) => {
+      const v = await colorOf(r);
+      return `<label class="pal-row"><span class="pal-row__sw" style="background:${v}"></span><span class="pal-row__txt"><b>${r.label}</b><small>${r.hint}</small></span><span class="pal-row__hex" dir="ltr">${v.toUpperCase()}</span><input type="color" data-role="${r.key}" value="${v}" aria-label="لون ${r.label}"></label>`;
+    }));
+    wrap.innerHTML = rows.join('');
+  };
+  const paintSaved = async () => {
+    const list = (await getSetting('palettes', [])) || [];
+    saved.innerHTML = list.length
+      ? list.map((p, i) => `<span class="pal-chip"><button type="button" class="pal-chip__go" data-apply="${i}">${esc(p.name)}</button><button type="button" class="pal-chip__del" data-del="${i}" aria-label="حذف ${esc(p.name)}">×</button></span>`).join('')
+      : '<p class="muted">لا مجموعات محفوظة بعد.</p>';
+  };
+  await paintRoles();
+  await paintSaved();
+
+  // لون واحد: يُحفظ ويُطبَّق فوراً على التطبيق كله
+  wrap.addEventListener('input', async (e) => {
+    const inp = e.target.closest('input[data-role]');
+    if (!inp) return;
+    const r = roleOf(inp.dataset.role);
+    const v = inp.value;
+    await setSetting(r.setting, v);
+    applyRole(r, v);
+    const row = inp.closest('.pal-row');
+    row.querySelector('.pal-row__sw').style.background = v;
+    row.querySelector('.pal-row__hex').textContent = v.toUpperCase();
+  });
+  root.querySelector('#pal-reset').addEventListener('click', async () => {
+    for (const r of ROLES) { await deleteSetting(r.setting); clearRole(r); }
+    await paintRoles();
+  });
+  root.querySelector('#pal-save').addEventListener('click', async () => {
+    const name = root.querySelector('#pal-name').value.trim();
+    if (!name) return;
+    const colors = {};
+    for (const r of ROLES) colors[r.setting] = await colorOf(r);
+    const list = (await getSetting('palettes', [])) || [];
+    await setSetting('palettes', [...list.filter((p) => p.name !== name), { name, colors }]);
+    root.querySelector('#pal-name').value = '';
+    await paintSaved();
+  });
+  saved.addEventListener('click', async (e) => {
+    const del = e.target.closest('[data-del]');
+    const go = e.target.closest('[data-apply]');
+    const list = (await getSetting('palettes', [])) || [];
+    if (del) {
+      await setSetting('palettes', list.filter((_, i) => i !== Number(del.dataset.del)));
+      return paintSaved();
+    }
+    if (go) {
+      const p = list[Number(go.dataset.apply)];
+      if (!p) return;
+      for (const r of ROLES) {
+        const v = p.colors?.[r.setting];
+        if (isHex(v)) { await setSetting(r.setting, v); applyRole(r, v); }
+      }
+      await paintRoles();
+    }
+  });
+
+  // الشفافية والتوهج
   const a = root.querySelector('#ic-alpha');
-  const out = root.querySelector('#ic-alpha-out');
-  if (!c || !a) return;
-  const color = await getSetting('iconColor', '#4ade80');
-  const alpha = Number(await getSetting('iconAlpha', 100)) || 100;
-  c.value = /^#[0-9a-f]{6}$/i.test(color) ? color : '#4ade80';
-  a.value = alpha;
-  out.textContent = `${alpha}%`;
-  c.addEventListener('input', () => setSetting('iconColor', c.value));
-  a.addEventListener('input', () => {
-    out.textContent = `${a.value}%`;
-    setSetting('iconAlpha', Number(a.value));
-  });
-  root.querySelector('#ic-reset')?.addEventListener('click', async () => {
-    await deleteSetting('iconColor');
-    await deleteSetting('iconAlpha');
-    c.value = '#4ade80';
-    a.value = 100;
-    out.textContent = '100%';
-  });
-}
-
-// لون الخلفية المستقل: يلوّن تدرج خلفية التطبيق فقط
-async function bindBackdrop(root) {
-  const c = root.querySelector('#app-backdrop');
-  if (!c) return;
-  const saved = await getSetting('backdropColor', '');
-  c.value = isHex(saved) ? saved : '#22c55e';
-  c.addEventListener('input', async () => {
-    await setSetting('backdropColor', c.value);
-    setBackdrop(c.value);
-  });
-  root.querySelector('#app-backdrop-reset')?.addEventListener('click', async () => {
-    await deleteSetting('backdropColor');
-    clearBackdrop();
-    c.value = '#22c55e';
-  });
-}
-
-// لون التمييز الموحّد: يُطبَّق فوراً على كل التطبيق
-async function bindAppAccent(root) {
-  const c = root.querySelector('#app-accent');
-  if (!c) return;
-  const saved = await getSetting('accentColor', '');
-  c.value = isHex(saved) ? saved : '#22c55e';
-  c.addEventListener('input', async () => {
-    await setSetting('accentColor', c.value);
-    setAccent(c.value);
-  });
-  root.querySelector('#app-accent-reset')?.addEventListener('click', async () => {
-    await deleteSetting('accentColor');
-    clearAccent();
-    c.value = '#22c55e';
-  });
-}
-
-// لون الكرة الرئيسية وتوهجها (تُقرأ في شاشة المحادثات)
-async function bindOrbStyle(root) {
-  const c = root.querySelector('#orb-color');
+  const ao = root.querySelector('#ic-alpha-out');
   const g = root.querySelector('#orb-glow');
-  const out = root.querySelector('#orb-glow-out');
-  if (!c || !g) return;
-  const color = await getSetting('orbColor', '#4ade80');
+  const go2 = root.querySelector('#orb-glow-out');
+  const alpha = Number(await getSetting('iconAlpha', 100)) || 100;
   const glow = Number(await getSetting('orbGlow', 100));
-  c.value = /^#[0-9a-f]{6}$/i.test(color) ? color : '#4ade80';
-  g.value = Number.isFinite(glow) ? glow : 100;
-  out.textContent = `${g.value}%`;
-  c.addEventListener('input', () => setSetting('orbColor', c.value));
-  g.addEventListener('input', () => {
-    out.textContent = `${g.value}%`;
-    setSetting('orbGlow', Number(g.value));
-  });
-  root.querySelector('#orb-reset')?.addEventListener('click', async () => {
-    await deleteSetting('orbColor');
-    await deleteSetting('orbGlow');
-    c.value = '#4ade80';
-    g.value = 100;
-    out.textContent = '100%';
+  a.value = alpha; ao.textContent = `${alpha}%`;
+  g.value = Number.isFinite(glow) ? glow : 100; go2.textContent = `${g.value}%`;
+  a.addEventListener('input', () => { ao.textContent = `${a.value}%`; setSetting('iconAlpha', Number(a.value)); });
+  g.addEventListener('input', () => { go2.textContent = `${g.value}%`; setSetting('orbGlow', Number(g.value)); });
+  root.querySelector('#ic-reset').addEventListener('click', async () => {
+    await deleteSetting('iconAlpha'); await deleteSetting('orbGlow');
+    a.value = 100; ao.textContent = '100%'; g.value = 100; go2.textContent = '100%';
   });
 }
 
