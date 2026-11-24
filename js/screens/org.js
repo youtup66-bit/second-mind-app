@@ -86,24 +86,14 @@ function bindRulesBox(root) {
 
 // ---- أول مرة: لا مؤسسة على هذا الجهاز ----
 function renderSetup(root) {
+  // شاشة الربط تعرض فقط ما يحتاجه المدير: لصق إعداد Firebase (بلا تفاصيل أخرى حمايةً للمؤسسة)
   root.innerHTML = `
     <div class="org">
-      <div class="org-hero">
-        <div class="org-hero__icon" aria-hidden="true">🏢</div>
-        <h2>عقل المؤسسة</h2>
-        <p class="muted">حساب للمدير يضيف منه الموظفين، ومحادثة مشتركة، ونقاط وتقارير. ملاحظاتك الشخصية تبقى على جهازك ولا يراها أحد.</p>
-      </div>
       <section class="card">
-        <h3>أنا موظف</h3>
-        <p class="muted">افتح رابط الدعوة الذي أرسله لك المدير، وسيُجهَّز حسابك تلقائياً.</p>
-      </section>
-      <section class="card">
-        <h3>أنا المدير</h3>
-        <p class="muted">اربط مشروع Firebase الخاص بمؤسستك: من إعدادات المشروع في Firebase انسخ لصقة <bdi dir="ltr">firebaseConfig</bdi> كاملة والصقها هنا. الخطوات كاملة في ملف <bdi dir="ltr">firebase/SETUP.md</bdi>.</p>
-        ${rulesBox()}
+        <h3>ربط المؤسسة</h3>
         <form id="cfg-form" class="org-form">
           <label class="org-field"><span>لصقة firebaseConfig</span>
-            <textarea id="cfg-text" dir="ltr" rows="7" spellcheck="false" autocomplete="off" required placeholder="const firebaseConfig = {&#10;  apiKey: &quot;AIza...&quot;,&#10;  authDomain: &quot;...&quot;,&#10;  projectId: &quot;...&quot;,&#10;  appId: &quot;...&quot;&#10;};"></textarea>
+            <textarea id="cfg-text" dir="ltr" rows="7" spellcheck="false" autocomplete="off" required></textarea>
           </label>
           <button class="btn" id="cfg-save" type="submit">ربط المؤسسة</button>
           <p class="status" id="cfg-msg" role="status"></p>
@@ -111,7 +101,6 @@ function renderSetup(root) {
       </section>
     </div>`;
   const btn = root.querySelector('#cfg-save');
-  bindRulesBox(root);
   root.querySelector('#cfg-form').addEventListener('submit', busyButton(btn, async () => {
     const msg = root.querySelector('#cfg-msg');
     try {
