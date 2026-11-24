@@ -62,7 +62,11 @@ function groupSettings(root) {
     sec.append(body);
     sec.classList.add('set-group');
     setOpen(sec, false);
-    head.addEventListener('click', () => (sec.classList.contains('is-open') ? setOpen(sec, false) : open(sec)));
+    head.addEventListener('click', () => {
+      // المؤسسة تفتح شاشتها مباشرة (بلا قسم وسيط)
+      if (sec.id === 'org') { location.hash = '#/org'; return; }
+      sec.classList.contains('is-open') ? setOpen(sec, false) : open(sec);
+    });
   }
   return open;
 }
