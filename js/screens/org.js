@@ -1,6 +1,7 @@
 // شاشة المؤسسة: الدخول، وإنشاء المؤسسة (المدير)، والانضمام بدعوة (الموظف)
 import { PUBLIC_BASE, IS_DEV } from '../env.js';
 import { getSetting, setSetting } from '../storage.js';
+import { canUpdateApp, startAppUpdate } from '../app-update.js';
 import {
   cloudConfig, setCloudConfig, clearCloudConfig, session, signIn, signOut, createOrg,
   readInvite, joinWithInvite, orgExists, sendReset,
@@ -165,10 +166,24 @@ async function renderLogin(root, err) {
         <button class="btn" id="no-go" type="submit">إنشاء المؤسسة وحساب المدير</button>
         <p class="status" id="no-msg" role="status"></p>
       </form>
+      ${canUpdateApp() ? '<p class="org-foot"><button type="button" class="link-btn" id="org-update">⬇️ تحديث التطبيق</button></p>' : ''}
       <p class="org-foot"><button type="button" class="link-btn" id="unlink">فصل هذا الجهاز عن المؤسسة</button></p>
     </div>`;
 
   const liBtn = root.querySelector('#li-go');
+  // التحديث هنا لأن الإعدادات مقفلة قبل التسجيل
+  root.querySelector('#org-update')?.addEventListener('click', (e) => {
+    const b = e.currentTarget;
+    const msg = root.querySelector('#li-msg');
+    b.disabled = true;
+    const off = startAppUpdate((ev) => {
+      if (ev.type === 'uptodate') { setMsg(msg, `التطبيق محدّث (الإصدار ${ev.version}) ✓`, true); b.disabled = false; off(); }
+      else if (ev.type === 'start') setMsg(msg, `جارٍ تنزيل التحديث ${ev.version} (${ev.total} ملف)…`, true);
+      else if (ev.type === 'progress') setMsg(msg, `جارٍ التنزيل… ${ev.done} من ${ev.total}`, true);
+      else if (ev.type === 'done') { setMsg(msg, `تم التحديث إلى ${ev.version}. يُعاد تحميل التطبيق…`, true); off(); }
+      else if (ev.type === 'error') { setMsg(msg, ev.message); b.disabled = false; off(); }
+    });
+  });
   // مبدّل الأدوار (نسخة التجربة فقط): الأيقونة تعرض الحسابات التجريبية، والضغط على أحدها يدخل مباشرة
   if (IS_DEV) {
     const btn = root.querySelector('#dev-btn');
