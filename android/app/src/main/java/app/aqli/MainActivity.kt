@@ -145,7 +145,7 @@ class MainActivity : ComponentActivity() {
             override fun handleOnBackPressed() {
                 web.evaluateJavascript(
                     "(function(){var h=location.hash||'';var p=h.split('?')[0];var q=h.split('?')[1]||'';" +
-                        "var root=(p===''||p==='#'||p==='#/home'||(p==='#/chats'&&!/view=groups/.test(q)&&!/tab=(sections|people)/.test(q)));" +
+                        "var root=(p===''||p==='#'||(p==='#/chats'&&!/view=groups/.test(q)&&!/tab=(sections|people)/.test(q)));" +
                         "return root?'root':'sub';})()"
                 ) { r ->
                     if (r?.contains("root") == true) finish()
