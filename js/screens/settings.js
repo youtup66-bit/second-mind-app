@@ -133,7 +133,7 @@ export async function mount(root) {
         <select id="net-addr-type"><option value="static">ثابت (Static): رقم IP لا يتغير</option><option value="dhcp">ديناميكي (DHCP): اسم الخادم</option></select></label>
       <label class="org-field"><span id="net-server-label">عنوان الخادم الأساسي</span>
         <input id="net-server" dir="ltr" inputmode="url" autocomplete="off" placeholder="https://192.168.1.10"></label>
-      <p class="muted" id="net-dhcp-note" hidden>الخادم بعنوان ديناميكي قد يتغير رقمه، لذلك يُستعمل اسمه الداخلي (مثل https://aqli.local) ويبقى ثابتاً.</p>
+      <p class="muted" id="net-dhcp-note" hidden>اكتب اسم الخادم الداخلي مع المنفذ مرة واحدة، مثل <span dir="ltr">http://aqli:8080</span>. يبقى الاسم صالحاً حتى لو تغيّر رقم الخادم.</p>
       <label class="org-field"><span>عنوان بديل (اختياري، مثل اسم النطاق الداخلي)</span>
         <input id="net-server2" dir="ltr" inputmode="url" autocomplete="off" placeholder="https://aqli.local"></label>
       <label class="org-field"><span>بصمة الشهادة SHA-256 (اختياري، للتأكد من هوية الخادم)</span>
@@ -1022,8 +1022,8 @@ async function bindNetwork(root) {
   addrType.value = await getSetting('netAddrType', 'static');
   const syncType = () => {
     const dhcp = addrType.value === 'dhcp';
-    label.textContent = dhcp ? 'اسم الخادم الداخلي' : 'عنوان الخادم الأساسي (IP ثابت)';
-    s1.placeholder = dhcp ? 'https://aqli.local' : 'https://192.168.1.10';
+    label.textContent = dhcp ? 'اسم الخادم الداخلي (DNS)' : 'عنوان الخادم الأساسي (IP ثابت)';
+    s1.placeholder = dhcp ? 'http://aqli:8080' : 'http://192.168.1.10:8080';
     dhcpNote.hidden = !dhcp;
   };
   syncType();
