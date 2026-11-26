@@ -2,6 +2,7 @@
 import { IS_DEV, IS_BUNDLED } from '../env.js';
 import { canUpdateApp, appVersion, startAppUpdate } from '../app-update.js';
 import { getSetting, setSetting, deleteSetting, clearAll, clearMessages } from '../storage.js';
+import { lanLogin, lanLogout, lanUser } from '../lan.js';
 import { ROLES, roleOf, applyRole, clearRole, isHex } from '../appearance.js';
 import { DEFAULT_MODEL, DEFAULT_LITE_MODEL, testKey, getUsage, ttsCooldownUntil, clearTtsCooldown, economyMode } from '../gemini.js';
 import { canSpeak, canListen, canRecord, canBrowserListen, speak, stopSpeaking, unlockAudio, voicesReady } from '../voice.js';
@@ -142,7 +143,17 @@ export async function mount(root) {
         <button class="text-btn" type="button" id="net-test">اختبار الاتصال</button>
       </div>
       <p class="status" id="net-msg" role="status"></p>
-      <p class="muted">ملاحظة: الخادم الداخلي لم يُفعَّل بعد، فلن يتغيّر مصدر البيانات حتى يُربط.</p>
+      <div class="org-field" id="net-login-box">
+        <span>دخول حساب الخادم (للمهام في وضع الشبكة الداخلية)</span>
+        <input id="net-user" dir="ltr" autocomplete="username" autocapitalize="none" spellcheck="false" placeholder="اسم المستخدم">
+        <input id="net-pass" dir="ltr" type="password" autocomplete="current-password" placeholder="كلمة المرور">
+        <div class="text-btns">
+          <button class="text-btn" type="button" id="net-login">دخول</button>
+          <button class="text-btn" type="button" id="net-logout" hidden>خروج</button>
+        </div>
+        <p class="muted" id="net-login-state"></p>
+      </div>
+      <p class="muted">المهام تُحفظ على خادم المؤسسة عند تفعيل «شبكة داخلية» وتسجيل الدخول. المنشورات والمحادثات ما زالت كما هي.</p>
     </section>
     <section class="card" id="look">
       <h2>المظهر</h2>
@@ -1022,6 +1033,28 @@ async function bindNetwork(root) {
   ident.value = await getSetting('netIdentity', '');
   const show = (t, ok = true) => { out.textContent = t; out.className = `status ${ok ? 'status--ok' : 'status--err'}`; };
   const clean = (v) => String(v || '').trim().replace(/\/+$/, '');
+  const loginState = async () => {
+    const u = await lanUser();
+    $('#net-login-state').textContent = u ? `مسجّل الدخول كـ ${u}` : 'غير مسجّل الدخول إلى الخادم';
+    $('#net-logout').hidden = !u;
+  };
+  await loginState();
+  $('#net-login').addEventListener('click', async () => {
+    const u = $('#net-user').value, p = $('#net-pass').value;
+    if (!u.trim() || !p) return show('اكتب اسم المستخدم وكلمة المرور.', false);
+    show('أسجّل الدخول…');
+    try {
+      const name = await lanLogin(u, p);
+      $('#net-pass').value = '';
+      show(`تم تسجيل الدخول كـ ${name} ✓`);
+    } catch (err) { show(err.message, false); }
+    await loginState();
+  });
+  $('#net-logout').addEventListener('click', async () => {
+    await lanLogout();
+    show('تم تسجيل الخروج من الخادم.');
+    await loginState();
+  });
   $('#net-save').addEventListener('click', async () => {
     const a = clean(s1.value), b = clean(s2.value);
     if (mode.value === 'lan' && !/^https?:\/\//.test(a)) return show('اكتب عنوان الخادم الأساسي بصيغة https://…', false);

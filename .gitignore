@@ -3,3 +3,4 @@ apk/app/build/
 apk/build/
 apk/.gradle/
 android/app/src/main/assets/
+server/data/

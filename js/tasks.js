@@ -5,6 +5,7 @@
 import { api } from './cloud.js';
 import { getSetting, setSetting } from './storage.js';
 import { groupMe, groupMembers, groupBranch, sendGroup, GENERAL } from './group.js';
+import { lanOn, lanListTasks, lanSaveTasks } from './lan.js';
 
 export const taskEvents = new EventTarget(); // change
 const emit = () => taskEvents.dispatchEvent(new Event('change'));
@@ -16,13 +17,30 @@ const uid = () => `${Date.now().toString(36)}${Math.random().toString(36).slice(
 // كل حساب قائمته على الجهاز، ولا تُقرأ ولا تُكتب بلا حساب مسجّل (حتى لا تختلط بين الحسابات)
 const key = () => (groupMe()?.uid ? `tasks_${groupMe().uid}` : null);
 // لا تظهر إلا المهام التي أرسلها هذا الحساب، أو استلمها هو
-export async function listTasks() {
+// في وضع «شبكة داخلية» تُقرأ القائمة وتُكتب على خادم المؤسسة (lan.js) بدلاً من الجهاز
+const mine = (t, uid) => (t.mine ? t.from === uid : t.to === uid);
+async function rawList() {
+  if (await lanOn()) return lanListTasks();
   const k = key();
-  if (!k) return [];
-  const me = groupMe();
-  return ((await getSetting(k, [])) || []).filter((t) => (t.mine ? t.from === me.uid : t.to === me.uid));
+  return k ? ((await getSetting(k, [])) || []) : [];
 }
-async function saveTasks(list) { const k = key(); if (!k) return; await setSetting(k, list.slice(0, 500)); emit(); }
+export async function listTasks() {
+  const me = groupMe();
+  if (!me?.uid) return [];
+  return (await rawList()).filter((t) => mine(t, me.uid));
+}
+async function saveTasks(list) {
+  const me = groupMe();
+  if (!me?.uid) return;
+  if (await lanOn()) {
+    // لا نمحو مهام الحسابات الأخرى المحفوظة على الخادم: نستبدل مهامي فقط
+    const others = (await lanListTasks()).filter((t) => !mine(t, me.uid));
+    await lanSaveTasks([...list, ...others].slice(0, 500));
+  } else {
+    await setSetting(key(), list.slice(0, 500));
+  }
+  emit();
+}
 async function upsert(t) {
   const list = await listTasks();
   const i = list.findIndex((x) => x.id === t.id && x.from === t.from);
