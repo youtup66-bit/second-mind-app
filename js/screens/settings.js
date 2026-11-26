@@ -20,6 +20,7 @@ import { aiMode } from '../ai.js';
 const GROUP_HINTS = {
   'المطوّر': 'المؤسسة التجريبية، والدخول بأي حساب (نسخة التجربة فقط)',
   'المؤسسة': 'الدخول، وحساب المدير، والموظفون',
+  'الشبكة': 'الإنترنت أو الشبكة الداخلية، وعنوان الخادم',
   'المظهر': 'ألوان التطبيق: أخضر واتساب',
   'تثبيت التطبيق': 'التثبيت، والإصدار، والتحقق من التحديثات',
   'صوت الردود': 'نوع الصوت وطبقته وسرعته',
@@ -122,6 +123,24 @@ export async function mount(root) {
       <div class="row"><a class="btn" href="#/org" id="org-open">الدخول إلى المؤسسة</a></div>
     </section>
 
+    <section class="card" id="network">
+      <h2>الشبكة</h2>
+      <p class="muted">اختر طريقة الاتصال. «الإنترنت» كما هو الآن، و«شبكة داخلية» يتصل بالخادم في المؤسسة عند تفعيله.</p>
+      <label class="look-row"><span>طريقة الاتصال</span>
+        <select id="net-mode"><option value="internet">الإنترنت</option><option value="lan">شبكة داخلية (خادم المؤسسة)</option></select></label>
+      <label class="org-field"><span>عنوان الخادم الأساسي</span>
+        <input id="net-server" dir="ltr" inputmode="url" autocomplete="off" placeholder="https://192.168.1.10"></label>
+      <label class="org-field"><span>عنوان بديل (اختياري، مثل اسم النطاق الداخلي)</span>
+        <input id="net-server2" dir="ltr" inputmode="url" autocomplete="off" placeholder="https://aqli.local"></label>
+      <label class="org-field"><span>بصمة الشهادة SHA-256 (اختياري، للتأكد من هوية الخادم)</span>
+        <input id="net-ident" dir="ltr" autocomplete="off" spellcheck="false" placeholder="AB:CD:…"></label>
+      <div class="text-btns">
+        <button class="text-btn" type="button" id="net-save">حفظ</button>
+        <button class="text-btn" type="button" id="net-test">اختبار الاتصال</button>
+      </div>
+      <p class="status" id="net-msg" role="status"></p>
+      <p class="muted">ملاحظة: الخادم الداخلي لم يُفعَّل بعد، فلن يتغيّر مصدر البيانات حتى يُربط.</p>
+    </section>
     <section class="card" id="look">
       <h2>المظهر</h2>
       <p class="muted">كل لون قابل للتعديل على حدة. اجمع ألوانك في مجموعة باسم، واستعدها بنقرة.</p>
@@ -329,7 +348,7 @@ export async function mount(root) {
   `;
   // الموظف: لا مساعد ولا عقل ولا ذكاء؛ نُبقي الحساب والمظهر والتثبيت والخصوصية فقط
   if (await getSetting('orgRole', null) === 'employee') {
-    const keep = new Set(['account', 'org', 'look', 'install', 'privacy', 'dev']); // dev: أدوات المطوّر في نسخة التجربة
+    const keep = new Set(['account', 'org', 'look', 'install', 'privacy', 'dev', 'network']); // dev: أدوات المطوّر في نسخة التجربة
     // المسؤول المسموح له بالمساعد: يضع مفتاحه الخاص (الموظف العادي لا مفتاح على جواله)
     const { startGroupSync, waitBranch } = await import('../group.js');
     await startGroupSync().catch(() => {});
@@ -407,6 +426,7 @@ export async function mount(root) {
 
   bindAppUpdate(root);
   bindLook(root);
+  bindNetwork(root);
   root.querySelector('#ai-check-btn').addEventListener('click', async () => {
     const { aiCheck } = await import('../ai-check.js');
     const out = root.querySelector('#ai-check');
@@ -975,6 +995,45 @@ async function bindLook(root) {
   root.querySelector('#ic-reset').addEventListener('click', async () => {
     await deleteSetting('iconAlpha'); await deleteSetting('orbGlow');
     a.value = 100; ao.textContent = '100%'; g.value = 100; go2.textContent = '100%';
+  });
+}
+
+// الشبكة: عناوين الخادم وطريقة الاتصال تُحفظ على الجهاز، ويُختبر الأساسي ثم البديل
+async function bindNetwork(root) {
+  const $ = (q) => root.querySelector(q);
+  const mode = $('#net-mode'), s1 = $('#net-server'), s2 = $('#net-server2'), ident = $('#net-ident'), out = $('#net-msg');
+  if (!mode) return;
+  mode.value = await getSetting('netMode', 'internet');
+  s1.value = await getSetting('netServer', '');
+  s2.value = await getSetting('netServer2', '');
+  ident.value = await getSetting('netIdentity', '');
+  const show = (t, ok = true) => { out.textContent = t; out.className = `status ${ok ? 'status--ok' : 'status--err'}`; };
+  const clean = (v) => String(v || '').trim().replace(/\/+$/, '');
+  $('#net-save').addEventListener('click', async () => {
+    const a = clean(s1.value), b = clean(s2.value);
+    if (mode.value === 'lan' && !/^https?:\/\//.test(a)) return show('اكتب عنوان الخادم الأساسي بصيغة https://…', false);
+    if ((a && !/^https?:\/\//.test(a)) || (b && !/^https?:\/\//.test(b))) return show('العناوين تبدأ بـ https://', false);
+    await setSetting('netMode', mode.value);
+    await setSetting('netServer', a);
+    await setSetting('netServer2', b);
+    await setSetting('netIdentity', ident.value.trim().toUpperCase());
+    show('تم الحفظ على هذا الجهاز ✓');
+  });
+  const probe = async (addr) => {
+    const ctl = new AbortController();
+    const t = setTimeout(() => ctl.abort(), 5000);
+    try { const r = await fetch(`${addr}/health`, { signal: ctl.signal, cache: 'no-store' }); return r.ok; }
+    catch { return false; }
+    finally { clearTimeout(t); }
+  };
+  $('#net-test').addEventListener('click', async () => {
+    const list = [clean(s1.value), clean(s2.value)].filter((x) => /^https?:\/\//.test(x));
+    if (!list.length) return show('اكتب عنواناً أولاً.', false);
+    show('أختبر الاتصال…');
+    for (const addr of list) {
+      if (await probe(addr)) return show(`الخادم يستجيب عبر ${addr} ✓`);
+    }
+    show('لا يستجيب أي عنوان. تحقق من الشبكة أو العنوان.', false);
   });
 }
 
