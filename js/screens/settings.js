@@ -128,8 +128,11 @@ export async function mount(root) {
       <p class="muted">اختر طريقة الاتصال. «الإنترنت» كما هو الآن، و«شبكة داخلية» يتصل بالخادم في المؤسسة عند تفعيله.</p>
       <label class="look-row"><span>طريقة الاتصال</span>
         <select id="net-mode"><option value="internet">الإنترنت</option><option value="lan">شبكة داخلية (خادم المؤسسة)</option></select></label>
-      <label class="org-field"><span>عنوان الخادم الأساسي</span>
+      <label class="look-row"><span>نوع عنوان الخادم</span>
+        <select id="net-addr-type"><option value="static">ثابت (Static): رقم IP لا يتغير</option><option value="dhcp">ديناميكي (DHCP): اسم الخادم</option></select></label>
+      <label class="org-field"><span id="net-server-label">عنوان الخادم الأساسي</span>
         <input id="net-server" dir="ltr" inputmode="url" autocomplete="off" placeholder="https://192.168.1.10"></label>
+      <p class="muted" id="net-dhcp-note" hidden>الخادم بعنوان ديناميكي قد يتغير رقمه، لذلك يُستعمل اسمه الداخلي (مثل https://aqli.local) ويبقى ثابتاً.</p>
       <label class="org-field"><span>عنوان بديل (اختياري، مثل اسم النطاق الداخلي)</span>
         <input id="net-server2" dir="ltr" inputmode="url" autocomplete="off" placeholder="https://aqli.local"></label>
       <label class="org-field"><span>بصمة الشهادة SHA-256 (اختياري، للتأكد من هوية الخادم)</span>
@@ -1002,8 +1005,18 @@ async function bindLook(root) {
 async function bindNetwork(root) {
   const $ = (q) => root.querySelector(q);
   const mode = $('#net-mode'), s1 = $('#net-server'), s2 = $('#net-server2'), ident = $('#net-ident'), out = $('#net-msg');
+  const addrType = $('#net-addr-type'), label = $('#net-server-label'), dhcpNote = $('#net-dhcp-note');
   if (!mode) return;
   mode.value = await getSetting('netMode', 'internet');
+  addrType.value = await getSetting('netAddrType', 'static');
+  const syncType = () => {
+    const dhcp = addrType.value === 'dhcp';
+    label.textContent = dhcp ? 'اسم الخادم الداخلي' : 'عنوان الخادم الأساسي (IP ثابت)';
+    s1.placeholder = dhcp ? 'https://aqli.local' : 'https://192.168.1.10';
+    dhcpNote.hidden = !dhcp;
+  };
+  syncType();
+  addrType.addEventListener('change', syncType);
   s1.value = await getSetting('netServer', '');
   s2.value = await getSetting('netServer2', '');
   ident.value = await getSetting('netIdentity', '');
@@ -1014,6 +1027,7 @@ async function bindNetwork(root) {
     if (mode.value === 'lan' && !/^https?:\/\//.test(a)) return show('اكتب عنوان الخادم الأساسي بصيغة https://…', false);
     if ((a && !/^https?:\/\//.test(a)) || (b && !/^https?:\/\//.test(b))) return show('العناوين تبدأ بـ https://', false);
     await setSetting('netMode', mode.value);
+    await setSetting('netAddrType', addrType.value);
     await setSetting('netServer', a);
     await setSetting('netServer2', b);
     await setSetting('netIdentity', ident.value.trim().toUpperCase());
