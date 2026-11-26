@@ -72,3 +72,18 @@ export async function lanListTasks() {
 export async function lanSaveTasks(tasks) {
   await call('PUT', '/api/tasks', { tasks });
 }
+
+// تفعيل حساب جديد: المنتسب يكتب اسمه ورمز التفعيل ثم يختار كلمة سره بنفسه
+export async function lanActivate(username, code, password) {
+  const res = await fetch(`${await base()}/api/activate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username: String(username || '').trim().toLowerCase(), code: String(code || '').trim(), password: String(password || '') }),
+    cache: 'no-store',
+  }).catch(() => null);
+  if (!res) throw new Error('تعذّر الوصول إلى خادم المؤسسة. تحقق من الشبكة الداخلية.');
+  const data = await res.json().catch(() => ({}));
+  if (res.status === 429) throw new Error('محاولات كثيرة. انتظر ٥ دقائق ثم حاول مجدداً.');
+  if (!res.ok || !data.ok) throw new Error('الرمز غير صحيح أو منتهٍ، أو كلمة السر أقل من ٦ أحرف.');
+  return data.user;
+}

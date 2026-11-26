@@ -2,7 +2,7 @@
 import { IS_DEV, IS_BUNDLED } from '../env.js';
 import { canUpdateApp, appVersion, startAppUpdate } from '../app-update.js';
 import { getSetting, setSetting, deleteSetting, clearAll, clearMessages } from '../storage.js';
-import { lanLogin, lanLogout, lanUser } from '../lan.js';
+import { lanLogin, lanLogout, lanUser, lanActivate } from '../lan.js';
 import { DEFAULT_SERVER } from '../net-defaults.js';
 import { ROLES, roleOf, applyRole, clearRole, isHex } from '../appearance.js';
 import { DEFAULT_MODEL, DEFAULT_LITE_MODEL, testKey, getUsage, ttsCooldownUntil, clearTtsCooldown, economyMode } from '../gemini.js';
@@ -153,6 +153,13 @@ export async function mount(root) {
           <button class="text-btn" type="button" id="net-logout" hidden>خروج</button>
         </div>
         <p class="muted" id="net-login-state"></p>
+        <details>
+          <summary>تفعيل حساب جديد (برمز من مدير الشبكة)</summary>
+          <input id="net-act-user" dir="ltr" autocomplete="username" autocapitalize="none" spellcheck="false" placeholder="اسم المستخدم">
+          <input id="net-act-code" dir="ltr" autocomplete="one-time-code" autocapitalize="characters" spellcheck="false" placeholder="رمز التفعيل (10 أحرف)">
+          <input id="net-act-pass" dir="ltr" type="password" autocomplete="new-password" placeholder="اختر كلمة سرك (6 أحرف على الأقل)">
+          <div class="text-btns"><button class="text-btn" type="button" id="net-activate">تفعيل</button></div>
+        </details>
       </div>
       <p class="muted">المهام تُحفظ على خادم المؤسسة عند تفعيل «شبكة داخلية» وتسجيل الدخول. المنشورات والمحادثات ما زالت كما هي.</p>
     </section>
@@ -1060,6 +1067,16 @@ async function bindNetwork(root) {
       show(`تم تسجيل الدخول كـ ${name} ✓`);
     } catch (err) { show(err.message, false); }
     await loginState();
+  });
+  $('#net-activate').addEventListener('click', async () => {
+    const u = $('#net-act-user').value, c = $('#net-act-code').value, p = $('#net-act-pass').value;
+    if (!u.trim() || !c.trim() || !p) return show('اكتب الاسم والرمز وكلمة السر.', false);
+    show('أفعّل الحساب…');
+    try {
+      await lanActivate(u, c, p);
+      $('#net-act-code').value = ''; $('#net-act-pass').value = '';
+      show('تم تفعيل الحساب. سجّل الدخول الآن بكلمة السر التي اخترتها.');
+    } catch (err) { show(err.message, false); }
   });
   $('#net-logout').addEventListener('click', async () => {
     await lanLogout();

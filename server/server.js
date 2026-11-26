@@ -45,6 +45,7 @@ function hashPassword(password, salt = crypto.randomBytes(16).toString('hex')) {
   return { salt, hash };
 }
 function checkPassword(password, rec) {
+  if (!rec.salt || !rec.hash) return false; // حساب بانتظار التفعيل
   const { hash } = hashPassword(password, rec.salt);
   return crypto.timingSafeEqual(Buffer.from(hash, 'hex'), Buffer.from(rec.hash, 'hex'));
 }
@@ -108,6 +109,31 @@ async function handleApi(req, res, pathname) {
     return sendJson(res, 200, { ok: true, token: newSession(name), user: name });
   }
 
+  // تفعيل الحساب: المنتسب يكتب اسمه ورمز التفعيل (لمرة واحدة) ثم يختار كلمة سره بنفسه
+  if (pathname === '/api/activate' && req.method === 'POST') {
+    const body = await readBody(req);
+    const name = String(body.username || '').trim().toLowerCase();
+    const code = String(body.code || '').trim().toUpperCase();
+    const pass = String(body.password || '');
+    const fkey = `act:${name}`;
+    const f = failures.get(fkey);
+    if (f && f.until > Date.now()) return sendJson(res, 429, { ok: false, error: 'locked' });
+    const all = users();
+    const rec = all[name];
+    const pending = rec && rec.invite;
+    const valid = pending && pending.exp > Date.now() && checkPassword(code, pending.code) && pass.length >= 6;
+    if (!valid) {
+      const expired = f && f.until > 0 && f.until <= Date.now();
+      const n = (f && !expired ? f.n : 0) + 1;
+      failures.set(fkey, { n, until: n >= 8 ? Date.now() + LOCK_MS : 0 });
+      return sendJson(res, 401, { ok: false, error: 'bad activation' });
+    }
+    failures.delete(fkey);
+    all[name] = { ...hashPassword(pass), created: rec.created || Date.now() };
+    writeJson(USERS_FILE, all);
+    return sendJson(res, 200, { ok: true, user: name });
+  }
+
   if (pathname === '/api/logout' && req.method === 'POST') {
     const m = /^Bearer ([0-9a-f]{64})$/.exec(req.headers.authorization || '');
     if (m) sessions.delete(m[1]);
@@ -164,6 +190,22 @@ const server = http.createServer(async (req, res) => {
 });
 
 // أمر إنشاء الحساب من الطرفية (لا يمر عبر الشبكة)
+if (process.argv[2] === 'invite') {
+  const name = String(process.argv[3] || '').trim().toLowerCase();
+  if (!/^[a-z0-9._-]{2,32}$/.test(name)) {
+    console.log('الاستعمال: node server/server.js invite <اسم_المستخدم>');
+    process.exit(1);
+  }
+  const all = users();
+  const code = crypto.randomBytes(5).toString('hex').toUpperCase(); // ١٠ أحرف، تُكتب للمنتسب
+  const rec = all[name] || { created: Date.now() };
+  // كلمة السر القديمة (إن وُجدت) تبقى حتى يُفعَّل الرمز الجديد
+  all[name] = { ...rec, invite: { code: hashPassword(code), exp: Date.now() + 48 * 3600 * 1000 } };
+  writeJson(USERS_FILE, all);
+  console.log(`رمز التفعيل لـ ${name}: ${code}  (صالح ٤٨ ساعة، لمرة واحدة)`);
+  process.exit(0);
+}
+
 if (process.argv[2] === 'adduser') {
   const name = String(process.argv[3] || '').trim().toLowerCase();
   const pass = String(process.argv[4] || '');
