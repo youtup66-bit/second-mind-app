@@ -1,6 +1,7 @@
 // الاتصال بخادم المؤسسة الداخلي (وضع «شبكة داخلية» فقط). الخادم يخزن مهام كل حساب بعد تسجيل دخول.
 // في وضع الشبكة الداخلية لا نرجع إلى التخزين المحلي عند الخطأ، حتى لا تنقسم المهام بين مكانين.
 import { getSetting, setSetting, deleteSetting } from './storage.js';
+import { DEFAULT_SERVER } from './net-defaults.js';
 
 const clean = (v) => String(v || '').trim().replace(/\/+$/, '');
 
@@ -8,7 +9,7 @@ export async function lanOn() {
   return (await getSetting('netMode', 'internet')) === 'lan';
 }
 async function base() {
-  const b = clean(await getSetting('netServer', ''));
+  const b = clean(await getSetting('netServer', '')) || DEFAULT_SERVER;
   if (!/^https?:\/\//.test(b)) throw new Error('اكتب عنوان خادم المؤسسة في الإعدادات ← الشبكة.');
   return b;
 }

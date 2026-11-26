@@ -3,6 +3,7 @@ import { IS_DEV, IS_BUNDLED } from '../env.js';
 import { canUpdateApp, appVersion, startAppUpdate } from '../app-update.js';
 import { getSetting, setSetting, deleteSetting, clearAll, clearMessages } from '../storage.js';
 import { lanLogin, lanLogout, lanUser } from '../lan.js';
+import { DEFAULT_SERVER } from '../net-defaults.js';
 import { ROLES, roleOf, applyRole, clearRole, isHex } from '../appearance.js';
 import { DEFAULT_MODEL, DEFAULT_LITE_MODEL, testKey, getUsage, ttsCooldownUntil, clearTtsCooldown, economyMode } from '../gemini.js';
 import { canSpeak, canListen, canRecord, canBrowserListen, speak, stopSpeaking, unlockAudio, voicesReady } from '../voice.js';
@@ -1028,7 +1029,7 @@ async function bindNetwork(root) {
   };
   syncType();
   addrType.addEventListener('change', syncType);
-  s1.value = await getSetting('netServer', '');
+  s1.value = (await getSetting('netServer', '')) || (addrType.value === 'dhcp' ? DEFAULT_SERVER : '');
   s2.value = await getSetting('netServer2', '');
   ident.value = await getSetting('netIdentity', '');
   const show = (t, ok = true) => { out.textContent = t; out.className = `status ${ok ? 'status--ok' : 'status--err'}`; };
