@@ -1033,6 +1033,16 @@ async function bindNetwork(root) {
   ident.value = await getSetting('netIdentity', '');
   const show = (t, ok = true) => { out.textContent = t; out.className = `status ${ok ? 'status--ok' : 'status--err'}`; };
   const clean = (v) => String(v || '').trim().replace(/\/+$/, '');
+  // إن فُتح التطبيق من خادم المؤسسة نفسه، فعنوان الصفحة هو عنوان الخادم: نملأه تلقائياً
+  if (!clean(s1.value)) {
+    try {
+      const j = await (await fetch(`${location.origin}/health`, { cache: 'no-store' })).json();
+      if (j?.name === 'aqli-server') {
+        s1.value = location.origin;
+        show('تم ملء عنوان الخادم تلقائياً من هذه الصفحة. اختر «شبكة داخلية» ثم اضغط حفظ.');
+      }
+    } catch { /* ليست صفحة الخادم: لا نملأ شيئاً */ }
+  }
   const loginState = async () => {
     const u = await lanUser();
     $('#net-login-state').textContent = u ? `مسجّل الدخول كـ ${u}` : 'غير مسجّل الدخول إلى الخادم';
