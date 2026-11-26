@@ -104,7 +104,7 @@ function explain(err) {
 const run = async (fn) => { try { return await fn(); } catch (err) { throw explain(err); } };
 
 // ---- أسماء المستخدمين وكلمات المرور ----
-export const INVITE_DAYS = 7;
+export const INVITE_HOURS = 48; // مدة صلاحية الدعوة/مفتاح التفعيل: ٤٨ ساعة، ولمرة واحدة
 export const normalizeUsername = (u) => String(u || '').trim().toLowerCase();
 export function checkUsername(u) {
   const n = normalizeUsername(u);
@@ -301,7 +301,7 @@ export async function readInvite(params) {
   const d = inv.data();
   // الدعوة تنتهي بعد ٧ أيام (تفرضه القواعد أيضاً)
   const made = d.createdAt?.toMillis?.() || Date.now();
-  if (Date.now() - made > INVITE_DAYS * 86400000) throw new CloudError('انتهت صلاحية هذه الدعوة (بعد ٧ أيام). اطلب من مسؤولك رابطاً جديداً.', 'EXPIRED');
+  if (Date.now() - made > INVITE_HOURS * 3600000) throw new CloudError('انتهت صلاحية هذه الدعوة (بعد ٤٨ ساعة). اطلب من مسؤولك رابطاً جديداً.', 'EXPIRED');
   return {
     code, org_name: org.exists() ? org.data().name : '', display_name: d.displayName, username: d.username,
     extra: { ...(d.node ? { node: d.node } : {}), ...(d.title ? { title: d.title } : {}), ...(d.replaces ? { replaces: d.replaces } : {}) },

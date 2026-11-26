@@ -78,8 +78,8 @@ service cloud.firestore {
             && exists(invite(request.resource.data.invite))
             && get(invite(request.resource.data.invite)).data.username == request.resource.data.username
             && get(invite(request.resource.data.invite)).data.displayName == request.resource.data.displayName
-            // الدعوة تنتهي بعد ٧ أيام من إنشائها (لا تُستعمل بعدها)
-            && request.time < get(invite(request.resource.data.invite)).data.createdAt + duration.value(7, 'd')
+            // الدعوة تنتهي بعد ٤٨ ساعة من إنشائها (لا تُستعمل بعدها)
+            && request.time < get(invite(request.resource.data.invite)).data.createdAt + duration.value(48, 'h')
             && !existsAfter(invite(request.resource.data.invite)))
         );
       // لا تعديل للأدوار أبداً
